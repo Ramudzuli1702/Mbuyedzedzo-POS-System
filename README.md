@@ -2,18 +2,20 @@
 
 A comprehensive JavaFX-based Point of Sale (POS) System with a modern, beautiful UI designed for retail business management.
 
-## Editions
+## Editions — two separate products from one codebase
 
-One codebase ships as two products, chosen in **Settings → POS Edition** (takes
-effect on next login; stored as the `pos.edition` business setting):
+The build produces **two distinct installers**. A customer licenses one; the
+other isn't in their build (it's not a setting they can flip).
 
-| Edition | For | Difference |
-| --- | --- | --- |
-| **Standard** | Shops that keep customer accounts (loyalty, contracts, age-restricted goods) | Full Customer and Marketing screens, promo targeting, receipt-by-email, customer-insight reports |
-| **Retail** | Shops that just sell over the counter | No Customer or Marketing screens. Every sale is booked against a single hidden **"Walk-in"** account, so no schema change is needed. Reports drop the customer-centric views. |
+| Edition | For | Difference | Build |
+| --- | --- | --- | --- |
+| **Standard POS** | Shops that keep customer accounts (loyalty, contracts, age-restricted goods) | Full Customer and Marketing screens, promo targeting, receipt-by-email, customer-insight reports | `mvn clean verify` → `target/dist/POS-*.exe` |
+| **Retail POS** | Shops that just sell over the counter | No Customer or Marketing screens. Every sale is booked against a single hidden **"Walk-in"** account, so no schema change is needed. Reports drop the customer-centric views. | `mvn -P retail clean verify` → `target/dist/RetailPOS-*.exe` |
 
-When licensing is added (see below), the edition is fixed by the license key
-rather than a setting.
+The edition is baked in at build time: the Maven `pos.edition` property is
+filtered into `pos-edition.properties` inside the jar and read by
+`com.pos.Edition`. The window title, receipts and installer name follow it
+(e.g. *Mvelelo Retail POS*).
 
 ## Licensing (planned — portfolio scope)
 
@@ -21,7 +23,8 @@ The intended model, documented here rather than fully built:
 
 - Each install requires a **license key** (e.g. `POS-2026-XK29-MNQT-7R4B`) to
   unlock the system; without a valid key the app stays in a restricted demo
-  mode.
+  mode. Keys are product-specific — a Retail POS key won't activate a Standard
+  POS build and vice-versa.
 - A small **license server** (Spring Boot REST API) validates a key against a
   machine fingerprint on activation and returns a signed token; the app
   re-checks it periodically.

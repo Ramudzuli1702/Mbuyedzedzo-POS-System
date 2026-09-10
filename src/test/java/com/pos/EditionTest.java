@@ -16,11 +16,12 @@ class EditionTest {
     }
 
     @Test
-    void defaultsToStandardWhenSettingIsUnavailable() {
-        // No database in this test — getBusinessSetting falls back to its
-        // default, so current() must resolve to STANDARD, never throw.
-        Edition.reload();
-        assertEquals(Edition.STANDARD, Edition.current());
+    void currentIsResolvedAndConsistent() {
+        // Value depends on the build profile (default STANDARD, `-P retail` RETAIL).
+        Edition e = Edition.current();
+        assertNotNull(e);
+        assertEquals(e == Edition.STANDARD, e.hasCustomers());
+        assertEquals(e == Edition.RETAIL,   e.isRetail());
     }
 
     @Test

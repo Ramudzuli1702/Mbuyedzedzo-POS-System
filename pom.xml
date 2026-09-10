@@ -43,6 +43,15 @@
         <!-- Fat-JAR name produced by the Shade plugin (no extension) -->
         <shaded.jar.name>point-of-sale-system-${project.version}</shaded.jar.name>
 
+        <!--
+            Which product this build is. Default = STANDARD (customer accounts).
+            `mvn -P retail ...` overrides these to build the Retail product.
+            Filtered into src/main/resources/pos-edition.properties and read by
+            com.pos.Edition. The two builds produce different installers.
+        -->
+        <pos.edition>STANDARD</pos.edition>
+        <pos.exe.name>POS</pos.exe.name>
+
         <!-- Integration-test DB (empty = ITs skip themselves). Override on the CLI. -->
         <pos.it.jdbcUrl></pos.it.jdbcUrl>
         <pos.it.user></pos.it.user>
@@ -156,6 +165,20 @@
          BUILD
     ══════════════════════════════════════════════════════════════ -->
     <build>
+        <resources>
+            <!-- Only pos-edition.properties is filtered; logback.xml etc. must
+                 keep their literal ${...} placeholders. -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes><include>pos-edition.properties</include></includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes><exclude>pos-edition.properties</exclude></excludes>
+            </resource>
+        </resources>
         <plugins>
 
             <!-- 1 ── Compiler ──────────────────────────────────────────────── -->
@@ -355,7 +378,7 @@
                                 <argument>${project.build.directory}</argument>
 
                                 <argument>--name</argument>
-                                <argument>POS</argument>
+                                <argument>${pos.exe.name}</argument>
 
                                 <argument>--main-jar</argument>
                                 <argument>${shaded.jar.name}.jar</argument>
@@ -418,7 +441,7 @@
                                     $APPDIR is a jpackage token expanded to the app's install dir.
                                 -->
                                 <argument>--java-options</argument>
-                                <argument>-Djpackage.app-path=$APPDIR/POS.exe</argument>
+                                <argument>-Djpackage.app-path=$APPDIR/${pos.exe.name}.exe</argument>
 
                             </arguments>
                         </configuration>
@@ -429,5 +452,20 @@
 
         </plugins>
     </build>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         PROFILES — one build per product
+         mvn clean verify            → Standard POS   (dist/POS-*.exe)
+         mvn -P retail clean verify  → Retail POS     (dist/RetailPOS-*.exe)
+    ══════════════════════════════════════════════════════════════ -->
+    <profiles>
+        <profile>
+            <id>retail</id>
+            <properties>
+                <pos.edition>RETAIL</pos.edition>
+                <pos.exe.name>RetailPOS</pos.exe.name>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>
