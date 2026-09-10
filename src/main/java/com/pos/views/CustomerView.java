@@ -450,7 +450,9 @@ public class CustomerView {
 
         ScrollPane scroll = new ScrollPane(subRoot);
         scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        // Opaque background: a transparent ScrollPane background makes label
+        // text inside it render blank on some Windows GPUs.
+        scroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
 
         subStage.setScene(new Scene(scroll, 900, 560));
         subStage.showAndWait();

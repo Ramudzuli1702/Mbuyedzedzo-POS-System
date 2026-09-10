@@ -534,7 +534,9 @@ public class SalesView {
 
         ScrollPane quickScroll = new ScrollPane(quickAddPane);
         quickScroll.setFitToWidth(true);
-        quickScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        // Opaque background: a transparent ScrollPane background makes label
+        // text inside it render blank on some Windows GPUs.
+        quickScroll.setStyle("-fx-background: white; -fx-background-color: white;");
 
         panel.getChildren().addAll(searchLabel, searchField, quickAddHeader, quickScroll);
         VBox.setVgrow(quickScroll, Priority.ALWAYS);
