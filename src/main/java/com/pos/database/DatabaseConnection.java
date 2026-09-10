@@ -125,9 +125,19 @@ public class DatabaseConnection {
     /**
      * Timezone query parameters shared by every connection URL.
      * See the TIMEZONE field for the rationale.
+     *
+     * The value is URL-encoded: an offset like "+02:00" contains a '+', which a
+     * URL query string decodes to a space — the driver would then try
+     * ZoneId.of(" 02:00") and fail. Encoding turns it into "%2B02%3A00".
      */
     private static String tzParams() {
-        return "connectionTimeZone=" + TIMEZONE
+        String tz;
+        try {
+            tz = java.net.URLEncoder.encode(TIMEZONE, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (RuntimeException e) {
+            tz = TIMEZONE;
+        }
+        return "connectionTimeZone=" + tz
              + "&forceConnectionTimeZoneToSession=true"
              + "&preserveInstants=false";
     }

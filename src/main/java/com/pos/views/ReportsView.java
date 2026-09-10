@@ -1046,16 +1046,16 @@ public class ReportsView {
         }
     }
 
-    private void tip(javafx.beans.property.ObjectProperty<javafx.scene.Node> nodeProp,
+    private void tip(javafx.beans.value.ObservableValue<? extends javafx.scene.Node> nodeProp,
                      java.util.function.Supplier<String> text) {
         Runnable apply = () -> {
-            javafx.scene.Node n = nodeProp.get();
+            javafx.scene.Node n = nodeProp.getValue();
             if (n == null) return;
             Tooltip t = new Tooltip(text.get());
             t.setShowDelay(javafx.util.Duration.millis(120));
             Tooltip.install(n, t);
         };
-        if (nodeProp.get() != null) apply.run();
+        if (nodeProp.getValue() != null) apply.run();
         else nodeProp.addListener((o, a, b) -> { if (b != null) apply.run(); });
     }
 
