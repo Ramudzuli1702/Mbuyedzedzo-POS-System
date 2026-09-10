@@ -72,6 +72,13 @@ public class SalesView {
 
     private Label sessionStatusLabel;
 
+    // ── Display zoom (helps cashiers read the terminal without eye strain) ──
+    private static double zoom = 1.0;
+    private static final double ZOOM_MIN = 0.9, ZOOM_MAX = 2.0, ZOOM_STEP = 0.15;
+    private Label zoomLabel;
+    private Label quickAddLabel;
+    private Label searchLabel;
+
     public SalesView(User user) {
         this.currentUser = user;
         this.activeCashier = user;
@@ -155,6 +162,7 @@ public class SalesView {
         mainContent.getChildren().addAll(leftPanel, rightPanel);
         layout.setCenter(mainContent);
 
+        applyZoom(); // all controls exist now — apply the remembered zoom level
         return layout;
     }
 
@@ -283,6 +291,7 @@ public class SalesView {
 
         topBar.getChildren().addAll(
                 title, sessionStatusLabel, spacer,
+                createZoomControls(),
                 activeCashierLabel, switchCashierBtn,
                 customerLabel, customerCombo, newCustomerBtn);
 
@@ -501,16 +510,13 @@ public class SalesView {
                 "-fx-background-color: white; -fx-background-radius: 10;"
                 + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
 
-        Label searchLabel = new Label("Search Product");
-        searchLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
+        searchLabel = new Label("Search Product");
 
         searchField = new TextField();
         searchField.setPromptText("Enter barcode or product name");
-        searchField.setStyle("-fx-font-size: 14; -fx-padding: 12;");
         searchField.textProperty().addListener((obs, oldText, newText) -> handleProductSearch());
 
-        Label quickAddLabel = new Label("Quick Add Products");
-        quickAddLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
+        quickAddLabel = new Label("Quick Add Products");
 
         quickAddPane = new FlowPane(10, 10);
         populateQuickAddButtons(allProducts, quickAddPane);
@@ -522,7 +528,44 @@ public class SalesView {
         panel.getChildren().addAll(searchLabel, searchField, quickAddLabel, quickScroll);
         VBox.setVgrow(quickScroll, Priority.ALWAYS);
 
+        applyZoom();
         return panel;
+    }
+
+    // ── Zoom ────────────────────────────────────────────────────────────────
+
+    private HBox createZoomControls() {
+        Button minus = new Button("A−");
+        Button plus  = new Button("A+");
+        zoomLabel = new Label();
+        String s = "-fx-background-color: #e6f4f2; -fx-text-fill: #0f766e; -fx-font-weight: bold;"
+                 + "-fx-padding: 6 12; -fx-background-radius: 6; -fx-cursor: hand;";
+        minus.setStyle(s); plus.setStyle(s);
+        minus.setTooltip(new Tooltip("Smaller text"));
+        plus.setTooltip(new Tooltip("Larger text"));
+        minus.setOnAction(e -> setZoom(zoom - ZOOM_STEP));
+        plus.setOnAction(e -> setZoom(zoom + ZOOM_STEP));
+        zoomLabel.setTextFill(Color.web("#0f766e"));
+        zoomLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+
+        HBox box = new HBox(6, minus, zoomLabel, plus);
+        box.setAlignment(Pos.CENTER);
+        return box;
+    }
+
+    private void setZoom(double z) {
+        zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(z * 100) / 100.0));
+        applyZoom();
+        handleProductSearch(); // rebuild product buttons at the new size
+    }
+
+    private void applyZoom() {
+        if (zoomLabel != null) zoomLabel.setText(Math.round(zoom * 100) + "%");
+        if (searchLabel != null)   searchLabel.setFont(Font.font("System", FontWeight.BOLD, 18 * zoom));
+        if (quickAddLabel != null) quickAddLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14 * zoom));
+        if (searchField != null)   searchField.setStyle("-fx-font-size: " + (14 * zoom) + "px; -fx-padding: " + (12 * zoom) + "px;");
+        if (cartTable != null)     cartTable.setStyle("-fx-font-size: " + (13 * zoom) + "px;");
+        if (totalLabel != null)    totalLabel.setFont(Font.font("System", FontWeight.BOLD, 24 * zoom));
     }
 
     private void handleProductSearch() {
@@ -550,10 +593,12 @@ public class SalesView {
         for (Product product : products) {
             if (!product.isOutOfStock()) {
                 Button productBtn = new Button(product.getProductName() + "\nR" + product.getPrice());
+                productBtn.setWrapText(true);
                 productBtn.setStyle(
-                        "-fx-background-color: #ecf0f1; -fx-padding: 15; -fx-background-radius: 8; -fx-cursor: hand;");
-                productBtn.setPrefWidth(120);
-                productBtn.setPrefHeight(80);
+                        "-fx-background-color: #ecf0f1; -fx-padding: " + (14 * zoom) + "px;"
+                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-font-size: " + (13 * zoom) + "px;");
+                productBtn.setPrefWidth(120 * zoom);
+                productBtn.setPrefHeight(80 * zoom);
                 productBtn.setOnAction(e -> {
                     addProductWithDefaultQuantity(product);
                     searchField.clear();
