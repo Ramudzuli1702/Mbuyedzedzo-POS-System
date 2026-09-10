@@ -1,0 +1,21 @@
+# Local dev database. Port 3307 so it doesn't clash with a POS MySQL on 3306.
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mvelelo_licensing
+      MYSQL_USER: licensing
+      MYSQL_PASSWORD: licensing
+    ports:
+      - "3307:3306"
+    volumes:
+      - licensing-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  licensing-db:
