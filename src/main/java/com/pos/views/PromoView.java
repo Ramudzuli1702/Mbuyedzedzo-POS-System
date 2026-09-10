@@ -41,13 +41,18 @@ public class PromoView {
     }
 
     public VBox getView() {
-        VBox root = new VBox(16);
+        // One white padded card — title bar + table together — so it matches
+        // the "Product List" card on the Products tab.
+        VBox card = new VBox(15);
+        card.setStyle(
+            "-fx-background-color: white; -fx-background-radius: 10;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+        card.setPadding(new Insets(20));
+        card.getChildren().addAll(buildTopBar(), buildTable());
+
+        VBox root = new VBox(card);
         root.setPadding(new Insets(20));
-
-        HBox topBar = buildTopBar();
-        VBox tableBox = buildTable();
-
-        root.getChildren().addAll(topBar, tableBox);
+        VBox.setVgrow(card, Priority.ALWAYS);
         return root;
     }
 
@@ -84,14 +89,11 @@ public class PromoView {
 
     private VBox buildTable() {
         VBox box = new VBox(0);
-        box.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 8, 0, 0, 2);"
-        );
 
         table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPlaceholder(new Label("No promos yet. Click '+ New Promo' to create one."));
+        table.setPrefHeight(420);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         TableColumn<Promo, String> codeCol = new TableColumn<>("Code");

@@ -189,26 +189,28 @@ public class InventoryView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        VBox mainContent = new VBox(20);
-        mainContent.setPadding(new Insets(20));
+        // ── Products tab ────────────────────────────────────────────────
+        VBox productsContent = new VBox(20);
+        productsContent.setPadding(new Insets(20));
+        productsContent.getChildren().addAll(
+            createSummaryCards(), createWiFiStatusBox(), createLowStockAlert(), createProductTable());
 
-        HBox wifiStatusBox = createWiFiStatusBox();
-        HBox alertBox      = createLowStockAlert();
-        VBox tableBox      = createProductTable();
+        ScrollPane productsScroll = new ScrollPane(productsContent);
+        productsScroll.setFitToWidth(true);
+        productsScroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
 
-        Separator divider = new Separator();
-        divider.setStyle("-fx-background-color: #e0e0e0;");
-        VBox.setMargin(divider, new Insets(8, 0, 8, 0));
+        // ── Promo Codes tab ────────────────────────────────────────────
+        ScrollPane promoScroll = new ScrollPane(new PromoView(currentUser).getView());
+        promoScroll.setFitToWidth(true);
+        promoScroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
 
-        PromoView promoView = new PromoView(currentUser);
+        TabPane tabs = new TabPane();
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        tabs.getTabs().addAll(
+            new Tab("Products", productsScroll),
+            new Tab("Promo Codes", promoScroll));
 
-        mainContent.getChildren().addAll(createSummaryCards(), wifiStatusBox, alertBox, tableBox, divider, promoView.getView());
-
-        ScrollPane scroll = new ScrollPane(mainContent);
-        scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
-
-        layout.setCenter(scroll);
+        layout.setCenter(tabs);
         return layout;
     }
 
