@@ -1,0 +1,366 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.pos</groupId>
+    <artifactId>point-of-sale-system</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <name>Point of Sale System</name>
+    <description>JavaFX POS System</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>22</maven.compiler.source>
+        <maven.compiler.target>22</maven.compiler.target>
+        <javafx.version>22</javafx.version>
+
+        <!--
+            JavaFX jmods: download from https://gluonhq.com/products/javafx/
+            Unzip and point this property at the folder.
+        -->
+        <javafx.jmods.path>C:\javafx-jmods-22.0.2</javafx.jmods.path>
+
+        <!--
+            App icon — must be a .ico file for Windows.
+        -->
+        <app.icon>src/main/images/app_icon.ico</app.icon>
+
+        <!--
+            MySQL 8.4 MSI — place this file in the project root before building.
+            jpackage will bundle it inside the installed app directory so
+            FirstRunSetup can find and run it silently on first launch.
+
+            Download from: https://dev.mysql.com/downloads/mysql/
+            Choose: Windows (x86, 64-bit), MSI Installer
+        -->
+        <mysql.msi.path>${project.basedir}/installer/mysql-installer.msi</mysql.msi.path>
+
+        <!-- Fat-JAR name produced by the Shade plugin (no extension) -->
+        <shaded.jar.name>point-of-sale-system-${project.version}</shaded.jar.name>
+    </properties>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         DEPENDENCIES
+    ══════════════════════════════════════════════════════════════ -->
+    <dependencies>
+
+        <!-- JavaFX -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-swing</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
+        <!-- MySQL JDBC Driver -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <version>8.4.0</version>
+        </dependency>
+
+        <!-- ZXing for QR Code Generation -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>javase</artifactId>
+            <version>3.5.2</version>
+        </dependency>
+
+        <!-- Apache POI for Excel Export -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
+        <!-- Gson for JSON parsing -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
+        <!-- iTextPDF for PDF Reports -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itextpdf</artifactId>
+            <version>5.5.13.3</version>
+        </dependency>
+
+        <!-- JavaMail -->
+        <dependency>
+            <groupId>com.sun.mail</groupId>
+            <artifactId>javax.mail</artifactId>
+            <version>1.6.2</version>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ══════════════════════════════════════════════════════════════
+         BUILD
+    ══════════════════════════════════════════════════════════════ -->
+    <build>
+        <plugins>
+
+            <!-- 1 ── Compiler ──────────────────────────────────────────────── -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>22</source>
+                    <target>22</target>
+                </configuration>
+            </plugin>
+
+            <!-- 2 ── JavaFX run plugin (dev only: mvn javafx:run) ──────────── -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration>
+                    <mainClass>com.pos.POSApplication</mainClass>
+                </configuration>
+            </plugin>
+
+            <!-- 3 ── Fat JAR via Shade ─────────────────────────────────────── -->
+            <!--
+                Bundles ALL dependencies into one self-contained JAR.
+                Run:   mvn clean package
+                Output: target/point-of-sale-system-1.0.0.jar
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals><goal>shade</goal></goals>
+                        <configuration>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>com.pos.POSApplication</mainClass>
+                                </transformer>
+                                <!-- Merge service files (needed for JavaFX + iText internals) -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
+                            <!-- Strip JAR signatures — they break fat JARs -->
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/*.EC</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 4 ── Copy MySQL MSI into target/ so jpackage can bundle it ── -->
+            <!--
+                jpackage's -app-content flag copies extra files into the
+                installed app directory alongside the JAR and JRE.
+                We point it at target/app-content/ which this plugin populates.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-mysql-msi</id>
+                        <phase>prepare-package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/app-content</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/installer</directory>
+                                    <includes>
+                                        <include>mysql-installer.msi</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- 5 ── jlink + jpackage via exec-maven-plugin ────────────────── -->
+            <!--
+                Run with:   mvn clean verify
+                Or steps:   mvn exec:exec@jlink
+                            mvn exec:exec@jpackage
+
+                Prerequisites:
+                  • JDK 22 on PATH  (provides jlink & jpackage)
+                  • JavaFX jmods unzipped at <javafx.jmods.path>
+                  • WiX Toolset v3 on PATH for .exe output
+                    Install: https://github.com/wixtoolset/wix3/releases
+                  • installer/mysql-installer.msi present before running verify
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.1</version>
+                <executions>
+
+                    <!-- ── 5a: jlink — build a minimal custom JRE ──────────── -->
+                    <execution>
+                        <id>jlink</id>
+                        <phase>verify</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>jlink</executable>
+                            <arguments>
+                                <argument>--module-path</argument>
+                                <!--
+                                    Semicolon-separated on Windows.
+                                    Combines the fat JAR with the JavaFX jmods.
+                                -->
+                                <argument>${project.build.directory}/${shaded.jar.name}.jar;${javafx.jmods.path}</argument>
+
+                                <argument>--add-modules</argument>
+                                <argument>javafx.controls,javafx.fxml,javafx.swing,java.base,java.logging,java.sql,java.desktop,java.xml,java.naming,jdk.crypto.ec,jdk.httpserver,java.net.http</argument>
+
+                                <argument>--output</argument>
+                                <argument>${project.build.directory}/runtime</argument>
+
+                                <!--
+                                    -compress in JDK 21+ uses zip-N notation.
+                                    zip-1 = fastest, zip-9 = smallest.
+                                    (The old integer form 0/1/2 was removed in JDK 21.)
+                                -->
+                                <argument>--compress=zip-6</argument>
+                                <argument>--strip-debug</argument>
+                                <argument>--no-header-files</argument>
+                                <argument>--no-man-pages</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                    <!-- ── 5b: jpackage — create the .exe installer ─────────── -->
+                    <execution>
+                        <id>jpackage</id>
+                        <phase>verify</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <executable>jpackage</executable>
+                            <arguments>
+                                <!-- Custom JRE built by jlink above -->
+                                <argument>--runtime-image</argument>
+                                <argument>${project.build.directory}/runtime</argument>
+
+                                <!-- Folder containing the fat JAR -->
+                                <argument>--input</argument>
+                                <argument>${project.build.directory}</argument>
+
+                                <argument>--name</argument>
+                                <argument>POS</argument>
+
+                                <argument>--main-jar</argument>
+                                <argument>${shaded.jar.name}.jar</argument>
+
+                                <argument>--main-class</argument>
+                                <argument>com.pos.POSApplication</argument>
+
+                                <!-- Windows EXE installer -->
+                                <argument>--type</argument>
+                                <argument>exe</argument>
+
+                                <argument>--dest</argument>
+                                <argument>${project.build.directory}/dist</argument>
+
+                                <!-- ── Extra files bundled inside the installed app dir ── -->
+                                <!--
+                                    FirstRunSetup looks for mysql-installer.msi in the app dir.
+                                    jpackage copies everything under app-content/ to the root
+                                    of the installed application folder.
+                                -->
+                                <argument>--app-content</argument>
+                                <argument>${project.build.directory}/app-content</argument>
+
+                                <!-- ── Branding ───────────────────────────────────── -->
+                                <argument>--app-version</argument>
+                                <argument>${project.version}</argument>
+
+                                <argument>--vendor</argument>
+                                <argument>Ralidzhivha RR</argument>
+
+                                <argument>--icon</argument>
+                                <argument>${app.icon}</argument>
+
+                                <!-- ── Windows installer options ─────────────────── -->
+                                <argument>--win-dir-chooser</argument>
+                                <argument>--win-shortcut</argument>
+                                <argument>--win-menu</argument>
+                                <!--
+                                    -win-per-user-install is REMOVED here intentionally.
+                                    Installing MySQL silently requires admin rights (UAC).
+                                    A per-machine install (the default without this flag)
+                                    correctly triggers the UAC elevation prompt.
+                                    If you add -win-per-user-install back, MySQL's MSI
+                                    will fail silently because it can't write to Program Files.
+                                -->
+
+                                <!-- ── JVM flags forwarded to the launched app ───── -->
+                                <argument>--java-options</argument>
+                                <argument>-Xmx512m</argument>
+
+                                <argument>--java-options</argument>
+                                <argument>--add-opens=javafx.graphics/com.sun.javafx.application=ALL-UNNAMED</argument>
+
+                                <argument>--java-options</argument>
+                                <argument>--add-opens=javafx.base/com.sun.javafx.reflect=ALL-UNNAMED</argument>
+
+                                <!--
+                                    Pass the app install location to the JVM so
+                                    FirstRunSetup can locate mysql-installer.msi at runtime.
+                                    $APPDIR is a jpackage token expanded to the app's install dir.
+                                -->
+                                <argument>--java-options</argument>
+                                <argument>-Djpackage.app-path=$APPDIR/POS.exe</argument>
+
+                            </arguments>
+                        </configuration>
+                    </execution>
+
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,28 @@
+# ── Build output ──────────────────────────────────────────────
+target/
+dependency-reduced-pom.xml
+
+# ── IDE ───────────────────────────────────────────────────────
+.settings/
+.classpath
+bin/
+*.iml
+.idea/
+
+# ── Secrets & machine-specific config ─────────────────────────
+config/app.config
+config/email.properties
+config/db.properties
+
+# ── Generated runtime output (contains customer PII) ──────────
+receipts/
+reports/
+backups/
+
+# ── Large bundled installers (not source) ────────────────────
+installer/*.msi
+installer/jre/
+
+# ── OS noise ─────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
