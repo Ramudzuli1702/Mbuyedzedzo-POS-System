@@ -1,10 +1,13 @@
 package com.pos.components;
 
 import com.pos.services.WiFiHandler;
+import com.pos.utils.QRCodeUtil;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -119,7 +122,29 @@ public class WiFiStatusButton extends Button {
         
         serverInfo.getChildren().addAll(ipLabel, portLabel, urlLabel);
         content.getChildren().add(serverInfo);
-        
+
+        // Scan-to-connect QR (only meaningful while the server is up)
+        if (isServerRunning) {
+            String payload = wifiHandler.getConnectionPayload();
+            String base64 = QRCodeUtil.generateQRCode(payload);
+            Image qrImg = base64 != null ? QRCodeUtil.getQRCodeImage(base64) : null;
+            if (qrImg != null) {
+                ImageView qr = new ImageView(qrImg);
+                qr.setFitWidth(190);
+                qr.setFitHeight(190);
+                qr.setPreserveRatio(true);
+
+                Label qrCaption = new Label("Scan in the POS Scanner app → Connect");
+                qrCaption.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
+                qrCaption.setTextFill(Color.web("#0f766e"));
+
+                VBox qrBox = new VBox(6, qr, qrCaption);
+                qrBox.setAlignment(Pos.CENTER);
+                qrBox.setPadding(new Insets(8, 0, 4, 0));
+                content.getChildren().add(qrBox);
+            }
+        }
+
         content.getChildren().add(new Separator());
         
         // Connected devices
@@ -147,11 +172,11 @@ public class WiFiStatusButton extends Button {
         content.getChildren().add(instructionsTitle);
         
         Label instructions = new Label(
-            "1. Open the Android POS Scanner app\n" +
-            "2. Go to Settings\n" +
-            "3. Enter the server address: " + serverIP + ":" + serverPort + "\n" +
-            "4. Tap 'Connect'\n" +
-            "5. Start scanning products"
+            "1. Make sure the phone is on the same WiFi as this PC\n" +
+            "2. Open the POS Scanner app and tap 'Connect'\n" +
+            "3. Tap 'Scan QR' and point it at the code above\n" +
+            "   (or enter " + serverIP + ":" + serverPort + " manually)\n" +
+            "4. Start scanning products"
         );
         instructions.setWrapText(true);
         instructions.setPadding(new Insets(0, 0, 0, 20));

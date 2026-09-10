@@ -602,6 +602,15 @@ public class WiFiHandler {
     }
 
     /**
+     * The string encoded in the "connect" QR code shown on the desktop.
+     * The scanner app strips the {@code POS:} prefix and connects to the rest.
+     */
+    public String getConnectionPayload() {
+        int port = actualPort > 0 ? actualPort : BASE_PORT;
+        return "POS:" + getLocalIP() + ":" + port;
+    }
+
+    /**
      * Get local IP address
      */
     public String getLocalIP() {
