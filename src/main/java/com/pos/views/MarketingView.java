@@ -42,21 +42,23 @@ public class MarketingView {
         body.setPadding(new Insets(20));
 
         VBox leftCol = new VBox(18);
+        leftCol.setPrefWidth(520);
+        leftCol.setMinWidth(460);
         leftCol.getChildren().addAll(
             createStatsRow(), createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
-
-        ScrollPane leftScroll = new ScrollPane(leftCol);
-        leftScroll.setFitToWidth(true);
-        leftScroll.setPrefWidth(500);
-        leftScroll.setMinWidth(440);
-        leftScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
 
         VBox rightCol = new VBox(18);
         HBox.setHgrow(rightCol, Priority.ALWAYS);
         rightCol.getChildren().addAll(createHistoryCard(), createOptOutLogCard());
 
-        body.getChildren().addAll(leftScroll, rightCol);
-        layout.setCenter(body);
+        body.getChildren().addAll(leftCol, rightCol);
+
+        // Page-level vertical scroll so the columns can be as tall as they need.
+        ScrollPane scroll = new ScrollPane(body);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        layout.setCenter(scroll);
         return layout;
     }
 
@@ -84,9 +86,9 @@ public class MarketingView {
 
         HBox row = new HBox(12);
         row.getChildren().addAll(
-            statCard("📨 Campaigns",    String.valueOf(totalCampaigns),   "#0f766e"),
-            statCard("✅ Emails Sent",  String.valueOf(totalSent),         "#27ae60"),
-            statCard("👥 Subscribers",  String.valueOf(totalSubscribers),  "#e67e22")
+            statCard("Campaigns",    String.valueOf(totalCampaigns),   "#0f766e"),
+            statCard("Emails Sent",  String.valueOf(totalSent),        "#16a34a"),
+            statCard("Subscribers",  String.valueOf(totalSubscribers), "#d97706")
         );
         return row;
     }
@@ -94,6 +96,7 @@ public class MarketingView {
     private VBox statCard(String label, String value, String color) {
         VBox card = new VBox(6);
         card.setPadding(new Insets(16));
+        card.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(card, Priority.ALWAYS);
         card.setStyle(
             "-fx-background-color: white; -fx-background-radius: 10;" +
@@ -120,7 +123,7 @@ public class MarketingView {
             "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
         );
 
-        Label title = new Label("✉️ Compose & Send");
+        Label title = new Label("Compose & Send");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -214,7 +217,7 @@ public class MarketingView {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
 
-        Label title = new Label("👥 Subscribed Customers");
+        Label title = new Label("Subscribed Customers");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -306,7 +309,7 @@ public class MarketingView {
             "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
         );
 
-        Label title = new Label("🚫 Process Unsubscribe Request");
+        Label title = new Label("Process Unsubscribe Request");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -358,7 +361,7 @@ public class MarketingView {
             "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
         );
 
-        Label title = new Label("📕 Recent Opt-Outs");
+        Label title = new Label("Recent Opt-Outs");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -403,7 +406,6 @@ public class MarketingView {
     private VBox createHistoryCard() {
         VBox card = new VBox(14);
         card.setPadding(new Insets(20));
-        VBox.setVgrow(card, Priority.ALWAYS);
         card.setStyle(
             "-fx-background-color: white; -fx-background-radius: 10;" +
             "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
@@ -412,7 +414,7 @@ public class MarketingView {
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
 
-        Label title = new Label("📋 Campaign History");
+        Label title = new Label("Campaign History");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -434,7 +436,8 @@ public class MarketingView {
 
         historyTable = new TableView<>();
         historyTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        VBox.setVgrow(historyTable, Priority.ALWAYS);
+        historyTable.setPrefHeight(360);
+        historyTable.setMinHeight(220);
         historyTable.setPlaceholder(new Label("No campaigns sent yet."));
 
         TableColumn<MarketingCampaign, String> dateCol = new TableColumn<>("Date Sent");

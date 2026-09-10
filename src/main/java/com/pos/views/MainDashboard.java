@@ -60,7 +60,7 @@ public class MainDashboard {
         mainLayout.prefHeightProperty().bind(scene.heightProperty());
 
         stage.setScene(scene);
-        stage.setTitle("POS System — " + currentUser.getFullNames());
+        stage.setTitle(com.pos.Branding.APP_NAME + " — " + currentUser.getFullNames());
         stage.setOnCloseRequest(this::handleCloseRequest);
         stage.setMinWidth(1100);
         stage.setMinHeight(600);
@@ -194,7 +194,7 @@ public class MainDashboard {
         header.setPadding(new Insets(30, 20, 20, 20));
         header.setStyle("-fx-background-color: rgba(0,0,0,0.2);");
 
-        Label systemTitle = new Label("POS System");
+        Label systemTitle = new Label(com.pos.Branding.APP_SHORT);
         systemTitle.setFont(Font.font("System", FontWeight.BOLD, 22));
         systemTitle.setTextFill(Color.WHITE);
 

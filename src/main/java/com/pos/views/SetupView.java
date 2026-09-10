@@ -63,7 +63,7 @@ public class SetupView {
         root.setStyle("-fx-background-color: #0f766e;");
 
         // ── Branding ──
-        Label appName = new Label("Point of Sale System");
+        Label appName = new Label(com.pos.Branding.APP_NAME);
         appName.setFont(Font.font("System", FontWeight.BOLD, 32));
         appName.setTextFill(Color.WHITE);
 

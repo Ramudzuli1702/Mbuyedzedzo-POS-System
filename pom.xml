@@ -10,8 +10,8 @@
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Point of Sale System</name>
-    <description>JavaFX POS System</description>
+    <name>Mvelelo POS System</name>
+    <description>Mvelelo POS System — JavaFX point-of-sale</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

@@ -44,7 +44,7 @@ public class POSApplication extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        primaryStage.setTitle("Point of Sale System");
+        primaryStage.setTitle(Branding.APP_NAME);
         primaryStage.setMinWidth(900);
         primaryStage.setMinHeight(600);
         primaryStage.setMaximized(true);

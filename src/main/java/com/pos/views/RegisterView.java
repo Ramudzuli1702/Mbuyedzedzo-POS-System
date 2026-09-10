@@ -63,7 +63,7 @@ public class RegisterView {
         );
 
         // ── Header ──
-        Label title = new Label("Welcome to POS System");
+        Label title = new Label("Welcome to " + com.pos.Branding.APP_NAME);
         title.setFont(Font.font("System", FontWeight.BOLD, 26));
         title.setTextFill(Color.web("#0f766e"));
 

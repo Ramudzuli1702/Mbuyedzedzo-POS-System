@@ -43,7 +43,7 @@ public class LoginView {
         card.setPadding(new Insets(40));
         card.setStyle("-fx-background-color: white; -fx-background-radius: 15; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 20, 0, 0, 5);");
         
-        Label title = new Label("Point of Sale System");
+        Label title = new Label(com.pos.Branding.APP_NAME);
         title.setFont(Font.font("System", FontWeight.BOLD, 28));
         title.setTextFill(Color.web("#0f766e"));
         
