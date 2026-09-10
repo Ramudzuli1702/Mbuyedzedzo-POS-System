@@ -20,12 +20,16 @@ import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 import javafx.util.StringConverter;
 
 import java.math.BigDecimal;
@@ -167,7 +171,7 @@ public class SalesView {
         topBar.setAlignment(Pos.CENTER_LEFT);
         topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("💳 Sales Terminal");
+        Label title = new Label("Sales Terminal");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -177,13 +181,13 @@ public class SalesView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        activeCashierLabel = new Label("🧾 Cashier: " + activeCashier.getFullNames());
+        activeCashierLabel = new Label("Cashier: " + activeCashier.getFullNames());
         activeCashierLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
         activeCashierLabel.setTextFill(Color.web("#0f766e"));
         activeCashierLabel.setStyle(
                 "-fx-background-color: #e6f4f2; -fx-padding: 6 12; -fx-background-radius: 20;");
 
-        Button switchCashierBtn = new Button("⇄ Switch Cashier");
+        Button switchCashierBtn = new Button("Switch Cashier");
         switchCashierBtn.setStyle(
                 "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;"
                 + "-fx-padding: 8 14; -fx-background-radius: 6; -fx-cursor: hand;");
@@ -379,7 +383,7 @@ public class SalesView {
         Optional<User> result = dialog.showAndWait();
         result.ifPresent(selectedUser -> {
             activeCashier = selectedUser;
-            activeCashierLabel.setText("🧾 Cashier: " + activeCashier.getFullNames());
+            activeCashierLabel.setText("Cashier: " + activeCashier.getFullNames());
             showAlert("Cashier Switched",
                     activeCashier.getFullNames() + " is now the active cashier for this sale.",
                     Alert.AlertType.INFORMATION);
@@ -768,76 +772,140 @@ public class SalesView {
 
         // ── Promo + payment dialog ────────────────────────────────────────
         Optional<PaymentInfo> paymentResult = showPaymentDialog(cartTotal);
+        if (paymentResult.isEmpty()) return;
 
-        if (paymentResult.isPresent()) {
-            PaymentInfo paymentInfo = paymentResult.get();
+        final PaymentInfo paymentInfo = paymentResult.get();
+        final BigDecimal finalTotal = cartTotal.subtract(activeDiscount);
+        final Customer saleCustomer = customer;
+        final User saleCashier = activeCashier;
+        final PromoService.Promo salePromo = activePromo;
+        final BigDecimal saleDiscount = activeDiscount;
 
-            // The final total after any discount applied inside showPaymentDialog
-            BigDecimal finalTotal = cartTotal.subtract(activeDiscount);
+        // Run the sale (DB write, receipt build, email) off the FX thread so the
+        // register stays responsive, with a clear "please wait" indicator.
+        Stage busy = showBusyDialog("Processing sale — please wait…",
+                "Recording the transaction, updating stock and preparing the receipt.");
 
+        Thread worker = new Thread(() -> {
+            String error = null;
+            String receipt = null;
+            boolean success = false;
             try {
-                boolean success = transactionService.processTransaction(
-                        activeCashier.getStaffID(),
-                        customer.getAccountID(),
-                        cartItems,
-                        paymentInfo,
-                        activePromo,
-                        activeDiscount);
+                success = transactionService.processTransaction(
+                        saleCashier.getStaffID(), saleCustomer.getAccountID(),
+                        cartItems, paymentInfo, salePromo, saleDiscount);
 
                 if (success) {
-                    // Determine the sale ID for receipt saving (use 0 as fallback; update if
-                    // transactionService exposes it)
-                    String appliedPromoCode = activePromo != null ? activePromo.getPromoCode() : null;
-
-                    String receipt = ReceiptGenerator.generateReceipt(
-                            customer,
-                            cartItems,
-                            activeCashier,
-                            paymentInfo,
-                            appliedPromoCode,
-                            activeDiscount);
-
+                    receipt = ReceiptGenerator.generateReceipt(
+                            saleCustomer, cartItems, saleCashier, paymentInfo,
+                            salePromo != null ? salePromo.getPromoCode() : null, saleDiscount);
                     ReceiptGenerator.saveReceipt(receipt, "receipt_" + System.currentTimeMillis());
-                    ReceiptGenerator.printReceipt(receipt);
 
-                    CommPreferences prefs = commService.getPreferences(customer.getAccountID());
-                    if (prefs.isReceiptByEmail()) {
-                        commService.sendReceiptByEmail(customer.getEmailAddress(), receipt);
+                    CommPreferences prefs = commService.getPreferences(saleCustomer.getAccountID());
+                    if (prefs.isReceiptByEmail() && saleCustomer.getEmailAddress() != null
+                            && !saleCustomer.getEmailAddress().isBlank()) {
+                        commService.sendReceiptByEmail(saleCustomer.getEmailAddress(), receipt);
                     }
-
-                    if (wifiHandler != null && wifiHandler.isConnected()) {
-                        new Thread(() -> wifiHandler.sendReceipt(receipt), "Receipt-Sender").start();
-                    }
-
-                    // Increment promo usage AFTER successful transaction
-                    if (activePromo != null) {
-                        promoService.incrementUsage(activePromo.getPromoID());
-                    }
-
-                    showAlert("Receipt", receipt, Alert.AlertType.INFORMATION);
-
-                    showAlert("Success",
-                            "Transaction completed successfully!\n"
-                            + "Cashier: " + activeCashier.getFullNames() + "\n"
-                            + "Total: R " + String.format("%.2f", finalTotal) + "\n"
-                            + "Payment: " + paymentInfo.getPaymentMethod() + "\n"
-                            + (wifiHandler.isConnected() ? "Receipt sent to Android device." : "Receipt printed."),
-                            Alert.AlertType.INFORMATION);
-
-                    clearCart(); // also resets activePromo / activeDiscount
-                    customerCombo.setValue(null);
-
-                    activeCashier = currentUser;
-                    activeCashierLabel.setText("🧾 Cashier: " + activeCashier.getFullNames());
-
-                    updateSessionStatus();
-                } else {
-                    showAlert("Error", "Transaction failed. Please try again.", Alert.AlertType.ERROR);
+                    if (salePromo != null) promoService.incrementUsage(salePromo.getPromoID());
                 }
             } catch (RuntimeException e) {
-                showAlert("Error", e.getMessage(), Alert.AlertType.ERROR);
+                error = e.getMessage();
             }
+
+            final boolean fSuccess = success;
+            final String fReceipt = receipt;
+            final String fError = error;
+            Platform.runLater(() -> {
+                busy.close();
+                if (fError != null) {
+                    showAlert("Sale not completed", fError, Alert.AlertType.ERROR);
+                    return;
+                }
+                if (!fSuccess) {
+                    showAlert("Sale not completed",
+                            "The transaction could not be saved. Nothing was charged. Please try again.",
+                            Alert.AlertType.ERROR);
+                    return;
+                }
+
+                ReceiptGenerator.printReceipt(fReceipt);
+                if (wifiHandler != null && wifiHandler.isConnected()) {
+                    new Thread(() -> wifiHandler.sendReceipt(fReceipt), "Receipt-Sender").start();
+                }
+
+                showSaleCompleteDialog(fReceipt, finalTotal, paymentInfo);
+
+                clearCart();
+                customerCombo.setValue(null);
+                activeCashier = currentUser;
+                activeCashierLabel.setText("Cashier: " + activeCashier.getFullNames());
+                updateSessionStatus();
+            });
+        }, "Checkout-Worker");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    /** A small non-closable modal shown while a slow operation runs. */
+    private Stage showBusyDialog(String heading, String detail) {
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.initStyle(StageStyle.UNDECORATED);
+        if (cartTable != null && cartTable.getScene() != null) {
+            dialog.initOwner(cartTable.getScene().getWindow());
         }
+
+        ProgressIndicator spinner = new ProgressIndicator();
+        spinner.setPrefSize(46, 46);
+
+        Label h = new Label(heading);
+        h.setFont(Font.font("System", FontWeight.BOLD, 15));
+        h.setTextFill(Color.web("#0f766e"));
+
+        Label d = new Label(detail);
+        d.setWrapText(true);
+        d.setTextFill(Color.web("#475569"));
+        d.setMaxWidth(300);
+
+        VBox text = new VBox(4, h, d);
+        HBox box = new HBox(18, spinner, text);
+        box.setAlignment(Pos.CENTER_LEFT);
+        box.setPadding(new Insets(26, 30, 26, 26));
+        box.setStyle("-fx-background-color: white; -fx-background-radius: 12;"
+                + "-fx-border-color: #cbd5e1; -fx-border-radius: 12;");
+
+        dialog.setScene(new Scene(box));
+        dialog.show();
+        return dialog;
+    }
+
+    /** Post-sale confirmation with the receipt in a readable monospace pane. */
+    private void showSaleCompleteDialog(String receipt, BigDecimal total, PaymentInfo payment) {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Sale Complete");
+        dialog.initOwner(cartTable.getScene().getWindow());
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setPrefWidth(430);
+
+        Label ok = new Label("Sale completed — R " + String.format("%.2f", total)
+                + " (" + payment.getPaymentMethod() + ")");
+        ok.setFont(Font.font("System", FontWeight.BOLD, 15));
+        ok.setTextFill(Color.web("#16a34a"));
+
+        Label note = new Label(wifiHandler != null && wifiHandler.isConnected()
+                ? "Receipt printed and sent to the scanner device."
+                : "Receipt printed and saved.");
+        note.setTextFill(Color.web("#475569"));
+
+        TextArea receiptArea = new TextArea(receipt);
+        receiptArea.setEditable(false);
+        receiptArea.setStyle("-fx-font-family: 'Consolas','Courier New',monospace; -fx-font-size: 12;");
+        receiptArea.setPrefRowCount(16);
+
+        VBox content = new VBox(10, ok, note, new Separator(), receiptArea);
+        content.setPadding(new Insets(18));
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
     }
 
     // ── Payment dialog — now includes promo code field ────────────────────

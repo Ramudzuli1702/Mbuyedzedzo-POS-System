@@ -20,31 +20,29 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
- * ReceiptGenerator — handles both live POS receipts and historical sale receipts.
+ * ReceiptGenerator — plain-text receipts formatted for a 40-column thermal
+ * printer. Two entry points:
  *
- * Live receipt  : generateReceipt(...)   — called from SalesView at checkout
- * History receipt: generateSaleReceipt(...) — called from CustomerView for past sales
- *
- * Both pull business profile from BusinessSettings (name, address, phone, VAT, footer).
+ *   generateReceipt(...)     — live checkout receipt (SalesView)
+ *   generateSaleReceipt(...) — reprint of a past sale (CustomerView),
+ *                              showing net quantities after returns/exchanges
  */
 public class ReceiptGenerator {
 
     private static final SettingsService settings = new SettingsService();
 
-    private static final String SEP  = "=====================================\n";
-    private static final String DASH = "-------------------------------------\n";
-    private static final int    WIDTH = 37;
+    private static final int W = 40;                       // receipt column width
+    private static final String RULE   = "-".repeat(W) + "\n";
+    private static final String DRULE  = "=".repeat(W) + "\n";
 
     private static final DateTimeFormatter FULL_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final DateTimeFormatter SHORT_FMT =
-            DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
 
-    // ── Live POS receipt (called from SalesView) ──────────────────────────────
+    // ── Live checkout receipt ────────────────────────────────────────────────
 
     public static String generateReceipt(Customer customer,
                                          ObservableList<CartItem> items,
@@ -53,12 +51,6 @@ public class ReceiptGenerator {
         return generateReceipt(customer, items, cashier, paymentInfo, null, BigDecimal.ZERO);
     }
 
-    /**
-     * Full live receipt with optional promo discount.
-     *
-     * @param promoCode      the promo code used (or null)
-     * @param discountAmount the discount deducted (or ZERO)
-     */
     public static String generateReceipt(Customer customer,
                                          ObservableList<CartItem> items,
                                          User cashier,
@@ -66,179 +58,124 @@ public class ReceiptGenerator {
                                          String promoCode,
                                          BigDecimal discountAmount) {
         StringBuilder r = new StringBuilder();
+        header(r, "SALES RECEIPT");
 
-        r.append(header());
+        meta(r, "Date",     LocalDateTime.now().format(FULL_FMT));
+        meta(r, "Cashier",  cashier.getFullNames());
+        meta(r, "Customer", customer.getFullNames());
+        if (notBlank(customer.getEmailAddress())) meta(r, "Email", customer.getEmailAddress());
+        r.append(RULE);
 
-        // Transaction info
-        r.append("Date:     ").append(LocalDateTime.now().format(FULL_FMT)).append("\n");
-        r.append("Cashier:  ").append(cashier.getFullNames()).append("\n");
-        r.append("Customer: ").append(customer.getFullNames()).append("\n");
-        r.append("Email:    ").append(customer.getEmailAddress()).append("\n\n");
-
-        // Items
-        r.append(DASH);
-        r.append(String.format("%-20s %5s %8s\n", "Item", "Qty", "Price"));
-        r.append(DASH);
+        r.append(String.format("%-22s %6s %10s%n", "Item", "Qty", "Amount"));
+        r.append(RULE);
 
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem item : items) {
-            r.append(String.format("%-20s %5d R%7.2f\n",
-                    truncate(item.getProductName(), 20),
-                    item.getQuantity(),
-                    item.getSubtotal()));
+            itemLines(r, item.getProductName(), item.getQuantity(),
+                      item.getPrice(), item.getSubtotal());
             subtotal = subtotal.add(item.getSubtotal());
         }
 
-        r.append(DASH);
-        r.append(String.format("%-26s R%7.2f\n", "SUBTOTAL:", subtotal));
+        r.append(RULE);
+        BigDecimal discount = discountAmount != null ? discountAmount : BigDecimal.ZERO;
+        moneyLine(r, "Subtotal", subtotal);
+        if (discount.compareTo(BigDecimal.ZERO) > 0) {
+            moneyLine(r, "Discount" + (notBlank(promoCode) ? " (" + promoCode + ")" : ""),
+                      discount.negate());
+        }
+        r.append(DRULE);
+        moneyLine(r, "TOTAL", subtotal.subtract(discount));
+        r.append(DRULE);
 
-        // Promo discount
-        if (promoCode != null && !promoCode.isBlank() &&
-                discountAmount != null && discountAmount.compareTo(BigDecimal.ZERO) > 0) {
-            r.append(String.format("%-20s %6s -R%7.2f\n",
-                    "PROMO (" + promoCode + ")", "", discountAmount));
+        r.append('\n');
+        meta(r, "Payment", paymentInfo.getPaymentMethod());
+        if ("Cash".equalsIgnoreCase(paymentInfo.getPaymentMethod())) {
+            moneyLine(r, "Tendered", paymentInfo.getAmountPaid());
+            moneyLine(r, "Change",   paymentInfo.getChangeGiven());
         }
 
-        BigDecimal total = subtotal.subtract(
-                discountAmount != null ? discountAmount : BigDecimal.ZERO);
-        r.append(String.format("%-26s R%7.2f\n", "TOTAL:", total));
-        r.append(DASH);
-
-        // Payment
-        r.append("Payment: ").append(paymentInfo.getPaymentMethod()).append("\n");
-        if ("Cash".equals(paymentInfo.getPaymentMethod())) {
-            r.append(String.format("Paid:    R%7.2f\n", paymentInfo.getAmountPaid()));
-            r.append(String.format("Change:  R%7.2f\n", paymentInfo.getChangeGiven()));
-        }
-
-        r.append(footer());
+        footer(r);
         return r.toString();
     }
 
-    // ── Historical sale receipt (called from CustomerView) ────────────────────
+    // ── Historical sale reprint ─────────────────────────────────────────────
 
-    /**
-     * Generates a receipt for a past sale retrieved from customer purchase history.
-     *
-     * Each line item shows remaining (net) quantity after approved returns.
-     * If a line has an exchange or return on record, it is annotated below the item.
-     * The net total reflects quantities remaining after returns.
-     *
-     * @param sale            the Sale object (contains items and metadata)
-     * @param customer        the customer the sale belongs to
-     * @param customerService used to look up remaining quantities per transaction
-     * @param exchangeService used to look up exchange/return records per transaction
-     */
     public static String generateSaleReceipt(Sale sale,
                                              Customer customer,
                                              CustomerService customerService,
                                              ExchangeReturnService exchangeService) {
         StringBuilder r = new StringBuilder();
+        header(r, "SALES RECEIPT (REPRINT)");
 
-        r.append(header());
+        meta(r, "Sale #",   String.valueOf(sale.getSaleID()));
+        meta(r, "Date",     sale.getSaleDate().format(FULL_FMT));
+        meta(r, "Cashier",  sale.getStaffName());
+        meta(r, "Customer", customer.getFullNames());
+        if (notBlank(customer.getEmailAddress())) meta(r, "Email", customer.getEmailAddress());
+        r.append(RULE);
 
-        // Transaction info
-        r.append("Sale #:   ").append(sale.getSaleID()).append("\n");
-        r.append("Date:     ").append(sale.getSaleDate().format(FULL_FMT)).append("\n");
-        r.append("Cashier:  ").append(sale.getStaffName()).append("\n");
-        r.append("Customer: ").append(customer.getFullNames()).append("\n");
-        r.append("Email:    ").append(customer.getEmailAddress()).append("\n\n");
-
-        // Items
-        r.append(DASH);
-        r.append(String.format("%-20s %5s %8s\n", "Item", "Qty", "Amount"));
-        r.append(DASH);
+        r.append(String.format("%-22s %6s %10s%n", "Item", "Qty", "Amount"));
+        r.append(RULE);
 
         BigDecimal netTotal = BigDecimal.ZERO;
-
         for (Purchase item : sale.getItems()) {
             int remaining = customerService.getRemainingQuantity(item.getTransactionID());
             BigDecimal lineTotal = BigDecimal.valueOf(remaining * item.getSalePrice());
+            itemLines(r, item.getProductName(), remaining,
+                      BigDecimal.valueOf(item.getSalePrice()), lineTotal);
 
-            r.append(String.format("%-20s %5d R%7.2f\n",
-                    truncate(item.getProductName(), 20),
-                    remaining,
-                    lineTotal));
-
-            // Promo on this line
-            if (item.getPromoCode() != null && !item.getPromoCode().isBlank()) {
-                r.append("  Promo code: ").append(item.getPromoCode()).append("\n");
+            if (notBlank(item.getPromoCode())) {
+                r.append(indent("promo: " + item.getPromoCode()));
             }
 
-            // Exchange annotation
-            ObservableList<ExchangeReturnService.ExchangeRequest> exchanges =
-                    exchangeService.getExchangesForTransaction(item.getTransactionID());
-            if (!exchanges.isEmpty()) {
-                ExchangeReturnService.ExchangeRequest ex = exchanges.get(0);
-                r.append(String.format("  [EXCHANGE] %-12s → %-12s  Status: %s\n",
-                        truncate(ex.getProductName(), 12),
-                        truncate(ex.getNewProductName() != null ? ex.getNewProductName() : "—", 12),
-                        ex.getStatus()));
-                if (ex.getNewPrice() != null) {
-                    r.append(String.format("             Original: R%-7.2f  New: R%-7.2f\n",
-                            ex.getOriginalPrice(), ex.getNewPrice()));
-                }
-                if (ex.getReason() != null && !ex.getReason().isBlank()) {
-                    r.append("             Reason: ").append(ex.getReason()).append("\n");
-                }
+            for (ExchangeReturnService.ExchangeRequest ex :
+                    exchangeService.getExchangesForTransaction(item.getTransactionID())) {
+                r.append(indent("exchanged -> "
+                        + (notBlank(ex.getNewProductName()) ? ex.getNewProductName() : "pending")
+                        + "  [" + ex.getStatus() + "]"));
+                break;
             }
-
-            // Return annotation
-            ObservableList<ExchangeReturnService.ReturnRequest> returns =
-                    exchangeService.getReturnsForTransaction(item.getTransactionID());
-            if (!returns.isEmpty()) {
-                ExchangeReturnService.ReturnRequest ret = returns.get(0);
-                r.append(String.format("  [RETURN]   Qty: %d  Refund: R%-7.2f  Status: %s\n",
-                        ret.getReturnQuantity(),
-                        ret.getRefundAmount(),
-                        ret.getStatus()));
-                if (ret.getReason() != null && !ret.getReason().isBlank()) {
-                    r.append("             Reason: ").append(ret.getReason()).append("\n");
-                }
+            for (ExchangeReturnService.ReturnRequest ret :
+                    exchangeService.getReturnsForTransaction(item.getTransactionID())) {
+                r.append(indent(String.format("returned %d  refund R%.2f  [%s]",
+                        ret.getReturnQuantity(), ret.getRefundAmount(), ret.getStatus())));
+                break;
             }
 
             netTotal = netTotal.add(lineTotal);
         }
 
-        r.append(DASH);
-        r.append(String.format("%-26s R%7.2f\n", "NET TOTAL:", netTotal));
-        r.append(footer());
-
+        r.append(DRULE);
+        moneyLine(r, "NET TOTAL", netTotal);
+        r.append(DRULE);
+        footer(r);
         return r.toString();
     }
 
-    // ── Print ─────────────────────────────────────────────────────────────────
+    // ── Print ───────────────────────────────────────────────────────────────
 
     public static void printReceipt(String receiptText) {
         System.out.println(receiptText);
         try {
             Printer printer = Printer.getDefaultPrinter();
-            if (printer != null) {
-                PrinterJob job = PrinterJob.createPrinterJob(printer);
-                if (job != null) {
-                    Text text = new Text(receiptText);
-                    text.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 10pt;");
-                    boolean printed = job.printPage(new TextFlow(text));
-                    if (printed) job.endJob();
-                }
-            }
+            if (printer == null) return;
+            PrinterJob job = PrinterJob.createPrinterJob(printer);
+            if (job == null) return;
+            Text text = new Text(receiptText);
+            text.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 9pt;");
+            if (job.printPage(new TextFlow(text))) job.endJob();
         } catch (Exception e) {
             System.err.println("Printing not available: " + e.getMessage());
         }
     }
 
-    // ── Save ──────────────────────────────────────────────────────────────────
+    // ── Save ────────────────────────────────────────────────────────────────
 
-    /**
-     * Saves receipt to the configured receipts folder.
-     * Creates the folder if it doesn't exist.
-     */
     public static boolean saveReceipt(String receiptText, String fileName) {
         String savePath = settings.getReceiptSavePath();
         try {
             Files.createDirectories(Paths.get(savePath));
-            File file = new File(savePath + fileName + ".txt");
-            try (FileWriter writer = new FileWriter(file)) {
+            try (FileWriter writer = new FileWriter(new File(savePath + fileName + ".txt"))) {
                 writer.write(receiptText);
                 return true;
             }
@@ -248,60 +185,99 @@ public class ReceiptGenerator {
         }
     }
 
-    // ── Shared header / footer ────────────────────────────────────────────────
+    // ── Layout helpers ──────────────────────────────────────────────────────
 
-    private static String header() {
-        String businessName = settings.getBusinessName();
-        String address      = settings.getBusinessAddress();
-        String phone        = settings.getBusinessPhone();
-        String vatNo        = settings.getBusinessVatNo();
+    private static void header(StringBuilder r, String docType) {
+        String name    = orDefault(settings.getBusinessName(), "");
+        String address = settings.getBusinessAddress();
+        String phone   = settings.getBusinessPhone();
+        String vatNo   = settings.getBusinessVatNo();
 
-        StringBuilder h = new StringBuilder();
-        h.append(SEP);
-        h.append(centre(businessName, WIDTH)).append("\n");
-        if (!address.isBlank()) h.append(centre(address, WIDTH)).append("\n");
-        if (!phone.isBlank())   h.append(centre("Tel: " + phone, WIDTH)).append("\n");
-        if (!vatNo.isBlank())   h.append(centre("VAT: " + vatNo, WIDTH)).append("\n");
-        h.append(SEP).append("\n");
-        return h.toString();
+        r.append(DRULE);
+        if (notBlank(name)) r.append(centre(name.toUpperCase())).append('\n');
+        for (String l : wrapCentre(address)) r.append(l).append('\n');
+        if (notBlank(phone)) r.append(centre("Tel: " + phone)).append('\n');
+        if (notBlank(vatNo)) r.append(centre("VAT No: " + vatNo)).append('\n');
+        r.append(DRULE);
+        r.append(centre(docType)).append('\n');
+        r.append(RULE);
     }
 
-    private static String footer() {
-        String footerMsg = settings.getReceiptFooter();
-        return SEP + centre(footerMsg, WIDTH) + "\n" + SEP;
+    private static void footer(StringBuilder r) {
+        String msg = orDefault(settings.getReceiptFooter(), "Thank you for your purchase!");
+        r.append('\n');
+        for (String l : wrapCentre(msg)) r.append(l).append('\n');
+        r.append('\n');
+        r.append(centre("Powered by " + com.pos.Branding.APP_NAME)).append('\n');
+        r.append(DRULE);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    private static void meta(StringBuilder r, String label, String value) {
+        r.append(String.format("%-10s %s%n", label + ":", value == null ? "" : value));
+    }
 
-    private static String centre(String text, int width) {
+    /** Product name (wrapped) then a "qty x unit" / amount line. */
+    private static void itemLines(StringBuilder r, String name, int qty,
+                                  BigDecimal unit, BigDecimal amount) {
+        for (String l : wrap(name == null ? "" : name, W)) r.append(l).append('\n');
+        String left = String.format("  %d x %.2f", qty, unit == null ? 0.0 : unit.doubleValue());
+        r.append(pad(left, money(amount))).append('\n');
+    }
+
+    /** A right-aligned "Label .......... R123.45" line. */
+    private static void moneyLine(StringBuilder r, String label, BigDecimal amount) {
+        r.append(pad(label, money(amount))).append('\n');
+    }
+
+    private static String money(BigDecimal v) {
+        double d = v == null ? 0.0 : v.doubleValue();
+        return (d < 0 ? "-R" : "R") + String.format("%.2f", Math.abs(d));
+    }
+
+    /** Left text + right text on one W-wide line, right-justified. */
+    private static String pad(String left, String right) {
+        int gap = W - left.length() - right.length();
+        if (gap < 1) return left + " " + right;
+        return left + " ".repeat(gap) + right;
+    }
+
+    private static String indent(String s) {
+        return "    " + s + "\n";
+    }
+
+    private static String centre(String text) {
         if (text == null || text.isBlank()) return "";
-        if (text.length() >= width) return text;
-        int pad = (width - text.length()) / 2;
+        text = text.strip();
+        if (text.length() >= W) return text.substring(0, W);
+        int pad = (W - text.length()) / 2;
         return " ".repeat(pad) + text;
     }
 
-    /**
-     * Wraps a long string across multiple lines, each at most `width` characters.
-     * No words are omitted — the full text is always printed.
-     * Used for product names and other fields that may exceed the receipt column width.
-     */
-    private static String wrap(String str, int width) {
-        if (str == null) return "";
-        if (str.length() <= width) return str;
-        StringBuilder out = new StringBuilder();
-        int start = 0;
-        while (start < str.length()) {
-            int end = Math.min(start + width, str.length());
-            if (start > 0) out.append("\n").append(" ".repeat(width - (end - start))); // indent continuation
-            out.append(str, start, end);
-            start = end;
-        }
-        return out.toString();
+    private static java.util.List<String> wrapCentre(String s) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String l : wrap(s, W)) out.add(centre(l));
+        return out;
     }
 
-    // Keep truncate as a no-op passthrough so existing callers compile unchanged.
-    // All receipt formatting now uses wrap() instead.
-    private static String truncate(String str, int length) {
-        return wrap(str, length);
+    /** Word-wrap without dropping anything; long single words are hard-split. */
+    private static java.util.List<String> wrap(String s, int width) {
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        if (s == null || s.isBlank()) return lines;
+        StringBuilder cur = new StringBuilder();
+        for (String word : s.strip().split("\\s+")) {
+            while (word.length() > width) {
+                if (cur.length() > 0) { lines.add(cur.toString()); cur.setLength(0); }
+                lines.add(word.substring(0, width));
+                word = word.substring(width);
+            }
+            if (cur.length() == 0)                cur.append(word);
+            else if (cur.length() + 1 + word.length() <= width) cur.append(' ').append(word);
+            else { lines.add(cur.toString()); cur.setLength(0); cur.append(word); }
+        }
+        if (cur.length() > 0) lines.add(cur.toString());
+        return lines;
     }
+
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
+    private static String orDefault(String s, String d) { return notBlank(s) ? s : d; }
 }
