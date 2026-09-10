@@ -43,32 +43,43 @@ public class MarketingView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        VBox leftCol = new VBox(18,
-            createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
-        VBox rightCol = new VBox(18,
-            createHistoryCard(), createOptOutLogCard());
+        // No ScrollPane anywhere on this page: on some Windows GPUs every
+        // label inside a ScrollPane renders blank. Instead each column is a
+        // TabPane showing one card at a time, so the whole page always fits
+        // the window without needing to scroll.
+        TabPane leftTabs = new TabPane(
+            tab("Compose & Send",  createComposeCard()),
+            tab("Unsubscribe Requests", createUnsubscribeCard()),
+            tab("Subscribers",     createSubscribersCard()));
+        leftTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        leftCol.setPrefWidth(460);
-        rightCol.setPrefWidth(680);
-        leftCol.setMaxWidth(Double.MAX_VALUE);
-        rightCol.setMaxWidth(Double.MAX_VALUE);
+        TabPane rightTabs = new TabPane(
+            tab("Campaign History", createHistoryCard()),
+            tab("Recent Opt-Outs",  createOptOutLogCard()));
+        rightTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        HBox columns = new HBox(20, leftCol, rightCol);
-        HBox.setHgrow(leftCol, Priority.ALWAYS);
-        HBox.setHgrow(rightCol, Priority.ALWAYS);
+        leftTabs.setPrefWidth(460);
+        rightTabs.setPrefWidth(680);
+
+        HBox columns = new HBox(20, leftTabs, rightTabs);
+        HBox.setHgrow(leftTabs, Priority.ALWAYS);
+        HBox.setHgrow(rightTabs, Priority.ALWAYS);
 
         VBox content = new VBox(18, createStatsRow(), columns);
         content.setPadding(new Insets(20));
+        VBox.setVgrow(columns, Priority.ALWAYS);
 
-        // Vertical scroll for small windows. The blank-text bug this used to
-        // trigger is fixed globally by -Dprism.dirtyopts=false (see
-        // POSApplication.main).
-        ScrollPane scroll = new ScrollPane(content);
-        scroll.setFitToWidth(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        layout.setCenter(scroll);
+        layout.setCenter(content);
         return layout;
+    }
+
+    /** A non-closable tab wrapping one card, with a little breathing room. */
+    private Tab tab(String title, javafx.scene.Node card) {
+        VBox wrap = new VBox(card);
+        wrap.setPadding(new Insets(14, 4, 4, 4));
+        VBox.setVgrow(card, Priority.ALWAYS);
+        Tab t = new Tab(title, wrap);
+        return t;
     }
 
     private HBox createTopBar() {
@@ -125,6 +136,7 @@ public class MarketingView {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
         card.setStyle(CARD_STYLE);
+        card.setMaxHeight(Double.MAX_VALUE);
 
         Label title = new Label("Compose & Send");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
@@ -308,6 +320,7 @@ public class MarketingView {
         VBox card = new VBox(10);
         card.setPadding(new Insets(20));
         card.setStyle(CARD_STYLE);
+        card.setMaxHeight(Double.MAX_VALUE);
 
         Label title = new Label("Process Unsubscribe Request");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
@@ -357,6 +370,7 @@ public class MarketingView {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
         card.setStyle(CARD_STYLE);
+        card.setMaxHeight(Double.MAX_VALUE);
 
         Label title = new Label("Recent Opt-Outs");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
@@ -366,6 +380,7 @@ public class MarketingView {
         optOutTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         optOutTable.setPrefHeight(200);
         optOutTable.setMinHeight(120);
+        VBox.setVgrow(optOutTable, Priority.ALWAYS);
         optOutTable.setPlaceholder(new Label("No opt-out activity yet."));
 
         String[][] cols = {
