@@ -1,0 +1,14 @@
+# Copy to:  %PROGRAMDATA%\POS System\config\db.properties
+# On a normal install this file is written automatically by FirstRunSetup.
+# Use this template only for development against an existing local MySQL.
+
+db.host=127.0.0.1
+db.port=3306
+db.name=pos_db
+db.username=root
+db.password=
+
+# Connection timezone. Default +02:00 (South Africa, no DST).
+# Use a fixed UTC offset unless the MySQL server has its named-timezone
+# tables loaded (mysql_tzinfo_to_sql).
+db.timezone=+02:00

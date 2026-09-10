@@ -31,6 +31,21 @@ public class DatabaseConnection {
     public static String USERNAME = "root";
     public static String PASSWORD = "";          // overwritten from config on real installs
 
+    /**
+     * Timezone the JDBC connection operates in. Every DATETIME column in this
+     * schema stores a wall-clock value with no zone; the app both writes
+     * (Timestamp.valueOf(...)) and reads (rs.getTimestamp(...).toLocalDateTime())
+     * assuming that value is local time. Pinning the connection here — and
+     * forcing the MySQL session's time_zone to match, with preserveInstants=false
+     * so the driver does not shift DATETIMEs — keeps NOW()/CURRENT_TIMESTAMP,
+     * stored values, and the Java clock all in agreement.
+     *
+     * Default "+02:00" (South Africa Standard Time, no DST). Override with
+     * db.timezone in db.properties — use a fixed offset ("+02:00") unless the
+     * MySQL server has its named-timezone tables loaded.
+     */
+    public static String TIMEZONE = "+02:00";
+
     // Path the installer / first-run setup writes the config to
     public static final String CONFIG_PATH =
         System.getenv("PROGRAMDATA") + File.separator +
@@ -61,6 +76,7 @@ public class DatabaseConnection {
             DATABASE = props.getProperty("db.name",     DATABASE);
             USERNAME = props.getProperty("db.username", USERNAME);
             PASSWORD = props.getProperty("db.password", PASSWORD);
+            TIMEZONE = props.getProperty("db.timezone", TIMEZONE);
             System.out.println("✅ DB config loaded from " + CONFIG_PATH);
         } catch (Exception e) {
             System.err.println("⚠️  Could not read db.properties — using defaults. " + e.getMessage());
@@ -83,6 +99,7 @@ public class DatabaseConnection {
             props.setProperty("db.name",     database);
             props.setProperty("db.username", username);
             props.setProperty("db.password", password);
+            props.setProperty("db.timezone", TIMEZONE);
 
             try (FileOutputStream fos = new FileOutputStream(configFile)) {
                 props.store(fos, "POS System — auto-generated database configuration");
@@ -105,9 +122,19 @@ public class DatabaseConnection {
     // ── Connection pool (single shared connection) ─────────────────────────────
     private static Connection connection = null;
 
+    /**
+     * Timezone query parameters shared by every connection URL.
+     * See the TIMEZONE field for the rationale.
+     */
+    private static String tzParams() {
+        return "connectionTimeZone=" + TIMEZONE
+             + "&forceConnectionTimeZoneToSession=true"
+             + "&preserveInstants=false";
+    }
+
     private static String buildUrl() {
         return "jdbc:mysql://" + HOST + ":" + PORT + "/" + DATABASE
-             + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+             + "?useSSL=false&allowPublicKeyRetrieval=true&" + tzParams()
              + "&connectTimeout=10000&socketTimeout=30000";
     }
 
@@ -133,7 +160,7 @@ public class DatabaseConnection {
      */
     public static Connection getRootConnection() throws SQLException {
         String url = "jdbc:mysql://" + HOST + ":" + PORT
-                   + "?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+                   + "?useSSL=false&allowPublicKeyRetrieval=true&" + tzParams()
                    + "&connectTimeout=10000";
         try {
             Class.forName("com.mysql.cj.jdbc.Driver");

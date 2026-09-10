@@ -7,7 +7,6 @@ import com.pos.utils.PasswordUtil;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import java.sql.*;
-import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.LocalDate;
 import java.util.*;
@@ -65,13 +64,15 @@ public class UserService {
     }
 
     public boolean logCheckIn(int staffID) {
-        String query = "INSERT INTO CheckIn (StaffID, LoginStamp) VALUES (?, ?)";
+        // Use the DB clock (CURRENT_TIMESTAMP) so login/logout stamps are
+        // consistent with every other server-generated timestamp regardless
+        // of the client machine's clock or timezone.
+        String query = "INSERT INTO CheckIn (StaffID, LoginStamp) VALUES (?, CURRENT_TIMESTAMP)";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
             pstmt.setInt(1, staffID);
-            pstmt.setTimestamp(2, Timestamp.valueOf(LocalDateTime.now()));
 
             return pstmt.executeUpdate() > 0;
         } catch (SQLException e) {
@@ -81,13 +82,12 @@ public class UserService {
     }
 
     public boolean logCheckOut(int staffID) {
-        String query = "UPDATE CheckIn SET LogoutStamp = ? WHERE StaffID = ? AND LogoutStamp IS NULL";
+        String query = "UPDATE CheckIn SET LogoutStamp = CURRENT_TIMESTAMP WHERE StaffID = ? AND LogoutStamp IS NULL";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
 
-            pstmt.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now()));
-            pstmt.setInt(2, staffID);
+            pstmt.setInt(1, staffID);
 
             return pstmt.executeUpdate() > 0;
         } catch (SQLException e) {
