@@ -90,6 +90,10 @@ public class SettingsService {
     public String getBusinessWebsite() { return getBusinessSetting("business.website", ""); }
     public String getReceiptFooter()   { return getBusinessSetting("receipt.footer",   "Thank you for your purchase!"); }
     public String getReceiptSavePath() { return getBusinessSetting("receipt.savePath", "receipts/"); }
+    /** Whether a checkout should send the receipt straight to the OS printer.
+     *  Off by default — with a "Print to PDF" default printer this pops a
+     *  save-as dialog on every sale. The Sale Complete dialog has a Print button. */
+    public boolean getReceiptAutoPrint() { return Boolean.parseBoolean(getBusinessSetting("receipt.autoPrint", "false")); }
     public String getReportsSavePath() { return getBusinessSetting("reports.savePath", "reports/"); }
     public String getBackupSavePath()  { return getBusinessSetting("backup.savePath",  "backups/"); }
 

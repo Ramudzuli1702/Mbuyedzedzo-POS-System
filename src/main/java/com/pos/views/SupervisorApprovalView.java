@@ -275,7 +275,8 @@ public class SupervisorApprovalView {
                 if (success) {
                     if (approve) {
                         String receipt = generateExchangeReceipt(exchange);
-                        ReceiptGenerator.printReceipt(receipt);
+                        if (new com.pos.services.SettingsService().getReceiptAutoPrint())
+                            ReceiptGenerator.printReceipt(receipt);
                         showAlert("Receipt", receipt, Alert.AlertType.INFORMATION);
                     }
                     showAlert("Success",
@@ -303,7 +304,8 @@ public class SupervisorApprovalView {
                 if (success) {
                     if (approve) {
                         String receipt = generateReturnReceipt(returnReq);
-                        ReceiptGenerator.printReceipt(receipt);
+                        if (new com.pos.services.SettingsService().getReceiptAutoPrint())
+                            ReceiptGenerator.printReceipt(receipt);
                         showAlert("Receipt", receipt, Alert.AlertType.INFORMATION);
                     }
                     showAlert("Success",

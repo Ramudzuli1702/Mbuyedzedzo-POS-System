@@ -52,6 +52,7 @@ public class SalesView {
     private TransactionService transactionService;
     private SessionService sessionService;
     private CommunicationsService commService;
+    private final com.pos.services.SettingsService settingsService = new com.pos.services.SettingsService();
     private UserService userService;
     private PromoService promoService;
     private TableView<CartItem> cartTable;
@@ -888,7 +889,7 @@ public class SalesView {
                     return;
                 }
 
-                ReceiptGenerator.printReceipt(fReceipt);
+                if (settingsService.getReceiptAutoPrint()) ReceiptGenerator.printReceipt(fReceipt);
                 if (wifiHandler != null && wifiHandler.isConnected()) {
                     new Thread(() -> wifiHandler.sendReceipt(fReceipt), "Receipt-Sender").start();
                 }
@@ -952,15 +953,12 @@ public class SalesView {
         ok.setFont(Font.font("System", FontWeight.BOLD, 15));
         ok.setTextFill(Color.web("#16a34a"));
 
-        String printed = wifiHandler != null && wifiHandler.isConnected()
-                ? "Receipt printed and sent to the scanner device."
-                : "Receipt sent to the printer.";
-        Label note = new Label(printed);
-        note.setTextFill(Color.web("#475569"));
-
-        Label saved = new Label(savedFile != null
+        String savedMsg = savedFile != null
                 ? "Saved automatically to:  " + savedFile.getParent()
-                : "Note: the receipt could not be saved to disk.");
+                : "Note: the receipt could not be saved to disk.";
+        if (wifiHandler != null && wifiHandler.isConnected())
+            savedMsg += "\nAlso sent to the connected scanner device.";
+        Label saved = new Label(savedMsg);
         saved.setTextFill(Color.web(savedFile != null ? "#475569" : "#e74c3c"));
         saved.setWrapText(true);
 
@@ -969,7 +967,14 @@ public class SalesView {
         receiptArea.setStyle("-fx-font-family: 'Consolas','Courier New',monospace; -fx-font-size: 12;");
         receiptArea.setPrefRowCount(16);
 
-        VBox content = new VBox(10, ok, note, saved, new Separator(), receiptArea);
+        Button printBtn = new Button("Print receipt");
+        printBtn.setStyle("-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;"
+                + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
+        printBtn.setOnAction(e -> ReceiptGenerator.printReceipt(receipt));
+        HBox actions = new HBox(printBtn);
+        actions.setAlignment(Pos.CENTER_LEFT);
+
+        VBox content = new VBox(10, ok, saved, new Separator(), receiptArea, actions);
         content.setPadding(new Insets(18));
         dialog.getDialogPane().setContent(content);
         dialog.showAndWait();

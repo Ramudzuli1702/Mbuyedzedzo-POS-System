@@ -19,6 +19,12 @@ import java.util.List;
 
 public class MarketingView {
 
+    /** Flat card look — a border, not a dropshadow. Effect-cached nodes inside
+     *  a ScrollPane were painting blank on Windows. */
+    private static final String CARD_STYLE =
+        "-fx-background-color: white; -fx-background-radius: 10;"
+        + "-fx-border-color: #e2e8f0; -fx-border-radius: 10; -fx-border-width: 1;";
+
     private final User currentUser;
     private final CommunicationsService commService;
     private TableView<MarketingCampaign> historyTable;
@@ -38,9 +44,6 @@ public class MarketingView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        // Plain two-column layout — no wrapping ScrollPane. A ScrollPane around
-        // these shadowed cards was rendering the left column's labels blank.
-        // The tall content here is the tables, which scroll on their own.
         VBox leftCol = new VBox(18);
         leftCol.setPrefWidth(480);
         leftCol.setMaxWidth(Double.MAX_VALUE);
@@ -57,7 +60,14 @@ public class MarketingView {
         HBox.setHgrow(leftCol, Priority.ALWAYS);
         HBox.setHgrow(rightCol, Priority.ALWAYS);
 
-        layout.setCenter(body);
+        // Page-level vertical scroll so nothing is stranded off-screen. The
+        // cards use a flat border (no dropshadow effect) — effect-cached nodes
+        // inside a ScrollPane were painting blank on Windows.
+        ScrollPane scroll = new ScrollPane(body);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        layout.setCenter(scroll);
         return layout;
     }
 
@@ -97,10 +107,7 @@ public class MarketingView {
         card.setPadding(new Insets(16));
         card.setMaxWidth(Double.MAX_VALUE);
         HBox.setHgrow(card, Priority.ALWAYS);
-        card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 8, 0, 0, 2);"
-        );
+        card.setStyle(CARD_STYLE);
 
         Label valLabel = new Label(value);
         valLabel.setFont(Font.font("System", FontWeight.BOLD, 26));
@@ -117,10 +124,7 @@ public class MarketingView {
     private VBox createComposeCard() {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
-        card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
-        );
+        card.setStyle(CARD_STYLE);
 
         Label title = new Label("Compose & Send");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
@@ -208,10 +212,7 @@ public class MarketingView {
     private VBox createSubscribersCard() {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
-        card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
-        );
+        card.setStyle(CARD_STYLE);
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -304,10 +305,7 @@ public class MarketingView {
     private VBox createUnsubscribeCard() {
         VBox card = new VBox(10);
         card.setPadding(new Insets(20));
-        card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
-        );
+        card.setStyle(CARD_STYLE);
 
         Label title = new Label("Process Unsubscribe Request");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
@@ -356,10 +354,7 @@ public class MarketingView {
     private VBox createOptOutLogCard() {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
-        card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
-        );
+        card.setStyle(CARD_STYLE);
 
         Label title = new Label("Recent Opt-Outs");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
@@ -406,10 +401,7 @@ public class MarketingView {
     private VBox createHistoryCard() {
         VBox card = new VBox(14);
         card.setPadding(new Insets(20));
-        card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
-        );
+        card.setStyle(CARD_STYLE);
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
