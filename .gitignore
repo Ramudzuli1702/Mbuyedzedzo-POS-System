@@ -4,7 +4,8 @@ target/
 *.iml
 *.log
 
-# Signing keys — never commit
+# Local overrides & runtime-generated keys
 config/
-*.pem
-license-*.pem
+
+# dev-keys/ IS committed on purpose — a throwaway keypair so the demo is
+# reproducible. Production supplies real keys via LICENSE_PRIVATE_KEY.

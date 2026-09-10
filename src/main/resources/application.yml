@@ -19,16 +19,17 @@ spring:
     baseline-on-migrate: true
 
 # ── License token signing ────────────────────────────────────────────────
-# RSA private key (PKCS#8, PEM) used to sign activation tokens. The matching
-# PUBLIC key is bundled inside the desktop POS. Generate a dev pair with:
-#   openssl genpkey -algorithm RSA -pkcs8 -out license-private.pem -pkeyopt rsa_keygen_bits:2048
-#   openssl rsa -pubout -in license-private.pem -out license-public.pem
+# RS256. dev-keys/ holds a committed throwaway pair so the demo is
+# reproducible; its PUBLIC half is also bundled in the desktop POS at
+# src/main/resources/license-public.pem. For production, generate a fresh
+# pair and pass LICENSE_PRIVATE_KEY / LICENSE_PUBLIC_KEY (and re-bundle the
+# public key in the POS build).
 licensing:
   token:
     issuer: mvelelo-licensing
     ttl-days: 7                # short-lived; desktop re-validates before this
-    private-key-path: ${LICENSE_PRIVATE_KEY:config/license-private.pem}
-    public-key-path:  ${LICENSE_PUBLIC_KEY:config/license-public.pem}
+    private-key-path: ${LICENSE_PRIVATE_KEY:dev-keys/license-private.pem}
+    public-key-path:  ${LICENSE_PUBLIC_KEY:dev-keys/license-public.pem}
   trial:
     days: 30
     max-per-machine: 1
