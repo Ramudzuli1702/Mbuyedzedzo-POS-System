@@ -3,6 +3,8 @@ package com.pos;
 import com.pos.database.DatabaseConnection;
 import com.pos.database.DatabaseSetup;
 import com.pos.setup.FirstRunSetup;
+import com.pos.utils.Dialogs;
+import com.pos.utils.LogSetup;
 import com.pos.views.LoginView;
 import com.pos.views.RegisterView;
 import com.pos.views.SetupView;
@@ -11,6 +13,8 @@ import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.stage.Stage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -42,8 +46,17 @@ import java.sql.Statement;
  */
 public class POSApplication extends Application {
 
+    private static final Logger log = LoggerFactory.getLogger(POSApplication.class);
+
     @Override
     public void start(Stage primaryStage) {
+        // Any exception that escapes an FX event handler lands here.
+        Thread.currentThread().setUncaughtExceptionHandler((t, ex) -> {
+            log.error("Uncaught exception on the JavaFX thread", ex);
+            Dialogs.error(primaryStage, "Something went wrong",
+                    "The last action could not be completed.", ex);
+        });
+
         primaryStage.setTitle(Branding.APP_NAME);
         primaryStage.setMinWidth(900);
         primaryStage.setMinHeight(600);
@@ -159,6 +172,7 @@ public class POSApplication extends Application {
     // ── Entry point ────────────────────────────────────────────────────────────
 
     public static void main(String[] args) {
+        LogSetup.init();   // must run before anything touches a logger
         launch(args);
     }
 }

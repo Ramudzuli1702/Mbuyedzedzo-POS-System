@@ -42,6 +42,11 @@
 
         <!-- Fat-JAR name produced by the Shade plugin (no extension) -->
         <shaded.jar.name>point-of-sale-system-${project.version}</shaded.jar.name>
+
+        <!-- Integration-test DB (empty = ITs skip themselves). Override on the CLI. -->
+        <pos.it.jdbcUrl></pos.it.jdbcUrl>
+        <pos.it.user></pos.it.user>
+        <pos.it.password></pos.it.password>
     </properties>
 
     <!-- ══════════════════════════════════════════════════════════════
@@ -118,6 +123,25 @@
             <version>1.6.2</version>
         </dependency>
 
+        <!-- Logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>2.0.16</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>1.5.12</version>
+        </dependency>
+
+        <!-- Connection pool -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+
         <!-- Tests (not bundled into the app JAR) -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
@@ -145,11 +169,39 @@
                 </configuration>
             </plugin>
 
-            <!-- 1b ── Surefire — runs the JUnit 5 tests in the test phase ───── -->
+            <!-- 1b ── Surefire — fast unit tests (*Test) in the test phase ──── -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
+            </plugin>
+
+            <!-- 1c ── Failsafe — integration tests (*IT) in the verify phase ──
+                 They need a MySQL database and SKIP THEMSELVES unless one is
+                 supplied, so `mvn verify` / `mvn package` are unaffected:
+
+                   mvn verify -Dpos.it.jdbcUrl=jdbc:mysql://localhost:3306/pos_db_test \
+                              -Dpos.it.user=root -Dpos.it.password=secret
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <systemPropertyVariables>
+                        <pos.it.jdbcUrl>${pos.it.jdbcUrl}</pos.it.jdbcUrl>
+                        <pos.it.user>${pos.it.user}</pos.it.user>
+                        <pos.it.password>${pos.it.password}</pos.it.password>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
 
             <!-- 2 ── JavaFX run plugin (dev only: mvn javafx:run) ──────────── -->
@@ -268,7 +320,7 @@
                                 <argument>${project.build.directory}/${shaded.jar.name}.jar;${javafx.jmods.path}</argument>
 
                                 <argument>--add-modules</argument>
-                                <argument>javafx.controls,javafx.fxml,javafx.swing,java.base,java.logging,java.sql,java.desktop,java.xml,java.naming,jdk.crypto.ec,jdk.httpserver,java.net.http</argument>
+                                <argument>javafx.controls,javafx.fxml,javafx.swing,java.base,java.logging,java.management,java.sql,java.desktop,java.xml,java.naming,jdk.crypto.ec,jdk.httpserver,java.net.http</argument>
 
                                 <argument>--output</argument>
                                 <argument>${project.build.directory}/runtime</argument>

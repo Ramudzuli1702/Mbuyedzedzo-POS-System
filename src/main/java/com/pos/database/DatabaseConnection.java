@@ -1,5 +1,10 @@
 package com.pos.database;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -9,7 +14,7 @@ import java.sql.SQLException;
 import java.util.Properties;
 
 /**
- * DatabaseConnection — manages a single shared MySQL connection.
+ * DatabaseConnection — a HikariCP connection pool over MySQL.
  *
  * On startup it reads connection details from:
  *   %PROGRAMDATA%\POS System\config\db.properties
@@ -18,10 +23,14 @@ import java.util.Properties;
  * If the file doesn't exist yet (e.g. during development) the hardcoded
  * defaults below are used instead.
  *
- * Constants are non-final so the static initialiser can overwrite them
- * from the config file before any other class reads them.
+ * {@link #getConnection()} borrows a pooled connection; closing it (every call
+ * site uses try-with-resources) returns it to the pool. The pool is built
+ * lazily on first use, so it always picks up whatever config first-run setup
+ * has written by then, and rebuilt if the config changes.
  */
 public class DatabaseConnection {
+
+    private static final Logger log = LoggerFactory.getLogger(DatabaseConnection.class);
 
     // ── Connection details ─────────────────────────────────────────────────────
     // These start as defaults and are overwritten from db.properties if it exists.
@@ -67,7 +76,7 @@ public class DatabaseConnection {
     public static void loadConfig() {
         File configFile = new File(CONFIG_PATH);
         if (!configFile.exists()) {
-            System.out.println("ℹ️  No db.properties found — using development defaults.");
+            log.info("No db.properties found — using development defaults.");
             return;
         }
         try (FileInputStream fis = new FileInputStream(configFile)) {
@@ -79,10 +88,11 @@ public class DatabaseConnection {
             USERNAME = props.getProperty("db.username", USERNAME);
             PASSWORD = props.getProperty("db.password", PASSWORD);
             TIMEZONE = props.getProperty("db.timezone", TIMEZONE);
-            System.out.println("✅ DB config loaded from " + CONFIG_PATH);
+            log.info("DB config loaded from {}", CONFIG_PATH);
         } catch (Exception e) {
-            System.err.println("⚠️  Could not read db.properties — using defaults. " + e.getMessage());
+            log.warn("Could not read db.properties — using defaults ({})", e.getMessage());
         }
+        resetPool();  // rebuild against whatever was just loaded
     }
 
     /**
@@ -113,25 +123,18 @@ public class DatabaseConnection {
             DATABASE = database;
             USERNAME = username;
             PASSWORD = password;
+            resetPool();
 
-            System.out.println("✅ db.properties written to " + CONFIG_PATH);
+            log.info("db.properties written to {}", CONFIG_PATH);
         } catch (Exception e) {
-            System.err.println("❌ Could not write db.properties: " + e.getMessage());
+            log.error("Could not write db.properties", e);
             throw new RuntimeException("Failed to save database configuration", e);
         }
     }
 
-    // ── Connections ───────────────────────────────────────────────────────────
-    //
-    // Every call to getConnection() returns a NEW, independent connection that
-    // the caller owns and must close (all call sites use try-with-resources).
-    //
-    // There is deliberately no shared/cached connection: services are called
-    // from the JavaFX thread and several background threads (checkout worker,
-    // inventory load, marketing send, the WiFi scanner). A single shared
-    // java.sql.Connection is not thread-safe — one thread closing it, or
-    // toggling auto-commit, would corrupt another thread's in-flight work.
+    // ── Connection pool ───────────────────────────────────────────────────────
 
+    private static volatile HikariDataSource pool;
     private static volatile boolean driverLoaded = false;
 
     private static void ensureDriver() throws SQLException {
@@ -141,6 +144,37 @@ public class DatabaseConnection {
             driverLoaded = true;
         } catch (ClassNotFoundException e) {
             throw new SQLException("MySQL JDBC driver not found", e);
+        }
+    }
+
+    /** Builds the pool on first use; rebuilt after a config change. */
+    private static HikariDataSource pool() {
+        HikariDataSource p = pool;
+        if (p != null && !p.isClosed()) return p;
+        synchronized (DatabaseConnection.class) {
+            if (pool != null && !pool.isClosed()) return pool;
+            HikariConfig cfg = new HikariConfig();
+            cfg.setPoolName("pos-pool");
+            cfg.setJdbcUrl(buildUrl());
+            cfg.setUsername(USERNAME);
+            cfg.setPassword(PASSWORD);
+            cfg.setMaximumPoolSize(10);
+            cfg.setMinimumIdle(2);
+            cfg.setConnectionTimeout(10_000);   // 10s to hand out a connection
+            cfg.setValidationTimeout(3_000);
+            cfg.setMaxLifetime(30 * 60_000);    // recycle every 30 min
+            cfg.setKeepaliveTime(5 * 60_000);
+            pool = new HikariDataSource(cfg);
+            log.info("Connection pool started for {}:{}/{}", HOST, PORT, DATABASE);
+            return pool;
+        }
+    }
+
+    /** Closes the pool so the next getConnection() rebuilds it from current config. */
+    private static synchronized void resetPool() {
+        if (pool != null) {
+            try { pool.close(); } catch (Exception e) { log.warn("Error closing pool", e); }
+            pool = null;
         }
     }
 
@@ -171,17 +205,16 @@ public class DatabaseConnection {
     }
 
     /**
-     * Returns a NEW connection each call. The caller owns it and must close it
-     * (every call site uses try-with-resources). Returns {@code null} if the
-     * connection could not be opened — callers already null-check.
+     * Borrows a pooled connection. The caller owns it and must close it (every
+     * call site uses try-with-resources) — closing returns it to the pool.
+     * Returns {@code null} if a connection could not be obtained; callers
+     * already null-check.
      */
     public static Connection getConnection() {
         try {
-            ensureDriver();
-            return DriverManager.getConnection(buildUrl(), USERNAME, PASSWORD);
-        } catch (SQLException e) {
-            System.err.println("❌ MySQL connection failed: " + e.getMessage());
-            e.printStackTrace();
+            return pool().getConnection();
+        } catch (Exception e) {
+            log.error("Could not obtain a database connection", e);
             return null;
         }
     }
@@ -198,13 +231,13 @@ public class DatabaseConnection {
         return DriverManager.getConnection(url, USERNAME, PASSWORD);
     }
 
-    /**
-     * No-op — connections are per-call and closed by their callers. Kept so the
-     * shutdown paths (POSApplication, MainDashboard) still compile.
-     */
+    /** Kept for older call sites — individual connections are pool-managed. */
     public static void closeConnection() { }
 
-    public static void closeAll() { }
+    /** Shuts the pool down. Call on application exit. */
+    public static void closeAll() {
+        resetPool();
+    }
 
     public static boolean testConnection() {
         try (Connection conn = getConnection()) {

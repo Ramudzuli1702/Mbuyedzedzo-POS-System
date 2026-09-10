@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    POS logging.
+
+    CONSOLE : root logger, INFO+, formatted.
+    FILE    : a raw pass-through of everything that reaches the console — real
+              log events (already formatted by the console appender), plus
+              anything written to System.out / System.err (legacy println and
+              printStackTrace calls), captured by the tee in LogSetup.init().
+              Rolled daily and at 20 MB, 14 days / 200 MB kept.
+
+    Location comes from the `pos.log.dir` system property set by
+    LogSetup.init(); falls back to ~/.pos-logs.
+-->
+<configuration>
+
+    <property name="LOG_DIR" value="${pos.log.dir:-${user.home}/.pos-logs}" />
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss} %-5level %logger{28} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/pos.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/pos.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>14</maxHistory>
+            <totalSizeCap>200MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <!-- raw: the line has already been formatted (or is a raw print) -->
+            <pattern>%msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!--
+        The tee in LogSetup routes captured console output here. additivity=false
+        keeps it off the CONSOLE appender, so there is no write loop.
+    -->
+    <logger name="console.capture" level="TRACE" additivity="false">
+        <appender-ref ref="FILE" />
+    </logger>
+
+    <!-- Third-party noise control -->
+    <logger name="com.zaxxer.hikari" level="INFO" />
+    <logger name="com.mysql" level="WARN" />
+    <logger name="ch.qos.logback" level="WARN" />
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+
+</configuration>
