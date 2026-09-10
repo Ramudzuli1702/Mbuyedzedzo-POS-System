@@ -118,6 +118,14 @@
             <version>1.6.2</version>
         </dependency>
 
+        <!-- Tests (not bundled into the app JAR) -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.11.4</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <!-- ══════════════════════════════════════════════════════════════
@@ -135,6 +143,13 @@
                     <source>22</source>
                     <target>22</target>
                 </configuration>
+            </plugin>
+
+            <!-- 1b ── Surefire — runs the JUnit 5 tests in the test phase ───── -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
             </plugin>
 
             <!-- 2 ── JavaFX run plugin (dev only: mvn javafx:run) ──────────── -->

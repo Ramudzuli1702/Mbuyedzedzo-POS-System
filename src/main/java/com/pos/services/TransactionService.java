@@ -174,7 +174,7 @@ public class TransactionService {
      * [0, cartTotal]; the final line absorbs any rounding remainder so the line
      * totals sum back to (cartTotal - discount).
      */
-    private BigDecimal[] distributeDiscount(ObservableList<CartItem> cartItems, BigDecimal discountAmount) {
+    static BigDecimal[] distributeDiscount(ObservableList<CartItem> cartItems, BigDecimal discountAmount) {
         final int n = cartItems.size();
         final BigDecimal[] netUnit = new BigDecimal[n];
 
