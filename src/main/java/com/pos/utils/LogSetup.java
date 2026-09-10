@@ -41,6 +41,11 @@ public final class LogSetup {
         }
         System.setProperty("pos.log.dir", dir.toAbsolutePath().toString());
 
+        // If any logger fired before this method ran, logback already resolved
+        // its file path from the (then-unset) property and used the fallback.
+        // Re-read the config now that pos.log.dir is set.
+        reconfigureLogback();
+
         // Mirror everything printed to the console into the rolling log file,
         // so legacy println / printStackTrace calls are captured without
         // touching hundreds of call sites. Routed to a FILE-only logger, so
@@ -56,6 +61,24 @@ public final class LogSetup {
         Thread.setDefaultUncaughtExceptionHandler((thread, ex) ->
             LoggerFactory.getLogger("uncaught")
                 .error("Uncaught exception on thread {}", thread.getName(), ex));
+    }
+
+    /** Reload logback.xml so appenders pick up the now-set {@code pos.log.dir}. */
+    private static void reconfigureLogback() {
+        try {
+            org.slf4j.ILoggerFactory f = LoggerFactory.getILoggerFactory();
+            if (f instanceof ch.qos.logback.classic.LoggerContext ctx) {
+                ctx.reset();
+                ch.qos.logback.classic.joran.JoranConfigurator jc =
+                        new ch.qos.logback.classic.joran.JoranConfigurator();
+                jc.setContext(ctx);
+                try (java.io.InputStream in = LogSetup.class.getResourceAsStream("/logback.xml")) {
+                    if (in != null) jc.doConfigure(in);
+                }
+            }
+        } catch (Throwable t) {
+            // logging config isn't worth crashing startup over
+        }
     }
 
     /** A PrintStream that writes to {@code original} and also logs each completed line. */
