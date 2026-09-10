@@ -175,7 +175,9 @@ public class SettingsService {
             "--host=" + DatabaseConnection.HOST,
             "--port=" + DatabaseConnection.PORT,
             "--user=" + DatabaseConnection.USERNAME,
-            "--password=" + DatabaseConnection.PASSWORD,
+            // Password is passed via the MYSQL_PWD environment variable below,
+            // never on the command line where it would be visible to any process
+            // listing (tasklist / ps / Process Explorer).
             "--single-transaction",     // consistent backup without locking
             "--routines",
             "--triggers",
@@ -184,6 +186,7 @@ public class SettingsService {
 
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
+            pb.environment().put("MYSQL_PWD", DatabaseConnection.PASSWORD == null ? "" : DatabaseConnection.PASSWORD);
             pb.redirectOutput(new File(filename));
             pb.redirectErrorStream(false);
 

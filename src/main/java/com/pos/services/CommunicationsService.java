@@ -76,6 +76,19 @@ public class CommunicationsService {
     // ─────────────────────────────────────────────
     private final SettingsService settings = new SettingsService();
 
+    /** Display name for the business in email subjects, headers and footers. */
+    private String bizName() {
+        String n = settings.getBusinessName();
+        return (n == null || n.isBlank()) ? "Our Store" : n;
+    }
+
+    /** Contact address shown in email footers — the business email, or the sending account. */
+    private String bizEmail() {
+        String e = settings.getBusinessEmail();
+        if (e == null || e.isBlank()) e = settings.getEmailUsername();
+        return (e == null) ? "" : e;
+    }
+
     // ─────────────────────────────────────────────
     // Gmail SMTP session — credentials from SettingsService
     // ─────────────────────────────────────────────
@@ -109,7 +122,7 @@ public class CommunicationsService {
                     settings.getEmailUsername(),
                     settings.getEmailFromName()));
             message.setRecipient(Message.RecipientType.TO, new InternetAddress(toEmail));
-            message.setSubject("Your Receipt from CubeConnect POS");
+            message.setSubject("Your Receipt from " + bizName());
 
             String htmlBody = buildReceiptHtml(receiptText);
 
@@ -429,14 +442,14 @@ public class CommunicationsService {
                     </div>
                     <div style="background: #f5f7fa; padding: 16px; text-align: center;
                                 font-size: 11px; color: #7f8c8d;">
-                      CubeConnect POS &nbsp;|&nbsp; cubeconnectteam@gmail.com<br>
-                      <a href="mailto:cubeconnectteam@gmail.com?subject=Unsubscribe"
+                      %s &nbsp;|&nbsp; %s<br>
+                      <a href="mailto:%s?subject=Unsubscribe%%20from%%20receipts"
                          style="color: #95a5a6;">Unsubscribe from email receipts</a>
                     </div>
                   </div>
                 </body>
                 </html>
-                """.formatted(escaped);
+                """.formatted(escaped, bizName(), bizEmail(), bizEmail());
     }
 
     private String buildMarketingHtml(String customerName, String bodyHtml) {
@@ -449,7 +462,7 @@ public class CommunicationsService {
                               box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                     <div style="background: linear-gradient(135deg, #667eea, #764ba2);
                                 padding: 28px; text-align: center;">
-                      <h1 style="color: white; margin: 0; font-size: 24px;">CubeConnect</h1>
+                      <h1 style="color: white; margin: 0; font-size: 24px;">%s</h1>
                       <p style="color: #e0e6ff; margin: 6px 0 0; font-size: 13px;">Special offer just for you</p>
                     </div>
                     <div style="padding: 28px; color: #2c3e50;">
@@ -458,14 +471,14 @@ public class CommunicationsService {
                     </div>
                     <div style="background: #f5f7fa; padding: 16px; text-align: center;
                                 font-size: 11px; color: #7f8c8d; border-top: 1px solid #e0e0e0;">
-                      CubeConnect POS &nbsp;|&nbsp; cubeconnectteam@gmail.com<br>
-                      <a href="mailto:cubeconnectteam@gmail.com?subject=Unsubscribe"
+                      %s &nbsp;|&nbsp; %s<br>
+                      <a href="mailto:%s?subject=Unsubscribe"
                          style="color: #95a5a6;">Unsubscribe</a>
                     </div>
                   </div>
                 </body>
                 </html>
-                """.formatted(customerName, bodyHtml);
+                """.formatted(bizName(), customerName, bodyHtml, bizName(), bizEmail(), bizEmail());
     }
 
     public List<String[]> getSubscribedCustomers() {

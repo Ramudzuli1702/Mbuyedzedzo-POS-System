@@ -1,3 +1,10 @@
+-- ============================================================================
+--  REFERENCE ONLY — the authoritative schema is created at runtime by
+--  com.pos.database.DatabaseSetup (idempotent, runs on every launch) and
+--  evolved by its runMigrations() method. Keep this file in sync when the
+--  schema changes, but the application never reads it.
+-- ============================================================================
+
 CREATE TABLE Staff (
     StaffID INT AUTO_INCREMENT PRIMARY KEY,
     FullNames VARCHAR(100) NOT NULL,
@@ -47,11 +54,18 @@ CREATE TABLE Product (
 ) ENGINE=InnoDB;
 
 CREATE TABLE Promo (
-    PromoID INT AUTO_INCREMENT PRIMARY KEY,
-    PromoCode VARCHAR(10) NOT NULL UNIQUE,
-    ValidFrom DATETIME,
-    ValidTill DATETIME,
-    PromoQR BLOB
+    PromoID         INT AUTO_INCREMENT PRIMARY KEY,
+    PromoCode       VARCHAR(10)   NOT NULL UNIQUE,
+    PromoName       VARCHAR(100),
+    DiscountType    VARCHAR(10)   NOT NULL DEFAULT 'PERCENT',  -- 'PERCENT' or 'FIXED'
+    DiscountValue   DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    MinimumPurchase DECIMAL(10,2) DEFAULT 0.00,
+    ValidFrom       DATETIME,
+    ValidTill       DATETIME,
+    IsActive        BOOLEAN       DEFAULT TRUE,
+    UsageLimit      INT           DEFAULT NULL,
+    UsageCount      INT           DEFAULT 0,
+    PromoQR         BLOB
 ) ENGINE=InnoDB;
 
 CREATE TABLE Transactions (

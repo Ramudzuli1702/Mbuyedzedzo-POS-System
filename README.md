@@ -29,12 +29,16 @@ A comprehensive JavaFX-based Point of Sale (POS) System with a modern, beautiful
 
 - **Language**: Java 22
 - **UI Framework**: JavaFX 22
-- **Database**: Microsoft SQL Server
+- **Database**: MySQL 8.4 (bundled installer, set up automatically on first run)
 - **Build Tool**: Maven
+- **Packaging**: Shade fat-JAR → `jlink` custom runtime → `jpackage` Windows `.exe`
 - **Libraries**:
-  - Microsoft SQL Server JDBC Driver
-  - ZXing (QR Code generation)
+  - MySQL Connector/J
+  - ZXing (QR code generation)
   - Apache POI (Excel export)
+  - iText 5 (PDF reports)
+  - Jakarta Mail (email receipts & marketing)
+  - Gson (JSON for the WiFi scanner companion)
 
 ## Project Structure
 
@@ -77,50 +81,26 @@ point-of-sale-system/
 
 ## Database Setup
 
-### Prerequisites
-1. Microsoft SQL Server Management Studio installed
-2. SQL Server running on `RAMOS1702\SQLEXPRESS`
+**No manual setup is required.** On first launch the application:
 
-### Database Schema Updates
+1. Detects or silently installs MySQL 8.4 (`installer/mysql-installer.msi`, bundled by `jpackage`), generating a random root password.
+2. Writes the connection details to `%PROGRAMDATA%\POS System\config\db.properties`.
+3. Creates the `pos_db` schema and every table (`com.pos.database.DatabaseSetup`, idempotent — safe to re-run on every launch).
+4. Runs any pending column migrations.
 
-Before running the application, update your database schema with these corrections:
+For development against an existing local MySQL, create `%PROGRAMDATA%\POS System\config\db.properties`:
 
-```sql
--- 1. Update PromoCode data type in Transactions table
-ALTER TABLE Transactions
-ALTER COLUMN PromoCode VARCHAR(10);
-
--- 2. Update ContactNo data type in Account table
-ALTER TABLE Account
-ALTER COLUMN ContactNo VARCHAR(20);
-
--- 3. Update Price data type in Product table
-ALTER TABLE Product
-ALTER COLUMN Price DECIMAL(10, 2);
-
--- 4. Update QRCode and BarCode to store strings
-ALTER TABLE Product
-ALTER COLUMN QRCode VARCHAR(MAX);
-
-ALTER TABLE Product
-ALTER COLUMN BarCode VARCHAR(100);
-
--- 5. Add some default categories (optional but recommended)
-INSERT INTO Category (CategoryName) VALUES 
-('Electronics'),
-('Groceries'),
-('Clothing'),
-('Books'),
-('Toys'),
-('Sports'),
-('Home & Garden'),
-('Health & Beauty');
-
--- 6. Create a default admin user (password: Admin123!)
--- Note: This is a hashed password, do not change it
-INSERT INTO Staff (FullNames, EmailAddress, UserPassword, UserType, Status) 
-VALUES ('System Admin', 'admin@pos.com', 'jGl25bVBBBW96Qi9Te4V37Fnqchz/Eu4qB9vKrRIqRg=', 'Admin', 'Active');
+```properties
+db.host=127.0.0.1
+db.port=3306
+db.name=pos_db
+db.username=root
+db.password=your-password
+# Optional — defaults to Africa/Johannesburg
+db.timezone=Africa/Johannesburg
 ```
+
+`MySQL_Scripts/Tables_creation_script.sql` is a **reference copy** of the schema; the app never reads it. `MySQL_Scripts/insertions.sql` (git-ignored) is optional demo data.
 
 ## Installation & Setup
 
@@ -148,38 +128,29 @@ Navigate to the project root directory (where pom.xml is located) and run:
 mvn clean install
 ```
 
-This will download all required dependencies:
-- JavaFX libraries
-- SQL Server JDBC driver
-- ZXing (QR code library)
-- Apache POI (Excel export)
+This downloads JavaFX, MySQL Connector/J, ZXing, Apache POI, iText, Jakarta Mail and Gson.
 
-### Step 5: Configure Database Connection
-The database connection is already configured for your server in `DatabaseConnection.java`:
-- Server: `RAMOS1702\SQLEXPRESS`
-- Database: `PointOfSale`
-- Authentication: Windows Authentication
+### Step 5: Run the Application
 
-### Step 6: Run the Application
-
-Using Maven:
+Development:
 ```bash
 mvn javafx:run
 ```
 
-Or compile and run directly:
+Fat JAR:
 ```bash
 mvn clean package
 java -jar target/point-of-sale-system-1.0.0.jar
 ```
 
-## Default Login Credentials
+Windows installer (`.exe`) — see the `pom.xml` build section for the `jlink` / `jpackage` prerequisites:
+```bash
+mvn clean verify
+```
 
-After running the database setup script:
-- **Email**: admin@pos.com
-- **Password**: Admin123!
+## First Login
 
-**Important**: Change this password immediately after first login!
+There is **no default account**. On the first run — when the `Staff` table is empty — the app opens the registration screen and the first account you create becomes the Admin. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes; older unsalted hashes are upgraded automatically on next login.
 
 ## User Roles & Permissions
 
@@ -254,9 +225,9 @@ If you want to extend the system, consider:
 ## Troubleshooting
 
 ### Database Connection Issues
-- Verify SQL Server is running
-- Check Windows Authentication is enabled
-- Ensure database name is exactly "PointOfSale"
+- Verify the MySQL service is running
+- Check `%PROGRAMDATA%\POS System\config\db.properties` has the right host/port/user/password
+- The default database name is `pos_db` and is created automatically
 
 ### JavaFX Issues
 If you get JavaFX runtime errors:
@@ -270,7 +241,8 @@ mvn clean install -U
 ```
 
 ### Port Already in Use
-If SQL Server port is blocked, check firewall settings or use SQL Server Configuration Manager.
+If MySQL's port (3306) is blocked, check firewall settings or MySQL's `my.ini`.
+The WiFi scanner companion server uses port 8888 (auto-increments if taken).
 
 ## Screenshots
 

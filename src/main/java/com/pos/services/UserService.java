@@ -26,8 +26,16 @@ public class UserService {
             if (rs.next()) {
                 String hashedPassword = rs.getString("UserPassword");
                 if (PasswordUtil.verifyPassword(password, hashedPassword)) {
+                    int staffID = rs.getInt("StaffID");
+
+                    // Transparently upgrade legacy (unsalted SHA-256) hashes to
+                    // the current PBKDF2 format now that we have the plaintext.
+                    if (PasswordUtil.needsRehash(hashedPassword)) {
+                        rehashPassword(conn, staffID, password);
+                    }
+
                     User user = new User();
-                    user.setStaffID(rs.getInt("StaffID"));
+                    user.setStaffID(staffID);
                     user.setFullNames(rs.getString("FullNames"));
                     user.setEmailAddress(rs.getString("EmailAddress"));
                     user.setUserType(rs.getString("UserType"));
@@ -39,6 +47,21 @@ public class UserService {
             e.printStackTrace();
         }
         return null;
+    }
+
+    /**
+     * Rewrites a staff member's stored password hash in the current format.
+     * Best-effort: a failure here must not block an otherwise valid login.
+     */
+    private void rehashPassword(Connection conn, int staffID, String plaintext) {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "UPDATE Staff SET UserPassword = ? WHERE StaffID = ?")) {
+            ps.setString(1, PasswordUtil.hashPassword(plaintext));
+            ps.setInt(2, staffID);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Password rehash for staff #" + staffID + " failed: " + e.getMessage());
+        }
     }
 
     public boolean logCheckIn(int staffID) {

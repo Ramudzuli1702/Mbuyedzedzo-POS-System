@@ -23,6 +23,9 @@ backups/
 installer/*.msi
 installer/jre/
 
+# ── Dev seed data (contains sample credentials / real-looking emails) ──
+MySQL_Scripts/insertions.sql
+
 # ── OS noise ─────────────────────────────────────────────────
 Thumbs.db
 .DS_Store
