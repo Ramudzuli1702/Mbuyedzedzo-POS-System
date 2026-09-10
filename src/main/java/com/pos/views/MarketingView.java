@@ -23,8 +23,10 @@ public class MarketingView {
     private final CommunicationsService commService;
     private TableView<MarketingCampaign> historyTable;
     private TableView<String[]> subscribersTable;
+    private TableView<String[]> optOutTable;
     private Label historyCountLabel;
     private Label subscriberCountLabel;
+    private Label statusMessage;
 
     public MarketingView(User user) {
         this.currentUser = user;
@@ -39,16 +41,21 @@ public class MarketingView {
         HBox body = new HBox(20);
         body.setPadding(new Insets(20));
 
-        VBox leftCol = new VBox(20);
-        leftCol.setPrefWidth(480);
-        leftCol.setMinWidth(420);
-        leftCol.getChildren().addAll(createStatsRow(), createComposeCard(), createSubscribersCard());
+        VBox leftCol = new VBox(18);
+        leftCol.getChildren().addAll(
+            createStatsRow(), createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
 
-        VBox rightCol = new VBox(20);
+        ScrollPane leftScroll = new ScrollPane(leftCol);
+        leftScroll.setFitToWidth(true);
+        leftScroll.setPrefWidth(500);
+        leftScroll.setMinWidth(440);
+        leftScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+
+        VBox rightCol = new VBox(18);
         HBox.setHgrow(rightCol, Priority.ALWAYS);
-        rightCol.getChildren().add(createHistoryCard());
+        rightCol.getChildren().addAll(createHistoryCard(), createOptOutLogCard());
 
-        body.getChildren().addAll(leftCol, rightCol);
+        body.getChildren().addAll(leftScroll, rightCol);
         layout.setCenter(body);
         return layout;
     }
@@ -250,7 +257,34 @@ public class MarketingView {
             }
         });
 
-        subscribersTable.getColumns().addAll(nameCol, emailCol, smsCol);
+        TableColumn<String[], Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(110);
+        actionCol.setCellFactory(col -> new TableCell<>() {
+            private final Button btn = new Button("Unsubscribe");
+            {
+                btn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;"
+                    + "-fx-font-size: 10; -fx-padding: 4 8; -fx-background-radius: 4; -fx-cursor: hand;");
+                btn.setOnAction(e -> {
+                    String[] row = getTableView().getItems().get(getIndex());
+                    int accountID = Integer.parseInt(row[3]);
+                    Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                        "Unsubscribe " + row[0] + " from marketing emails?", ButtonType.YES, ButtonType.NO);
+                    confirm.showAndWait().ifPresent(r -> {
+                        if (r != ButtonType.YES) return;
+                        commService.setMarketingOptIn(accountID, false, "Staff",
+                            "Unsubscribed by staff from Marketing view", currentUser.getStaffID());
+                        loadSubscribers();
+                        loadOptOutLog();
+                    });
+                });
+            }
+            @Override protected void updateItem(Void v, boolean empty) {
+                super.updateItem(v, empty);
+                setGraphic(empty ? null : btn);
+            }
+        });
+
+        subscribersTable.getColumns().addAll(nameCol, emailCol, smsCol, actionCol);
         loadSubscribers();
 
         card.getChildren().addAll(header, subscribersTable);
@@ -261,6 +295,109 @@ public class MarketingView {
         List<String[]> subs = commService.getSubscribedCustomers();
         subscribersTable.setItems(FXCollections.observableArrayList(subs));
         subscriberCountLabel.setText(subs.size() + " opted in  ");
+    }
+
+    /** Card for processing a customer's emailed unsubscribe request. */
+    private VBox createUnsubscribeCard() {
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(20));
+        card.setStyle(
+            "-fx-background-color: white; -fx-background-radius: 10;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
+        );
+
+        Label title = new Label("🚫 Process Unsubscribe Request");
+        title.setFont(Font.font("System", FontWeight.BOLD, 16));
+        title.setTextFill(Color.web("#0f766e"));
+
+        Label help = new Label(
+            "When a customer emails asking to unsubscribe, paste their email address "
+            + "or the unsubscribe code from their message subject line here.");
+        help.setWrapText(true);
+        help.setFont(Font.font("System", 11));
+        help.setTextFill(Color.web("#7f8c8d"));
+
+        TextField input = new TextField();
+        input.setPromptText("customer@example.com  or  Unsubscribe <code>");
+        input.setStyle("-fx-padding: 9; -fx-font-size: 13;");
+
+        statusMessage = new Label("");
+        statusMessage.setWrapText(true);
+        statusMessage.setFont(Font.font("System", 12));
+
+        Button processBtn = new Button("Process");
+        processBtn.setStyle(
+            "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;"
+            + "-fx-padding: 9 20; -fx-background-radius: 8; -fx-cursor: hand;");
+        processBtn.setOnAction(e -> {
+            CommunicationsService.UnsubResult res =
+                commService.processUnsubscribeRequest(input.getText(), currentUser.getStaffID());
+            statusMessage.setTextFill(Color.web(res.matched() ? "#16a34a" : "#e74c3c"));
+            statusMessage.setText((res.matched() ? "✅ " : "⚠️ ") + res.message());
+            if (res.matched()) {
+                input.clear();
+                loadSubscribers();
+                loadOptOutLog();
+            }
+        });
+
+        HBox row = new HBox(10, input, processBtn);
+        HBox.setHgrow(input, Priority.ALWAYS);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        card.getChildren().addAll(title, help, row, statusMessage);
+        return card;
+    }
+
+    /** Recent opt-out / opt-in events. */
+    private VBox createOptOutLogCard() {
+        VBox card = new VBox(12);
+        card.setPadding(new Insets(20));
+        card.setStyle(
+            "-fx-background-color: white; -fx-background-radius: 10;" +
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
+        );
+
+        Label title = new Label("📕 Recent Opt-Outs");
+        title.setFont(Font.font("System", FontWeight.BOLD, 16));
+        title.setTextFill(Color.web("#0f766e"));
+
+        optOutTable = new TableView<>();
+        optOutTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        optOutTable.setPrefHeight(220);
+        optOutTable.setPlaceholder(new Label("No opt-out activity yet."));
+
+        String[][] cols = {
+            {"When", "0", "90"}, {"Customer", "1", "0"}, {"Email", "2", "0"},
+            {"Action", "3", "110"}, {"Via", "4", "90"}, {"By", "5", "120"}
+        };
+        for (String[] c : cols) {
+            int idx = Integer.parseInt(c[1]);
+            TableColumn<String[], String> tc = new TableColumn<>(c[0]);
+            if (!"0".equals(c[2])) tc.setPrefWidth(Double.parseDouble(c[2]));
+            tc.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                idx < d.getValue().length ? d.getValue()[idx] : ""));
+            if (idx == 3) tc.setCellFactory(col -> new TableCell<>() {
+                @Override protected void updateItem(String item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty || item == null) { setText(null); setStyle(""); return; }
+                    setText(item);
+                    setStyle("Unsubscribed".equals(item)
+                        ? "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
+                        : "-fx-text-fill: #16a34a; -fx-font-weight: bold;");
+                }
+            });
+            optOutTable.getColumns().add(tc);
+        }
+        loadOptOutLog();
+
+        card.getChildren().addAll(title, optOutTable);
+        return card;
+    }
+
+    private void loadOptOutLog() {
+        if (optOutTable == null) return;
+        optOutTable.setItems(FXCollections.observableArrayList(commService.getSuppressionLog(25)));
     }
 
     private VBox createHistoryCard() {

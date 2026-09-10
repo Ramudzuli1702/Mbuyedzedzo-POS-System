@@ -243,6 +243,7 @@ public class DatabaseSetup {
                     ReceiptByEmail   BOOLEAN DEFAULT TRUE,
                     SMSNotifications BOOLEAN DEFAULT FALSE,
                     TermsAccepted    BOOLEAN DEFAULT FALSE,
+                    UnsubToken       VARCHAR(64) DEFAULT NULL,
                     AcceptanceDate   DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (AccountID) REFERENCES Account(AccountID) ON DELETE CASCADE
                 ) ENGINE=InnoDB
@@ -287,6 +288,25 @@ public class DatabaseSetup {
                     ExpiryDate  DATETIME,
                     IsActive    BOOLEAN DEFAULT TRUE,
                     FOREIGN KEY (StaffID) REFERENCES Staff(StaffID) ON DELETE CASCADE
+                ) ENGINE=InnoDB
+            """);
+
+            // MarketingSuppression — audit log of marketing opt-out / opt-in events.
+            // The live opt-in state is CustomerCommunications.MarketingEmails; this
+            // table records who changed it, when, how, and why.
+            stmt.executeUpdate("""
+                CREATE TABLE IF NOT EXISTS MarketingSuppression (
+                    EventID     INT AUTO_INCREMENT PRIMARY KEY,
+                    AccountID   INT NOT NULL,
+                    Email       VARCHAR(100),
+                    OptedIn     BOOLEAN NOT NULL,
+                    Method      VARCHAR(20)  NOT NULL DEFAULT 'Staff',
+                    Note        VARCHAR(255),
+                    ActionedBy  INT,
+                    EventAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_ms_account (AccountID),
+                    FOREIGN KEY (AccountID)  REFERENCES Account(AccountID) ON DELETE CASCADE,
+                    FOREIGN KEY (ActionedBy) REFERENCES Staff(StaffID)     ON DELETE SET NULL
                 ) ENGINE=InnoDB
             """);
 
@@ -403,6 +423,8 @@ public class DatabaseSetup {
                 "INT DEFAULT NULL AFTER IsActive");
             addColumnIfMissing(conn, "Promo", "UsageCount",
                 "INT DEFAULT 0 AFTER UsageLimit");
+            addColumnIfMissing(conn, "CustomerCommunications", "UnsubToken",
+                "VARCHAR(64) DEFAULT NULL AFTER TermsAccepted");
             System.out.println("✅ Migrations complete.");
         }
     }

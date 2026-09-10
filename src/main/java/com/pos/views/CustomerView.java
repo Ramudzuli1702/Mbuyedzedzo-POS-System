@@ -3,6 +3,8 @@ package com.pos.views;
 import com.pos.models.Customer;
 import com.pos.models.Product;
 import com.pos.models.User;
+import com.pos.services.CommunicationsService;
+import com.pos.services.CommunicationsService.CommPreferences;
 import com.pos.services.CustomerService;
 import com.pos.services.ExchangeReturnService;
 import com.pos.services.ProductService;
@@ -34,6 +36,7 @@ public class CustomerView {
     private User currentUser;
     private CustomerService customerService;
     private ProductService productService;
+    private final CommunicationsService commService = new CommunicationsService();
     private TableView<Customer> customerTable;
     private TextField searchField;
 
@@ -207,7 +210,8 @@ public class CustomerView {
                 createLabeledField("Signed Up By",     signupStaff),
                 createLabeledField("Member Since",     customer.getTimeStamp().toLocalDate().toString()),
                 createLabeledField("Total Net Purchases",
-                        customerService.getCustomerNetPurchaseQuantity(customer.getAccountID()) + " items"));
+                        customerService.getCustomerNetPurchaseQuantity(customer.getAccountID()) + " items"),
+                createMarketingToggleRow(customer));
         root.setTop(infoBox);
 
         // Purchases table
@@ -908,6 +912,41 @@ public class CustomerView {
         Label label = new Label(labelText + ":");
         label.setStyle("-fx-font-weight: bold; -fx-text-fill: #0f766e;");
         vbox.getChildren().addAll(label, new Label(valueText));
+        return vbox;
+    }
+
+    /** Marketing opt-in toggle for the customer detail window. */
+    private VBox createMarketingToggleRow(Customer customer) {
+        VBox vbox = new VBox(4);
+        Label label = new Label("Marketing Emails:");
+        label.setStyle("-fx-font-weight: bold; -fx-text-fill: #0f766e;");
+
+        CommPreferences prefs = commService.getPreferences(customer.getAccountID());
+        CheckBox optIn = new CheckBox("Customer receives marketing emails and special offers");
+        optIn.setSelected(prefs.isMarketingEmails());
+
+        Label note = new Label();
+        note.setFont(Font.font("System", 10));
+        note.setTextFill(Color.web("#7f8c8d"));
+
+        optIn.setOnAction(e -> {
+            boolean ok = commService.setMarketingOptIn(
+                    customer.getAccountID(), optIn.isSelected(),
+                    "Staff",
+                    optIn.isSelected() ? "Re-subscribed from customer detail"
+                                       : "Unsubscribed from customer detail",
+                    currentUser.getStaffID());
+            if (ok) {
+                note.setTextFill(Color.web("#16a34a"));
+                note.setText(optIn.isSelected() ? "Opted in — saved." : "Opted out — saved.");
+            } else {
+                optIn.setSelected(!optIn.isSelected());
+                note.setTextFill(Color.web("#e74c3c"));
+                note.setText("Could not save the change.");
+            }
+        });
+
+        vbox.getChildren().addAll(label, optIn, note);
         return vbox;
     }
 

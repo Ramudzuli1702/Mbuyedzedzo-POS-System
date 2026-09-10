@@ -154,6 +154,16 @@ public class CommunicationsService {
     // ─────────────────────────────────────────────
     public boolean sendMarketingEmail(String toEmail, String customerName,
             String subject, String bodyHtml) {
+        return sendMarketingEmail(toEmail, customerName, subject, bodyHtml, null);
+    }
+
+    /**
+     * @param unsubToken per-customer unsubscribe token; enables the footer
+     *                   unsubscribe link and the List-Unsubscribe header so the
+     *                   recipient can opt out with one click.
+     */
+    public boolean sendMarketingEmail(String toEmail, String customerName,
+            String subject, String bodyHtml, String unsubToken) {
         try {
             Session session = getMailSession();
 
@@ -164,7 +174,12 @@ public class CommunicationsService {
             message.setRecipient(Message.RecipientType.TO, new InternetAddress(toEmail));
             message.setSubject(subject);
 
-            String fullHtml = buildMarketingHtml(customerName, bodyHtml);
+            if (unsubToken != null && !unsubToken.isBlank() && !bizEmail().isBlank()) {
+                message.setHeader("List-Unsubscribe",
+                        "<mailto:" + bizEmail() + "?subject=Unsubscribe%20" + unsubToken + ">");
+            }
+
+            String fullHtml = buildMarketingHtml(customerName, bodyHtml, unsubToken);
             message.setContent(fullHtml, "text/html; charset=utf-8");
 
             Transport.send(message);
@@ -186,7 +201,7 @@ public class CommunicationsService {
      */
     public int sendMarketingBlast(String subject, String bodyHtml, int staffID) {
         String query = """
-                    SELECT a.EmailAddress, a.FullNames
+                    SELECT a.AccountID, a.EmailAddress, a.FullNames
                     FROM Account a
                     JOIN CustomerCommunications cc ON a.AccountID = cc.AccountID
                     WHERE cc.MarketingEmails = TRUE
@@ -195,15 +210,29 @@ public class CommunicationsService {
         int successCount = 0;
         int totalCount = 0;
 
+        // Collect first, then send — so we're not holding the shared connection
+        // open while getOrCreateUnsubToken() needs it per recipient.
+        java.util.List<int[]> ids = new ArrayList<>();
+        java.util.List<String[]> recipients = new ArrayList<>();
         try (Connection conn = DatabaseConnection.getConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(query)) {
-
             while (rs.next()) {
+                ids.add(new int[]{ rs.getInt("AccountID") });
+                recipients.add(new String[]{ rs.getString("EmailAddress"), rs.getString("FullNames") });
+            }
+        } catch (SQLException e) {
+            System.err.println("❌ Marketing blast query error: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        try {
+            for (int i = 0; i < recipients.size(); i++) {
                 totalCount++;
-                String email = rs.getString("EmailAddress");
-                String name = rs.getString("FullNames");
-                if (sendMarketingEmail(email, name, subject, bodyHtml))
+                String email = recipients.get(i)[0];
+                String name  = recipients.get(i)[1];
+                String token = getOrCreateUnsubToken(ids.get(i)[0]);
+                if (sendMarketingEmail(email, name, subject, bodyHtml, token))
                     successCount++;
                 Thread.sleep(200);
             }
@@ -452,7 +481,15 @@ public class CommunicationsService {
                 """.formatted(escaped, bizName(), bizEmail(), bizEmail());
     }
 
-    private String buildMarketingHtml(String customerName, String bodyHtml) {
+    private String buildMarketingHtml(String customerName, String bodyHtml, String unsubToken) {
+        String subject = (unsubToken != null && !unsubToken.isBlank())
+                ? "Unsubscribe%20" + unsubToken
+                : "Unsubscribe";
+        String unsubLink = "mailto:" + bizEmail() + "?subject=" + subject;
+        String unsubNote = (unsubToken != null && !unsubToken.isBlank())
+                ? "Click Unsubscribe and send the message — we'll remove you from our mailing list."
+                : "Reply to this email with \"Unsubscribe\" to opt out.";
+
         return """
                 <!DOCTYPE html>
                 <html>
@@ -472,19 +509,19 @@ public class CommunicationsService {
                     <div style="background: #f5f7fa; padding: 16px; text-align: center;
                                 font-size: 11px; color: #7f8c8d; border-top: 1px solid #e0e0e0;">
                       %s &nbsp;|&nbsp; %s<br>
-                      <a href="mailto:%s?subject=Unsubscribe"
-                         style="color: #95a5a6;">Unsubscribe</a>
+                      <a href="%s" style="color: #95a5a6;">Unsubscribe</a><br>
+                      <span style="color: #b0b8c0;">%s</span>
                     </div>
                   </div>
                 </body>
                 </html>
-                """.formatted(bizName(), customerName, bodyHtml, bizName(), bizEmail(), bizEmail());
+                """.formatted(bizName(), customerName, bodyHtml, bizName(), bizEmail(), unsubLink, unsubNote);
     }
 
     public List<String[]> getSubscribedCustomers() {
         List<String[]> customers = new ArrayList<>();
         String sql = """
-                    SELECT a.FullNames, a.EmailAddress, cc.SMSNotifications
+                    SELECT a.AccountID, a.FullNames, a.EmailAddress, cc.SMSNotifications
                     FROM Account a
                     JOIN CustomerCommunications cc ON a.AccountID = cc.AccountID
                     WHERE cc.MarketingEmails = TRUE
@@ -498,7 +535,8 @@ public class CommunicationsService {
                 customers.add(new String[] {
                         rs.getString("FullNames"),
                         rs.getString("EmailAddress"),
-                        rs.getBoolean("SMSNotifications") ? "✅" : "—"
+                        rs.getBoolean("SMSNotifications") ? "✅" : "—",
+                        String.valueOf(rs.getInt("AccountID"))   // index 3 — for the Unsubscribe action
                 });
             }
         } catch (SQLException e) {
@@ -506,5 +544,168 @@ public class CommunicationsService {
             e.printStackTrace();
         }
         return customers;
+    }
+
+    // ─────────────────────────────────────────────
+    // Marketing opt-in / unsubscribe
+    // ─────────────────────────────────────────────
+
+    public record UnsubResult(boolean matched, String customerName, String email, String message) {}
+
+    /** The customer's unsubscribe token, generated and stored on first use. */
+    public String getOrCreateUnsubToken(int accountID) {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT UnsubToken FROM CustomerCommunications WHERE AccountID = ?")) {
+                ps.setInt(1, accountID);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    String tok = rs.getString("UnsubToken");
+                    if (tok != null && !tok.isBlank()) return tok;
+                }
+            }
+            String token = randomToken();
+            try (PreparedStatement ps = conn.prepareStatement("""
+                    INSERT INTO CustomerCommunications (AccountID, UnsubToken)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE UnsubToken = VALUES(UnsubToken)
+                    """)) {
+                ps.setInt(1, accountID);
+                ps.setString(2, token);
+                ps.executeUpdate();
+            }
+            return token;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static String randomToken() {
+        byte[] b = new byte[18];
+        new java.security.SecureRandom().nextBytes(b);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+
+    /**
+     * Sets a customer's marketing-email opt-in state and records the change in
+     * MarketingSuppression.
+     *
+     * @param method  how it was actioned: "Staff", "EmailRequest", "Signup", ...
+     * @param staffID staff member who actioned it, or null
+     */
+    public boolean setMarketingOptIn(int accountID, boolean optIn, String method,
+                                     String note, Integer staffID) {
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            try (PreparedStatement ps = conn.prepareStatement("""
+                    INSERT INTO CustomerCommunications (AccountID, MarketingEmails)
+                    VALUES (?, ?)
+                    ON DUPLICATE KEY UPDATE MarketingEmails = VALUES(MarketingEmails)
+                    """)) {
+                ps.setInt(1, accountID);
+                ps.setBoolean(2, optIn);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = conn.prepareStatement("""
+                    INSERT INTO MarketingSuppression (AccountID, Email, OptedIn, Method, Note, ActionedBy)
+                    SELECT a.AccountID, a.EmailAddress, ?, ?, ?, ?
+                    FROM Account a WHERE a.AccountID = ?
+                    """)) {
+                ps.setBoolean(1, optIn);
+                ps.setString(2, method);
+                ps.setString(3, note);
+                if (staffID != null) ps.setInt(4, staffID); else ps.setNull(4, Types.INTEGER);
+                ps.setInt(5, accountID);
+                ps.executeUpdate();
+            }
+            return true;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Handles a pasted unsubscribe request from a customer's message — either an
+     * email address or an unsubscribe token (which may arrive as
+     * "Unsubscribe &lt;token&gt;"). Opts the customer out and logs it.
+     */
+    public UnsubResult processUnsubscribeRequest(String input, Integer staffID) {
+        if (input == null || input.isBlank())
+            return new UnsubResult(false, null, null, "Enter an email address or unsubscribe code.");
+        String s = input.trim();
+
+        String candidateToken = s;
+        int sp = s.lastIndexOf(' ');
+        if (sp >= 0 && sp < s.length() - 1) candidateToken = s.substring(sp + 1).trim();
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            Integer accountID = null;
+            String name = null, email = null;
+
+            try (PreparedStatement ps = conn.prepareStatement("""
+                    SELECT a.AccountID, a.FullNames, a.EmailAddress
+                    FROM CustomerCommunications cc JOIN Account a ON a.AccountID = cc.AccountID
+                    WHERE cc.UnsubToken = ?
+                    """)) {
+                ps.setString(1, candidateToken);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) { accountID = rs.getInt(1); name = rs.getString(2); email = rs.getString(3); }
+            }
+
+            if (accountID == null && s.contains("@")) {
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT AccountID, FullNames, EmailAddress FROM Account WHERE EmailAddress = ?")) {
+                    ps.setString(1, s);
+                    ResultSet rs = ps.executeQuery();
+                    if (rs.next()) { accountID = rs.getInt(1); name = rs.getString(2); email = rs.getString(3); }
+                }
+            }
+
+            if (accountID == null)
+                return new UnsubResult(false, null, null,
+                        "No customer matched \"" + s + "\". Check the email address or code.");
+
+            setMarketingOptIn(accountID, false, "EmailRequest", "Processed from customer message", staffID);
+            return new UnsubResult(true, name, email,
+                    name + " has been unsubscribed from marketing emails.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return new UnsubResult(false, null, null, "Database error: " + e.getMessage());
+        }
+    }
+
+    /** Recent opt-out / opt-in events: [when, name, email, action, method, actionedBy]. */
+    public List<String[]> getSuppressionLog(int limit) {
+        List<String[]> out = new ArrayList<>();
+        String sql = """
+            SELECT ms.EventAt, a.FullNames, ms.Email, ms.OptedIn, ms.Method,
+                   COALESCE(s.FullNames, 'System') AS actionedBy
+            FROM MarketingSuppression ms
+            JOIN Account a ON a.AccountID = ms.AccountID
+            LEFT JOIN Staff s ON s.StaffID = ms.ActionedBy
+            ORDER BY ms.EventAt DESC
+            LIMIT ?
+            """;
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                Timestamp t = rs.getTimestamp("EventAt");
+                out.add(new String[]{
+                        t != null ? t.toLocalDateTime().format(
+                                java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) : "",
+                        rs.getString("FullNames"),
+                        rs.getString("Email"),
+                        rs.getBoolean("OptedIn") ? "Re-subscribed" : "Unsubscribed",
+                        rs.getString("Method"),
+                        rs.getString("actionedBy")
+                });
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return out;
     }
 }

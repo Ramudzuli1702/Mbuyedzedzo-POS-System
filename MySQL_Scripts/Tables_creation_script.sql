@@ -152,13 +152,28 @@ ADD FOREIGN KEY (SupervisorID) REFERENCES Staff(StaffID) ON DELETE SET NULL;
 -- Customer communications preferences
 CREATE TABLE CustomerCommunications (
     CommID INT AUTO_INCREMENT PRIMARY KEY,
-    AccountID INT NOT NULL,
+    AccountID INT NOT NULL UNIQUE,
     MarketingEmails BOOLEAN DEFAULT FALSE,
     ReceiptByEmail BOOLEAN DEFAULT TRUE,
     SMSNotifications BOOLEAN DEFAULT FALSE,
     TermsAccepted BOOLEAN DEFAULT FALSE,
+    UnsubToken VARCHAR(64) DEFAULT NULL,
     AcceptanceDate DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (AccountID) REFERENCES Account(AccountID) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Marketing opt-out / opt-in audit log
+CREATE TABLE MarketingSuppression (
+    EventID    INT AUTO_INCREMENT PRIMARY KEY,
+    AccountID  INT NOT NULL,
+    Email      VARCHAR(100),
+    OptedIn    BOOLEAN NOT NULL,
+    Method     VARCHAR(20) NOT NULL DEFAULT 'Staff',
+    Note       VARCHAR(255),
+    ActionedBy INT,
+    EventAt    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (AccountID)  REFERENCES Account(AccountID) ON DELETE CASCADE,
+    FOREIGN KEY (ActionedBy) REFERENCES Staff(StaffID)     ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- Payment methods
