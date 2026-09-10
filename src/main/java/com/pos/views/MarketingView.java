@@ -19,8 +19,7 @@ import java.util.List;
 
 public class MarketingView {
 
-    /** Flat card look — a border, not a dropshadow. Effect-cached nodes inside
-     *  a ScrollPane were painting blank on Windows. */
+    /** Flat card look — a border, not a dropshadow. */
     private static final String CARD_STYLE =
         "-fx-background-color: white; -fx-background-radius: 10;"
         + "-fx-border-color: #e2e8f0; -fx-border-radius: 10; -fx-border-width: 1;";
@@ -44,30 +43,33 @@ public class MarketingView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        VBox leftCol = new VBox(18);
-        leftCol.setPrefWidth(480);
+        // No wrapping ScrollPane — a ScrollPane around these cards renders the
+        // left column's text blank on this hardware (a Windows prism/text-cache
+        // bug). Instead the layout fits the viewport: the two tall tables grow
+        // and shrink with the window and scroll internally.
+        VBox leftCol = new VBox(18,
+            createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
+        VBox rightCol = new VBox(18,
+            createHistoryCard(), createOptOutLogCard());
+
+        leftCol.setPrefWidth(460);
+        rightCol.setPrefWidth(680);
         leftCol.setMaxWidth(Double.MAX_VALUE);
-        leftCol.getChildren().addAll(
-            createStatsRow(), createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
-
-        VBox rightCol = new VBox(18);
-        rightCol.setPrefWidth(720);
         rightCol.setMaxWidth(Double.MAX_VALUE);
-        rightCol.getChildren().addAll(createHistoryCard(), createOptOutLogCard());
 
-        HBox body = new HBox(20, leftCol, rightCol);
-        body.setPadding(new Insets(20));
+        // Subscribed Customers (left) and Campaign History (right) absorb slack.
+        VBox.setVgrow(leftCol.getChildren().get(2), Priority.ALWAYS);
+        VBox.setVgrow(rightCol.getChildren().get(0), Priority.ALWAYS);
+
+        HBox columns = new HBox(20, leftCol, rightCol);
         HBox.setHgrow(leftCol, Priority.ALWAYS);
         HBox.setHgrow(rightCol, Priority.ALWAYS);
 
-        // Page-level vertical scroll so nothing is stranded off-screen. The
-        // cards use a flat border (no dropshadow effect) — effect-cached nodes
-        // inside a ScrollPane were painting blank on Windows.
-        ScrollPane scroll = new ScrollPane(body);
-        scroll.setFitToWidth(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        layout.setCenter(scroll);
+        VBox root = new VBox(18, createStatsRow(), columns);
+        root.setPadding(new Insets(20));
+        VBox.setVgrow(columns, Priority.ALWAYS);
+
+        layout.setCenter(root);
         return layout;
     }
 
@@ -213,6 +215,7 @@ public class MarketingView {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
         card.setStyle(CARD_STYLE);
+        card.setMaxHeight(Double.MAX_VALUE);
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -233,7 +236,8 @@ public class MarketingView {
         subscribersTable = new TableView<>();
         subscribersTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         subscribersTable.setPrefHeight(170);
-        subscribersTable.setMinHeight(120);
+        subscribersTable.setMinHeight(90);
+        VBox.setVgrow(subscribersTable, Priority.ALWAYS);
         subscribersTable.setPlaceholder(new Label("No subscribed customers found."));
 
         TableColumn<String[], String> nameCol = new TableColumn<>("Name");
@@ -362,7 +366,8 @@ public class MarketingView {
 
         optOutTable = new TableView<>();
         optOutTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        optOutTable.setPrefHeight(220);
+        optOutTable.setPrefHeight(200);
+        optOutTable.setMinHeight(120);
         optOutTable.setPlaceholder(new Label("No opt-out activity yet."));
 
         String[][] cols = {
@@ -402,6 +407,7 @@ public class MarketingView {
         VBox card = new VBox(14);
         card.setPadding(new Insets(20));
         card.setStyle(CARD_STYLE);
+        card.setMaxHeight(Double.MAX_VALUE);
 
         HBox header = new HBox();
         header.setAlignment(Pos.CENTER_LEFT);
@@ -429,7 +435,8 @@ public class MarketingView {
         historyTable = new TableView<>();
         historyTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         historyTable.setPrefHeight(360);
-        historyTable.setMinHeight(220);
+        historyTable.setMinHeight(160);
+        VBox.setVgrow(historyTable, Priority.ALWAYS);
         historyTable.setPlaceholder(new Label("No campaigns sent yet."));
 
         TableColumn<MarketingCampaign, String> dateCol = new TableColumn<>("Date Sent");
