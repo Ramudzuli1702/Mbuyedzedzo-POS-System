@@ -32,8 +32,11 @@ import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 import javafx.util.StringConverter;
 
+import java.io.File;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +76,9 @@ public class SalesView {
     private Label sessionStatusLabel;
 
     // ── Display zoom (helps cashiers read the terminal without eye strain) ──
+    private static final DateTimeFormatter RECEIPT_FILE_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss");
+
     private static double zoom = 1.0;
     private static final double ZOOM_MIN = 0.9, ZOOM_MAX = 2.0, ZOOM_STEP = 0.15;
     private Label zoomLabel;
@@ -291,7 +297,6 @@ public class SalesView {
 
         topBar.getChildren().addAll(
                 title, sessionStatusLabel, spacer,
-                createZoomControls(),
                 activeCashierLabel, switchCashierBtn,
                 customerLabel, customerCombo, newCustomerBtn);
 
@@ -518,6 +523,11 @@ public class SalesView {
 
         quickAddLabel = new Label("Quick Add Products");
 
+        Region qaSpacer = new Region();
+        HBox.setHgrow(qaSpacer, Priority.ALWAYS);
+        HBox quickAddHeader = new HBox(10, quickAddLabel, qaSpacer, createZoomControls());
+        quickAddHeader.setAlignment(Pos.CENTER_LEFT);
+
         quickAddPane = new FlowPane(10, 10);
         populateQuickAddButtons(allProducts, quickAddPane);
 
@@ -525,7 +535,7 @@ public class SalesView {
         quickScroll.setFitToWidth(true);
         quickScroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
 
-        panel.getChildren().addAll(searchLabel, searchField, quickAddLabel, quickScroll);
+        panel.getChildren().addAll(searchLabel, searchField, quickAddHeader, quickScroll);
         VBox.setVgrow(quickScroll, Priority.ALWAYS);
 
         applyZoom();
@@ -836,6 +846,7 @@ public class SalesView {
         Thread worker = new Thread(() -> {
             String error = null;
             String receipt = null;
+            File savedFile = null;
             boolean success = false;
             try {
                 success = transactionService.processTransaction(
@@ -846,7 +857,8 @@ public class SalesView {
                     receipt = ReceiptGenerator.generateReceipt(
                             saleCustomer, cartItems, saleCashier, paymentInfo,
                             salePromo != null ? salePromo.getPromoCode() : null, saleDiscount);
-                    ReceiptGenerator.saveReceipt(receipt, "receipt_" + System.currentTimeMillis());
+                    savedFile = ReceiptGenerator.saveReceiptToFile(
+                            receipt, "Receipt " + LocalDateTime.now().format(RECEIPT_FILE_FMT));
 
                     CommPreferences prefs = commService.getPreferences(saleCustomer.getAccountID());
                     if (prefs.isReceiptByEmail() && saleCustomer.getEmailAddress() != null
@@ -862,6 +874,7 @@ public class SalesView {
             final boolean fSuccess = success;
             final String fReceipt = receipt;
             final String fError = error;
+            final File fSavedFile = savedFile;
             Platform.runLater(() -> {
                 busy.close();
                 if (fError != null) {
@@ -880,7 +893,7 @@ public class SalesView {
                     new Thread(() -> wifiHandler.sendReceipt(fReceipt), "Receipt-Sender").start();
                 }
 
-                showSaleCompleteDialog(fReceipt, finalTotal, paymentInfo);
+                showSaleCompleteDialog(fReceipt, finalTotal, paymentInfo, fSavedFile);
 
                 clearCart();
                 customerCombo.setValue(null);
@@ -927,7 +940,7 @@ public class SalesView {
     }
 
     /** Post-sale confirmation with the receipt in a readable monospace pane. */
-    private void showSaleCompleteDialog(String receipt, BigDecimal total, PaymentInfo payment) {
+    private void showSaleCompleteDialog(String receipt, BigDecimal total, PaymentInfo payment, File savedFile) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Sale Complete");
         dialog.initOwner(cartTable.getScene().getWindow());
@@ -939,17 +952,24 @@ public class SalesView {
         ok.setFont(Font.font("System", FontWeight.BOLD, 15));
         ok.setTextFill(Color.web("#16a34a"));
 
-        Label note = new Label(wifiHandler != null && wifiHandler.isConnected()
+        String printed = wifiHandler != null && wifiHandler.isConnected()
                 ? "Receipt printed and sent to the scanner device."
-                : "Receipt printed and saved.");
+                : "Receipt sent to the printer.";
+        Label note = new Label(printed);
         note.setTextFill(Color.web("#475569"));
+
+        Label saved = new Label(savedFile != null
+                ? "Saved automatically to:  " + savedFile.getParent()
+                : "Note: the receipt could not be saved to disk.");
+        saved.setTextFill(Color.web(savedFile != null ? "#475569" : "#e74c3c"));
+        saved.setWrapText(true);
 
         TextArea receiptArea = new TextArea(receipt);
         receiptArea.setEditable(false);
         receiptArea.setStyle("-fx-font-family: 'Consolas','Courier New',monospace; -fx-font-size: 12;");
         receiptArea.setPrefRowCount(16);
 
-        VBox content = new VBox(10, ok, note, new Separator(), receiptArea);
+        VBox content = new VBox(10, ok, note, saved, new Separator(), receiptArea);
         content.setPadding(new Insets(18));
         dialog.getDialogPane().setContent(content);
         dialog.showAndWait();

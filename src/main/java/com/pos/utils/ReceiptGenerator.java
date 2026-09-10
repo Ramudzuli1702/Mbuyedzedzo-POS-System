@@ -19,6 +19,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -172,17 +173,45 @@ public class ReceiptGenerator {
     // ── Save ────────────────────────────────────────────────────────────────
 
     public static boolean saveReceipt(String receiptText, String fileName) {
-        String savePath = settings.getReceiptSavePath();
+        return saveReceiptToFile(receiptText, fileName) != null;
+    }
+
+    /**
+     * Writes the receipt to a .txt file and returns it (or null on failure).
+     *
+     * A configured absolute path in Settings is honoured; otherwise receipts
+     * land in "Documents/&lt;App Name&gt;/Receipts" so they are always findable
+     * and writable, even when the app runs from Program Files.
+     */
+    public static File saveReceiptToFile(String receiptText, String fileName) {
         try {
-            Files.createDirectories(Paths.get(savePath));
-            try (FileWriter writer = new FileWriter(new File(savePath + fileName + ".txt"))) {
+            Path dir = receiptsDir();
+            Files.createDirectories(dir);
+            File out = dir.resolve(sanitize(fileName) + ".txt").toFile();
+            try (FileWriter writer = new FileWriter(out)) {
                 writer.write(receiptText);
-                return true;
             }
+            System.out.println("Receipt saved: " + out.getAbsolutePath());
+            return out;
         } catch (IOException e) {
             e.printStackTrace();
-            return false;
+            return null;
         }
+    }
+
+    /** Folder receipts are saved into. */
+    public static Path receiptsDir() {
+        String configured = settings.getReceiptSavePath();
+        if (notBlank(configured)) {
+            Path p = Paths.get(configured.trim());
+            if (p.isAbsolute()) return p;
+        }
+        return Paths.get(System.getProperty("user.home"), "Documents",
+                         com.pos.Branding.APP_NAME, "Receipts");
+    }
+
+    private static String sanitize(String name) {
+        return name == null ? "receipt" : name.replaceAll("[\\\\/:*?\"<>|]", "-");
     }
 
     // ── Layout helpers ──────────────────────────────────────────────────────
