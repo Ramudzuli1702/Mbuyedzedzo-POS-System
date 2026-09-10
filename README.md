@@ -53,11 +53,19 @@ Token = RS256 JWT, claims: `sub`=key, `product`, `fingerprint`, `licenseType`,
 ## Run locally
 
 ```bash
-docker compose up -d db                      # MySQL on :3307
-mvn spring-boot:run                          # signing keys auto-generated into ./config on first run
+# 1. In your existing MySQL:
+mysql -u root -e "CREATE DATABASE mvelelo_licensing;"
+
+# 2. Run it (signing keys auto-generate into ./config on first start):
+mvn spring-boot:run
+#   ...if your MySQL root has a password:  DB_PASSWORD=yourpass mvn spring-boot:run
+
 # admin UI:  http://localhost:8080/admin
 # first login: BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD (see application.yml)
 ```
+
+`docker-compose.yml` is an **optional** alternative if you'd rather not touch
+your MySQL — see the notes in that file. Flyway builds the schema on startup.
 
 ### Admin portal
 
