@@ -38,27 +38,26 @@ public class MarketingView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        HBox body = new HBox(20);
-        body.setPadding(new Insets(20));
-
+        // Plain two-column layout — no wrapping ScrollPane. A ScrollPane around
+        // these shadowed cards was rendering the left column's labels blank.
+        // The tall content here is the tables, which scroll on their own.
         VBox leftCol = new VBox(18);
-        leftCol.setPrefWidth(520);
-        leftCol.setMinWidth(460);
+        leftCol.setPrefWidth(480);
+        leftCol.setMaxWidth(Double.MAX_VALUE);
         leftCol.getChildren().addAll(
             createStatsRow(), createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
 
         VBox rightCol = new VBox(18);
-        HBox.setHgrow(rightCol, Priority.ALWAYS);
+        rightCol.setPrefWidth(720);
+        rightCol.setMaxWidth(Double.MAX_VALUE);
         rightCol.getChildren().addAll(createHistoryCard(), createOptOutLogCard());
 
-        body.getChildren().addAll(leftCol, rightCol);
+        HBox body = new HBox(20, leftCol, rightCol);
+        body.setPadding(new Insets(20));
+        HBox.setHgrow(leftCol, Priority.ALWAYS);
+        HBox.setHgrow(rightCol, Priority.ALWAYS);
 
-        // Page-level vertical scroll so the columns can be as tall as they need.
-        ScrollPane scroll = new ScrollPane(body);
-        scroll.setFitToWidth(true);
-        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
-        layout.setCenter(scroll);
+        layout.setCenter(body);
         return layout;
     }
 
@@ -68,7 +67,7 @@ public class MarketingView {
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("📣 Marketing");
+        Label title = new Label("Marketing");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -141,14 +140,14 @@ public class MarketingView {
             "<p>We have an <strong>exciting offer</strong> just for you!</p>\n" +
             "<p>Visit us this weekend for 20% off all items.</p>"
         );
-        bodyArea.setPrefRowCount(6);
+        bodyArea.setPrefRowCount(5);
         bodyArea.setWrapText(true);
         bodyArea.setStyle("-fx-font-size: 12;");
 
         Label statusLabel = new Label("");
         statusLabel.setWrapText(true);
 
-        Button sendBtn = new Button("🚀  Send to All Opted-In Customers");
+        Button sendBtn = new Button("Send to All Opted-In Customers");
         sendBtn.setMaxWidth(Double.MAX_VALUE);
         sendBtn.setStyle(
             "-fx-background-color: #0f766e;" +
@@ -176,7 +175,7 @@ public class MarketingView {
 
                 sendBtn.setDisable(true);
                 statusLabel.setStyle("-fx-text-fill: #2980b9;");
-                statusLabel.setText("📤  Sending… please wait.");
+                statusLabel.setText("Sending… please wait.");
 
                 new Thread(() -> {
                     int count = commService.sendMarketingBlast(
@@ -232,7 +231,8 @@ public class MarketingView {
 
         subscribersTable = new TableView<>();
         subscribersTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-        subscribersTable.setPrefHeight(200);
+        subscribersTable.setPrefHeight(170);
+        subscribersTable.setMinHeight(120);
         subscribersTable.setPlaceholder(new Label("No subscribed customers found."));
 
         TableColumn<String[], String> nameCol = new TableColumn<>("Name");
@@ -425,7 +425,7 @@ public class MarketingView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button refreshBtn = new Button("🔄 Refresh");
+        Button refreshBtn = new Button("Refresh");
         refreshBtn.setStyle(
             "-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;" +
             "-fx-font-weight: bold; -fx-padding: 7 14; -fx-background-radius: 6; -fx-cursor: hand;"
@@ -479,7 +479,7 @@ public class MarketingView {
         TableColumn<MarketingCampaign, Void> previewCol = new TableColumn<>("Preview");
         previewCol.setPrefWidth(80);
         previewCol.setCellFactory(col -> new TableCell<>() {
-            private final Button btn = new Button("👁 View");
+            private final Button btn = new Button("View");
             {
                 btn.setStyle(
                     "-fx-background-color: #3498db; -fx-text-fill: white;" +
