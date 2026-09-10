@@ -208,6 +208,15 @@ public class SalesView {
                 + "-fx-padding: 8 14; -fx-background-radius: 6; -fx-cursor: hand;");
         switchCashierBtn.setOnAction(e -> showCashierSelectDialog());
 
+        topBar.getChildren().addAll(
+                title, sessionStatusLabel, spacer,
+                activeCashierLabel, switchCashierBtn);
+
+        // Retail edition: no customer picker — sales go to the walk-in account.
+        if (com.pos.Edition.current().isRetail()) {
+            return topBar;
+        }
+
         Label customerLabel = new Label("Customer:");
         customerLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
 
@@ -296,10 +305,7 @@ public class SalesView {
                 + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
         newCustomerBtn.setOnAction(e -> showNewCustomerDialog());
 
-        topBar.getChildren().addAll(
-                title, sessionStatusLabel, spacer,
-                activeCashierLabel, switchCashierBtn,
-                customerLabel, customerCombo, newCustomerBtn);
+        topBar.getChildren().addAll(customerLabel, customerCombo, newCustomerBtn);
 
         return topBar;
     }
@@ -800,23 +806,35 @@ public class SalesView {
             return;
         }
 
-        Customer customer = customerCombo.getValue();
-        if (customer == null) {
-            showAlert("No Customer", "Please select a customer", Alert.AlertType.WARNING);
-            return;
-        }
-
-        if (!commService.hasAcceptedTerms(customer.getAccountID())) {
-            Optional<CommPreferences> prefs = CommunicationsDialog.showDialog(
-                    customer.getAccountID(), commService);
-
-            if (prefs.isPresent()) {
-                commService.savePreferences(prefs.get());
-            } else {
-                showAlert("Terms Required",
-                        "Customer must accept terms and conditions to continue",
-                        Alert.AlertType.WARNING);
+        Customer customer;
+        if (com.pos.Edition.current().isRetail()) {
+            // No customer picker — book the sale against the shared walk-in account.
+            customer = customerService.getOrCreateWalkInAccount(activeCashier.getStaffID());
+            if (customer == null) {
+                showAlert("Cannot Process Sale",
+                        "The walk-in account could not be created. Check the log for details.",
+                        Alert.AlertType.ERROR);
                 return;
+            }
+        } else {
+            customer = customerCombo.getValue();
+            if (customer == null) {
+                showAlert("No Customer", "Please select a customer", Alert.AlertType.WARNING);
+                return;
+            }
+
+            if (!commService.hasAcceptedTerms(customer.getAccountID())) {
+                Optional<CommPreferences> prefs = CommunicationsDialog.showDialog(
+                        customer.getAccountID(), commService);
+
+                if (prefs.isPresent()) {
+                    commService.savePreferences(prefs.get());
+                } else {
+                    showAlert("Terms Required",
+                            "Customer must accept terms and conditions to continue",
+                            Alert.AlertType.WARNING);
+                    return;
+                }
             }
         }
 
@@ -863,10 +881,12 @@ public class SalesView {
                     savedFile = ReceiptGenerator.saveReceiptToFile(
                             receipt, "Receipt " + LocalDateTime.now().format(RECEIPT_FILE_FMT));
 
-                    CommPreferences prefs = commService.getPreferences(saleCustomer.getAccountID());
-                    if (prefs.isReceiptByEmail() && saleCustomer.getEmailAddress() != null
-                            && !saleCustomer.getEmailAddress().isBlank()) {
-                        commService.sendReceiptByEmail(saleCustomer.getEmailAddress(), receipt);
+                    if (com.pos.Edition.current().hasCustomers()) {
+                        CommPreferences prefs = commService.getPreferences(saleCustomer.getAccountID());
+                        if (prefs.isReceiptByEmail() && saleCustomer.getEmailAddress() != null
+                                && !saleCustomer.getEmailAddress().isBlank()) {
+                            commService.sendReceiptByEmail(saleCustomer.getEmailAddress(), receipt);
+                        }
                     }
                     if (salePromo != null) promoService.incrementUsage(salePromo.getPromoID());
                 }
@@ -903,7 +923,7 @@ public class SalesView {
                 showSaleCompleteDialog(fReceipt, finalTotal, paymentInfo, fSavedFile);
 
                 clearCart();
-                customerCombo.setValue(null);
+                if (customerCombo != null) customerCombo.setValue(null);
                 activeCashier = currentUser;
                 activeCashierLabel.setText("Cashier: " + activeCashier.getFullNames());
                 updateSessionStatus();

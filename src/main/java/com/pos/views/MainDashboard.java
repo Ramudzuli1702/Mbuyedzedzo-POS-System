@@ -77,6 +77,10 @@ public class MainDashboard {
     }
 
     private void navigateToInternal(String section) {
+        // Retail edition has no customer/marketing screens
+        if (com.pos.Edition.current().isRetail() && ("customers".equals(section) || "marketing".equals(section))) {
+            return;
+        }
         // Stop the outgoing SessionView's background poll timer before swapping
         // it out (otherwise every visit leaks another INDEFINITE timeline).
         // SalesView/InventoryView keep their resources across navigation and are
@@ -252,10 +256,15 @@ public class MainDashboard {
         marketingBtn.setOnAction(e -> navigateTo("marketing"));
         settingsBtn.setOnAction(e  -> navigateTo("settings"));
 
-        menuBox.getChildren().addAll(
-            salesBtn, inventoryBtn, userMgmtBtn, customerBtn,
-            reportsBtn, sessionsBtn, approvalsBtn, marketingBtn, settingsBtn
-        );
+        menuBox.getChildren().add(salesBtn);
+        menuBox.getChildren().add(inventoryBtn);
+        menuBox.getChildren().add(userMgmtBtn);
+        if (com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(customerBtn);
+        menuBox.getChildren().add(reportsBtn);
+        menuBox.getChildren().add(sessionsBtn);
+        menuBox.getChildren().add(approvalsBtn);
+        if (com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(marketingBtn);
+        menuBox.getChildren().add(settingsBtn);
 
         return menuBox;
     }

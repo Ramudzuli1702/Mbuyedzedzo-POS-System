@@ -112,12 +112,14 @@ public class ReportsView {
             "Executive Dashboard",
             "Sales & Revenue",
             "Product Performance",
-            "Customer Insights",
             "Staff Analytics",
             "Inventory Health",
             "Returns & Exchanges",
-            "Promotions & Marketing"
+            com.pos.Edition.current().hasCustomers() ? "Promotions & Marketing" : "Promotions"
         );
+        if (com.pos.Edition.current().hasCustomers()) {
+            reportCombo.getItems().add(3, "Customer Insights");
+        }
         reportCombo.setValue(reportCombo.getItems().contains(sessionReport) ? sessionReport : "Executive Dashboard");
         reportCombo.setPrefWidth(220);
         reportCombo.setOnAction(e -> render());
@@ -172,14 +174,14 @@ public class ReportsView {
         }
 
         switch (reportCombo.getValue()) {
-            case "Executive Dashboard"      -> buildExecutiveDashboard();
-            case "Sales & Revenue"          -> buildSalesRevenue();
-            case "Product Performance"      -> buildProductPerformance();
-            case "Customer Insights"        -> buildCustomerInsights();
-            case "Staff Analytics"          -> buildStaffAnalytics();
-            case "Inventory Health"         -> buildInventoryHealth();
-            case "Returns & Exchanges"      -> buildReturnsExchanges();
-            case "Promotions & Marketing"   -> buildPromotionsMarketing();
+            case "Executive Dashboard"                 -> buildExecutiveDashboard();
+            case "Sales & Revenue"                     -> buildSalesRevenue();
+            case "Product Performance"                 -> buildProductPerformance();
+            case "Customer Insights"                   -> buildCustomerInsights();
+            case "Staff Analytics"                     -> buildStaffAnalytics();
+            case "Inventory Health"                    -> buildInventoryHealth();
+            case "Returns & Exchanges"                 -> buildReturnsExchanges();
+            case "Promotions & Marketing", "Promotions" -> buildPromotionsMarketing();
         }
     }
 
@@ -209,7 +211,8 @@ public class ReportsView {
         double     repRate  = svc.getRepeatCustomerRate(s, e);
 
         Runnable toSales     = goTo("Sales & Revenue");
-        Runnable toCustomers  = goTo("Customer Insights");
+        boolean hasCustomers = com.pos.Edition.current().hasCustomers();
+        Runnable toCustomers = hasCustomers ? goTo("Customer Insights") : toSales;
 
         GridPane kpi1 = kpiGrid(3);
         kpi1.add(kpiCard("💰 Gross Revenue",    fmtR(rev),    svc.calculateGrowth(prevRev, rev),    C_GREEN,  "vs prior period", toSales), 0, 0);
@@ -218,9 +221,13 @@ public class ReportsView {
         contentArea.getChildren().add(kpi1);
 
         GridPane kpi2 = kpiGrid(3);
-        kpi2.add(kpiCard("💳 Avg Sale Value", fmtR(avgSale),           svc.calculateGrowth(prevAvg, avgSale), C_TEAL,  "per transaction", toSales), 0, 0);
-        kpi2.add(kpiCard("🆕 New Customers", String.valueOf(newCust),  svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered", toCustomers), 1, 0);
-        kpi2.add(kpiCard("🔁 Repeat Rate",   fmtPct(repRate),          0,                                     C_SLATE, "loyal customers", toCustomers), 2, 0);
+        kpi2.add(kpiCard("💳 Avg Sale Value", fmtR(avgSale), svc.calculateGrowth(prevAvg, avgSale), C_TEAL, "per transaction", toSales), 0, 0);
+        if (hasCustomers) {
+            kpi2.add(kpiCard("🆕 New Customers", String.valueOf(newCust), svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered", toCustomers), 1, 0);
+            kpi2.add(kpiCard("🔁 Repeat Rate",   fmtPct(repRate),         0,                                      C_SLATE, "loyal customers", toCustomers), 2, 0);
+        } else {
+            kpi2.add(kpiCard("📈 Profit Margin", fmtPct(margin), 0, C_AMBER, "gross", toSales), 1, 0);
+        }
         contentArea.getChildren().add(kpi2);
 
         Label drillHint = new Label("Tip: click a metric card to open its detailed report.");

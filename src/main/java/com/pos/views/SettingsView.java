@@ -52,6 +52,7 @@ public class SettingsView {
         leftCol.setMinWidth(420);
         leftCol.getChildren().addAll(
             buildBusinessProfileCard(),
+            buildEditionCard(),
             buildFilePathsCard()
         );
 
@@ -148,6 +149,49 @@ public class SettingsView {
 
         card.getChildren().addAll(heading, sub, new Separator(), grid, saveBtn, status);
         return card;
+    }
+
+    // ── POS Edition card ─────────────────────────────────────────────────────
+
+    private VBox buildEditionCard() {
+        VBox card = card();
+
+        Label heading = cardHeading("POS Edition");
+        Label sub = new Label("Standard tracks customers; Retail is walk-in only. "
+                + "Log out and back in for the change to take effect.");
+        sub.setFont(Font.font("System", 12));
+        sub.setTextFill(Color.web("#7f8c8d"));
+        sub.setWrapText(true);
+
+        ComboBox<com.pos.Edition> combo = new ComboBox<>();
+        combo.getItems().addAll(com.pos.Edition.STANDARD, com.pos.Edition.RETAIL);
+        combo.setValue(com.pos.Edition.current());
+        combo.setMaxWidth(Double.MAX_VALUE);
+        combo.setButtonCell(editionCell());
+        combo.setCellFactory(lv -> editionCell());
+
+        Label status = statusLabel();
+
+        Button saveBtn = saveButton();
+        saveBtn.setMaxWidth(Double.MAX_VALUE);
+        saveBtn.setDisable(!currentUser.hasFullAccess());
+        saveBtn.setOnAction(e -> {
+            com.pos.Edition.set(combo.getValue());
+            status("Edition set to " + combo.getValue().name()
+                    + ". Log out and back in to apply.", status, true);
+        });
+
+        card.getChildren().addAll(heading, sub, new Separator(), combo, saveBtn, status);
+        return card;
+    }
+
+    private static ListCell<com.pos.Edition> editionCell() {
+        return new ListCell<>() {
+            @Override protected void updateItem(com.pos.Edition ed, boolean empty) {
+                super.updateItem(ed, empty);
+                setText(empty || ed == null ? null : ed.displayName());
+            }
+        };
     }
 
     // ── 2. File Paths card ────────────────────────────────────────────────────

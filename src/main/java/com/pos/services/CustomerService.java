@@ -53,6 +53,48 @@ public class CustomerService {
         } catch (SQLException e) { e.printStackTrace(); return false; }
     }
 
+    /** Sentinel email for the single shared "walk-in" account used in Retail edition. */
+    public static final String WALK_IN_EMAIL = "walk-in@pos.local";
+
+    /**
+     * Returns the shared "Walk-in Customer" account, creating it on first use.
+     * Retail-edition sales are all booked against this account so no schema
+     * change (Transactions.AccountID is NOT NULL) is needed.
+     *
+     * @param staffID any valid staff id, used only to satisfy Account.StaffID
+     */
+    public Customer getOrCreateWalkInAccount(int staffID) {
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT * FROM Account WHERE EmailAddress = ?")) {
+            ps.setString(1, WALK_IN_EMAIL);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return extractCustomer(rs);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        Customer walkIn = new Customer();
+        walkIn.setStaffID(staffID);
+        walkIn.setFullNames("Walk-in Customer");
+        walkIn.setEmailAddress(WALK_IN_EMAIL);
+        walkIn.setDateOfBirth(LocalDate.of(2000, 1, 1));
+        walkIn.setContactNo("0000000000");
+        if (addCustomer(walkIn)) return walkIn;
+
+        // Someone inserted it concurrently — re-read.
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT * FROM Account WHERE EmailAddress = ?")) {
+            ps.setString(1, WALK_IN_EMAIL);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return extractCustomer(rs);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
     public Customer getCustomerById(int accountID) {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(

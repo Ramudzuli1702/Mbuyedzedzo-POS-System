@@ -2,6 +2,34 @@
 
 A comprehensive JavaFX-based Point of Sale (POS) System with a modern, beautiful UI designed for retail business management.
 
+## Editions
+
+One codebase ships as two products, chosen in **Settings → POS Edition** (takes
+effect on next login; stored as the `pos.edition` business setting):
+
+| Edition | For | Difference |
+| --- | --- | --- |
+| **Standard** | Shops that keep customer accounts (loyalty, contracts, age-restricted goods) | Full Customer and Marketing screens, promo targeting, receipt-by-email, customer-insight reports |
+| **Retail** | Shops that just sell over the counter | No Customer or Marketing screens. Every sale is booked against a single hidden **"Walk-in"** account, so no schema change is needed. Reports drop the customer-centric views. |
+
+When licensing is added (see below), the edition is fixed by the license key
+rather than a setting.
+
+## Licensing (planned — portfolio scope)
+
+The intended model, documented here rather than fully built:
+
+- Each install requires a **license key** (e.g. `POS-2026-XK29-MNQT-7R4B`) to
+  unlock the system; without a valid key the app stays in a restricted demo
+  mode.
+- A small **license server** (Spring Boot REST API) validates a key against a
+  machine fingerprint on activation and returns a signed token; the app
+  re-checks it periodically.
+- A web **Product Management System** lets an admin (and restricted sales
+  agents) create customers, generate keys, and revoke / renew / transfer them.
+- Payment gateway integration (PayFast) is **out of scope** for this portfolio
+  build — keys are issued manually from the PMS.
+
 ## Features
 
 ### 🎯 Core Functionality
@@ -12,7 +40,7 @@ A comprehensive JavaFX-based Point of Sale (POS) System with a modern, beautiful
 - **Reports & Analytics**: Sales trends, top products, category analysis, Excel export functionality
 
 ### 🔐 Security
-- Password hashing using SHA-256
+- Password hashing using salted PBKDF2-HMAC-SHA256 (legacy SHA-256 hashes upgrade on next login)
 - Minimum 8-character password requirement
 - Role-based access control
 - Session management with login/logout tracking

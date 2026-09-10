@@ -63,8 +63,12 @@ public class ReceiptGenerator {
 
         meta(r, "Date",     LocalDateTime.now().format(FULL_FMT));
         meta(r, "Cashier",  cashier.getFullNames());
-        meta(r, "Customer", customer.getFullNames());
-        if (notBlank(customer.getEmailAddress())) meta(r, "Email", customer.getEmailAddress());
+        // Retail / walk-in sales carry no real customer — don't print a line for it.
+        boolean walkIn = com.pos.services.CustomerService.WALK_IN_EMAIL.equals(customer.getEmailAddress());
+        if (!walkIn) {
+            meta(r, "Customer", customer.getFullNames());
+            if (notBlank(customer.getEmailAddress())) meta(r, "Email", customer.getEmailAddress());
+        }
         r.append(RULE);
 
         r.append(String.format("%-22s %6s %10s%n", "Item", "Qty", "Amount"));
