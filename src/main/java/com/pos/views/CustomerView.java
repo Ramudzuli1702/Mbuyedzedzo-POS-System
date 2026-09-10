@@ -37,6 +37,7 @@ public class CustomerView {
     private CustomerService customerService;
     private ProductService productService;
     private final CommunicationsService commService = new CommunicationsService();
+    private final com.pos.services.ReportService reportService = new com.pos.services.ReportService();
     private TableView<Customer> customerTable;
     private TextField searchField;
 
@@ -54,10 +55,27 @@ public class CustomerView {
 
         VBox mainContent = new VBox(20);
         mainContent.setPadding(new Insets(20));
-        mainContent.getChildren().add(createCustomerTable());
+        mainContent.getChildren().addAll(createSummaryCards(), createCustomerTable());
         layout.setCenter(mainContent);
 
         return layout;
+    }
+
+    private javafx.scene.layout.HBox createSummaryCards() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        java.time.LocalDate monthStart = today.withDayOfMonth(1);
+
+        int total     = reportService.getTotalCustomers();
+        int newThisMonth = reportService.getNewCustomers(monthStart, today);
+        double repeat = reportService.getRepeatCustomerRate(today.minusMonths(6), today);
+        int subscribers = commService.getSubscribedCustomers().size();
+
+        return com.pos.components.SummaryCards.row(
+            new com.pos.components.SummaryCards.Card("Total Customers", String.format("%,d", total), "#0f766e", "all accounts"),
+            new com.pos.components.SummaryCards.Card("New This Month", String.valueOf(newThisMonth), "#16a34a", monthStart.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault()) + " " + today.getYear()),
+            new com.pos.components.SummaryCards.Card("Repeat Buyers", String.format("%.0f%%", repeat), "#7c3aed", "2+ purchases, 6 mo"),
+            new com.pos.components.SummaryCards.Card("Marketing Opt-Ins", String.valueOf(subscribers), "#d97706", "receive campaigns")
+        );
     }
 
     // ── Top bar ───────────────────────────────────────────────────────────────

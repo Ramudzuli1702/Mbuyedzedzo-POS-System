@@ -1,9 +1,11 @@
 package com.pos.views;
 
+import com.pos.components.SummaryCards;
 import com.pos.models.Product;
 import com.pos.models.User;
 import com.pos.services.CategoryService;
 import com.pos.services.ProductService;
+import com.pos.services.ReportService;
 import com.pos.services.WiFiHandler;
 import com.pos.utils.QRCodeUtil;
 import javafx.application.Platform;
@@ -32,6 +34,8 @@ public class InventoryView {
     private WiFiHandler wifiHandler;
     private Label wifiStatusLabel;
 
+    private final ReportService reportService = new ReportService();
+
     public InventoryView(User user) {
         this.currentUser = user;
         this.productService = new ProductService();
@@ -39,6 +43,20 @@ public class InventoryView {
         this.wifiHandler = WiFiHandler.getInstance();
 
         initializeWiFiReceiver();
+    }
+
+    private HBox createSummaryCards() {
+        int products = reportService.getTotalProducts();
+        int units    = reportService.getTotalStockUnits();
+        int low      = reportService.getLowStockCount();
+        int out      = reportService.getOutOfStockCount();
+        java.math.BigDecimal value = reportService.getTotalStockValue();
+        return SummaryCards.row(
+            new SummaryCards.Card("Products",     String.valueOf(products), "#0f766e", "in catalogue"),
+            new SummaryCards.Card("Stock on Hand", String.format("%,d", units), "#16a34a", "units"),
+            new SummaryCards.Card("Stock Value",  "R " + String.format("%,.2f", value == null ? 0.0 : value.doubleValue()), "#7c3aed", "at cost price"),
+            new SummaryCards.Card("Needs Restock", low + " low · " + out + " out", low + out > 0 ? "#dc2626" : "#64748b", "low / out of stock")
+        );
     }
 
     private void initializeWiFiReceiver() {
@@ -184,7 +202,7 @@ public class InventoryView {
 
         PromoView promoView = new PromoView(currentUser);
 
-        mainContent.getChildren().addAll(wifiStatusBox, alertBox, tableBox, divider, promoView.getView());
+        mainContent.getChildren().addAll(createSummaryCards(), wifiStatusBox, alertBox, tableBox, divider, promoView.getView());
 
         ScrollPane scroll = new ScrollPane(mainContent);
         scroll.setFitToWidth(true);

@@ -38,6 +38,21 @@ public class UserManagementView {
         this.userService = new UserService();
     }
 
+    private HBox createSummaryCards() {
+        var users = userService.getAllUsers();
+        long active   = users.stream().filter(u -> "Active".equalsIgnoreCase(u.getStatus())).count();
+        long admins   = users.stream().filter(u -> u.isAdmin()).count();
+        long managers = users.stream().filter(u -> u.isManager()).count();
+        long cashiers = users.stream().filter(u -> u.isCashier()).count();
+
+        return com.pos.components.SummaryCards.row(
+            new com.pos.components.SummaryCards.Card("Active Staff", String.valueOf(active), "#0f766e", "of " + users.size() + " total"),
+            new com.pos.components.SummaryCards.Card("Admins",   String.valueOf(admins),   "#7c3aed", "full access"),
+            new com.pos.components.SummaryCards.Card("Managers", String.valueOf(managers), "#0ea5e9", "full access"),
+            new com.pos.components.SummaryCards.Card("Cashiers", String.valueOf(cashiers), "#16a34a", "sales only")
+        );
+    }
+
     public BorderPane getView() {
         mainLayout = new BorderPane();
         mainLayout.setStyle("-fx-background-color: #f5f7fa;");
@@ -49,7 +64,7 @@ public class UserManagementView {
         mainContent.setPadding(new Insets(20));
 
         VBox tableBox = createUserTable();
-        mainContent.getChildren().add(tableBox);
+        mainContent.getChildren().addAll(createSummaryCards(), tableBox);
 
         mainLayout.setCenter(mainContent);
 
