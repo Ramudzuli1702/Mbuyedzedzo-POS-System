@@ -847,7 +847,7 @@ public class SalesView {
                 "Recording the transaction, updating stock and preparing the receipt.");
 
         Thread worker = new Thread(() -> {
-            String error = null;
+            RuntimeException error = null;
             String receipt = null;
             File savedFile = null;
             boolean success = false;
@@ -871,17 +871,21 @@ public class SalesView {
                     if (salePromo != null) promoService.incrementUsage(salePromo.getPromoID());
                 }
             } catch (RuntimeException e) {
-                error = e.getMessage();
+                error = e;
             }
 
             final boolean fSuccess = success;
             final String fReceipt = receipt;
-            final String fError = error;
+            final RuntimeException fError = error;
             final File fSavedFile = savedFile;
             Platform.runLater(() -> {
                 busy.close();
                 if (fError != null) {
-                    showAlert("Sale not completed", fError, Alert.AlertType.ERROR);
+                    com.pos.utils.Dialogs.error(
+                            cartTable.getScene() != null ? cartTable.getScene().getWindow() : null,
+                            "Sale not completed",
+                            "Nothing was charged. " + (fError.getMessage() != null ? fError.getMessage() : ""),
+                            fError);
                     return;
                 }
                 if (!fSuccess) {

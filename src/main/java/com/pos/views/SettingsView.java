@@ -60,7 +60,8 @@ public class SettingsView {
         HBox.setHgrow(rightCol, Priority.ALWAYS);
         rightCol.getChildren().addAll(
             buildEmailCard(),
-            buildBackupCard()
+            buildBackupCard(),
+            buildDiagnosticsCard()
         );
 
         body.getChildren().addAll(leftCol, rightCol);
@@ -349,6 +350,29 @@ public class SettingsView {
             new Separator(),
             historyHeader, historyList
         );
+        return card;
+    }
+
+    private VBox buildDiagnosticsCard() {
+        VBox card = card();
+
+        Label heading = cardHeading("Diagnostics");
+
+        VBox infoBox = new VBox(8,
+            infoLine("📄", "Errors and activity are written to a rolling log file"),
+            infoLine("📂", "Folder: " + com.pos.utils.LogSetup.logDir())
+        );
+
+        Button openLogs = new Button("Open Logs Folder");
+        openLogs.setMaxWidth(Double.MAX_VALUE);
+        openLogs.setStyle(
+            "-fx-background-color: #0f766e; -fx-text-fill: white;" +
+            "-fx-font-weight: bold; -fx-font-size: 13;" +
+            "-fx-padding: 11 24; -fx-background-radius: 8; -fx-cursor: hand;"
+        );
+        openLogs.setOnAction(e -> com.pos.utils.LogSetup.openLogFolder());
+
+        card.getChildren().addAll(heading, infoBox, new Separator(), openLogs);
         return card;
     }
 

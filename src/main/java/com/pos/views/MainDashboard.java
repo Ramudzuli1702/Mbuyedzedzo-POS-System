@@ -68,6 +68,15 @@ public class MainDashboard {
     }
 
     private void navigateTo(String section) {
+        try {
+            navigateToInternal(section);
+        } catch (RuntimeException ex) {
+            com.pos.utils.Dialogs.error(stage, "Could not open " + section,
+                    "That screen failed to load. You can keep using the rest of the app.", ex);
+        }
+    }
+
+    private void navigateToInternal(String section) {
         // Stop the outgoing SessionView's background poll timer before swapping
         // it out (otherwise every visit leaks another INDEFINITE timeline).
         // SalesView/InventoryView keep their resources across navigation and are
