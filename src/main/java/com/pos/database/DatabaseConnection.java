@@ -25,11 +25,13 @@ public class DatabaseConnection {
 
     // ── Connection details ─────────────────────────────────────────────────────
     // These start as defaults and are overwritten from db.properties if it exists.
-    public static String HOST     = "127.0.0.1";
-    public static int    PORT     = 3306;
-    public static String DATABASE = "pos_db";
-    public static String USERNAME = "root";
-    public static String PASSWORD = "";          // overwritten from config on real installs
+    // volatile: written once at startup (loadConfig / saveConfig), read from many
+    // threads afterwards.
+    public static volatile String HOST     = "127.0.0.1";
+    public static volatile int    PORT     = 3306;
+    public static volatile String DATABASE = "pos_db";
+    public static volatile String USERNAME = "root";
+    public static volatile String PASSWORD = "";  // overwritten from config on real installs
 
     /**
      * Timezone the JDBC connection operates in. Every DATETIME column in this
@@ -44,7 +46,7 @@ public class DatabaseConnection {
      * db.timezone in db.properties — use a fixed offset ("+02:00") unless the
      * MySQL server has its named-timezone tables loaded.
      */
-    public static String TIMEZONE = "+02:00";
+    public static volatile String TIMEZONE = "+02:00";
 
     // Path the installer / first-run setup writes the config to
     public static final String CONFIG_PATH =
@@ -119,8 +121,28 @@ public class DatabaseConnection {
         }
     }
 
-    // ── Connection pool (single shared connection) ─────────────────────────────
-    private static Connection connection = null;
+    // ── Connections ───────────────────────────────────────────────────────────
+    //
+    // Every call to getConnection() returns a NEW, independent connection that
+    // the caller owns and must close (all call sites use try-with-resources).
+    //
+    // There is deliberately no shared/cached connection: services are called
+    // from the JavaFX thread and several background threads (checkout worker,
+    // inventory load, marketing send, the WiFi scanner). A single shared
+    // java.sql.Connection is not thread-safe — one thread closing it, or
+    // toggling auto-commit, would corrupt another thread's in-flight work.
+
+    private static volatile boolean driverLoaded = false;
+
+    private static void ensureDriver() throws SQLException {
+        if (driverLoaded) return;
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            driverLoaded = true;
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("MySQL JDBC driver not found", e);
+        }
+    }
 
     /**
      * Timezone query parameters shared by every connection URL.
@@ -148,20 +170,20 @@ public class DatabaseConnection {
              + "&connectTimeout=10000&socketTimeout=30000";
     }
 
+    /**
+     * Returns a NEW connection each call. The caller owns it and must close it
+     * (every call site uses try-with-resources). Returns {@code null} if the
+     * connection could not be opened — callers already null-check.
+     */
     public static Connection getConnection() {
         try {
-            if (connection == null || connection.isClosed()) {
-                Class.forName("com.mysql.cj.jdbc.Driver");
-                connection = DriverManager.getConnection(buildUrl(), USERNAME, PASSWORD);
-            }
-        } catch (ClassNotFoundException e) {
-            System.err.println("❌ MySQL JDBC Driver not found.");
-            e.printStackTrace();
+            ensureDriver();
+            return DriverManager.getConnection(buildUrl(), USERNAME, PASSWORD);
         } catch (SQLException e) {
             System.err.println("❌ MySQL connection failed: " + e.getMessage());
             e.printStackTrace();
+            return null;
         }
-        return connection;
     }
 
     /**
@@ -172,35 +194,22 @@ public class DatabaseConnection {
         String url = "jdbc:mysql://" + HOST + ":" + PORT
                    + "?useSSL=false&allowPublicKeyRetrieval=true&" + tzParams()
                    + "&connectTimeout=10000";
-        try {
-            Class.forName("com.mysql.cj.jdbc.Driver");
-        } catch (ClassNotFoundException e) {
-            throw new SQLException("JDBC driver not found", e);
-        }
+        ensureDriver();
         return DriverManager.getConnection(url, USERNAME, PASSWORD);
     }
 
-    public static void closeConnection() {
-        try {
-            if (connection != null && !connection.isClosed()) {
-                connection.close();
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        } finally {
-            connection = null;
-        }
-    }
+    /**
+     * No-op — connections are per-call and closed by their callers. Kept so the
+     * shutdown paths (POSApplication, MainDashboard) still compile.
+     */
+    public static void closeConnection() { }
 
-    public static void closeAll() {
-        closeConnection();
-    }
+    public static void closeAll() { }
 
     public static boolean testConnection() {
-        try {
-            Connection conn = getConnection();
+        try (Connection conn = getConnection()) {
             return conn != null && !conn.isClosed();
-        } catch (Exception e) {
+        } catch (SQLException e) {
             return false;
         }
     }

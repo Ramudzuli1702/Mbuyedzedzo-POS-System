@@ -130,8 +130,7 @@ public class POSApplication extends Application {
      * time the app has been fully set up.
      */
     private boolean isFirstUser() {
-        try {
-            Connection conn = DatabaseConnection.getConnection();
+        try (Connection conn = DatabaseConnection.getConnection()) {
             if (conn == null) return false;
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM Staff")) {

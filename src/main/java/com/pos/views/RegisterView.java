@@ -165,8 +165,7 @@ public class RegisterView {
         // ── Persist ──
         String hashedPassword = PasswordUtil.hashPassword(password);
 
-        try {
-            Connection conn = DatabaseConnection.getConnection();
+        try (Connection conn = DatabaseConnection.getConnection()) {
             String sql = "INSERT INTO Staff (FullNames, EmailAddress, UserPassword, UserType, Status) " +
                          "VALUES (?, ?, ?, 'Admin', 'Active')";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
