@@ -380,27 +380,14 @@ public class InventoryView {
         });
 
         TableColumn<Product, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(200);
+        actionCol.setPrefWidth(260);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button viewQRBtn  = new Button("QR");
-            private final Button editBtn    = new Button("✏️");
-            private final Button restockBtn = new Button("📦");
-            private final Button deleteBtn  = new Button("🗑️");
+            private final Button viewQRBtn  = com.pos.components.Ui.actionButton("QR", "#3498db", "Show / print the product QR code");
+            private final Button editBtn    = com.pos.components.Ui.actionButton("Edit", "#f39c12", "Edit product details");
+            private final Button restockBtn = com.pos.components.Ui.actionButton("Restock", "#16a34a", "Add stock for this product");
+            private final Button deleteBtn  = com.pos.components.Ui.actionButton("Delete", "#e74c3c", "Delete this product");
 
             {
-                viewQRBtn.setStyle(
-                        "-fx-background-color: #3498db; -fx-text-fill: white;" +
-                        "-fx-font-size: 10; -fx-padding: 5; -fx-cursor: hand;");
-                editBtn.setStyle(
-                        "-fx-background-color: #f39c12; -fx-text-fill: white;" +
-                        "-fx-font-size: 10; -fx-padding: 5; -fx-cursor: hand;");
-                restockBtn.setStyle(
-                        "-fx-background-color: #27ae60; -fx-text-fill: white;" +
-                        "-fx-font-size: 10; -fx-padding: 5; -fx-cursor: hand;");
-                deleteBtn.setStyle(
-                        "-fx-background-color: #e74c3c; -fx-text-fill: white;" +
-                        "-fx-font-size: 10; -fx-padding: 5; -fx-cursor: hand;");
-
                 viewQRBtn.setOnAction(e -> {
                     Product product = getTableView().getItems().get(getIndex());
                     showQRCode(product);

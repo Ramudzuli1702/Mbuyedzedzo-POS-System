@@ -342,17 +342,13 @@ public class UserManagementView {
         });
 
         TableColumn<User, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(180);
+        actionCol.setPrefWidth(250);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button editBtn = new Button("✏️");
-            private final Button resetPwdBtn = new Button("🔑");
-            private final Button toggleBtn = new Button("⏸️");
+            private final Button editBtn = com.pos.components.Ui.actionButton("Edit", "#f39c12", "Edit name, email or role");
+            private final Button resetPwdBtn = com.pos.components.Ui.actionButton("Reset PW", "#3498db", "Set a new password for this user");
+            private final Button toggleBtn = com.pos.components.Ui.actionButton("Deactivate", "#e74c3c", "Activate / deactivate this account");
 
             {
-                editBtn.setStyle("-fx-background-color: #f39c12; -fx-text-fill: white; -fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-                resetPwdBtn.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-                toggleBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-
                 editBtn.setOnAction(e -> {
                     User user = getTableView().getItems().get(getIndex());
                     showEditUserDialog(user);
@@ -379,8 +375,13 @@ public class UserManagementView {
                     if (user.getStaffID() == currentUser.getStaffID()) {
                         setGraphic(new Label("(You)"));
                     } else {
-                        HBox buttons = new HBox(5, editBtn, resetPwdBtn, toggleBtn);
-                        buttons.setAlignment(Pos.CENTER);
+                        boolean active = "Active".equalsIgnoreCase(user.getStatus());
+                        toggleBtn.setText(active ? "Deactivate" : "Activate");
+                        toggleBtn.setStyle("-fx-background-color: " + (active ? "#e74c3c" : "#16a34a")
+                            + "; -fx-text-fill: white; -fx-font-size: 11; -fx-font-weight: bold;"
+                            + "-fx-padding: 5 12; -fx-background-radius: 5; -fx-cursor: hand;");
+                        HBox buttons = new HBox(6, editBtn, resetPwdBtn, toggleBtn);
+                        buttons.setAlignment(Pos.CENTER_LEFT);
                         setGraphic(buttons);
                     }
                 }

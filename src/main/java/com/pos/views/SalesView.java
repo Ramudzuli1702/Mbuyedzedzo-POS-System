@@ -649,13 +649,15 @@ public class SalesView {
         TableColumn<CartItem, BigDecimal> subtotalCol = new TableColumn<>("Subtotal");
         subtotalCol.setCellValueFactory(new PropertyValueFactory<>("subtotal"));
 
-        TableColumn<CartItem, Void> actionCol = new TableColumn<>("Action");
+        TableColumn<CartItem, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button removeBtn = new Button("✕");
+            private final Button removeBtn = new Button("Remove");
 
             {
                 removeBtn.setStyle(
-                        "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;");
+                        "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;"
+                        + "-fx-font-size: 11; -fx-padding: 4 10; -fx-background-radius: 5; -fx-cursor: hand;");
                 removeBtn.setOnAction(e -> removeFromCart(getTableView().getItems().get(getIndex())));
             }
 

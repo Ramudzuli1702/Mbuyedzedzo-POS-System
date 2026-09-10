@@ -469,8 +469,8 @@ public class SessionView {
         TableColumn<BusinessSession, Void> actionCol = new TableColumn<>("Actions");
         actionCol.setPrefWidth(200);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button viewBtn        = new Button("📄 Reports");
-            private final Button countersignBtn = new Button("✍️ Countersign");
+            private final Button viewBtn        = com.pos.components.Ui.actionButton("Reports", "#3498db", "Generate the session PDF reports");
+            private final Button countersignBtn = com.pos.components.Ui.actionButton("Countersign", "#9b59b6", "Manager/admin sign-off for a cashier session");
             private final HBox   btnBox         = new HBox(6, viewBtn, countersignBtn);
 
             {

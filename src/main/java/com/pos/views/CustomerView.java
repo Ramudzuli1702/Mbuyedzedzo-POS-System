@@ -157,15 +157,12 @@ public class CustomerView {
         });
 
         TableColumn<Customer, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(150);
+        actionCol.setPrefWidth(210);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button editBtn   = new Button("✏️");
-            private final Button viewBtn   = new Button("👁️");
-            private final Button deleteBtn = new Button("🗑️");
+            private final Button viewBtn   = com.pos.components.Ui.actionButton("Open", "#3498db", "View details & purchase history");
+            private final Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#f39c12", "Edit this customer");
+            private final Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#e74c3c", "Deactivate this customer");
             {
-                editBtn.setStyle("-fx-background-color: #f39c12; -fx-text-fill: white; -fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-                viewBtn.setStyle("-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-                deleteBtn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
                 editBtn.setOnAction(e -> showEditCustomerDialog(getTableView().getItems().get(getIndex())));
                 viewBtn.setOnAction(e -> { showCustomerDetails(getTableView().getItems().get(getIndex())); loadCustomers(); });
                 deleteBtn.setOnAction(e -> deleteCustomer(getTableView().getItems().get(getIndex())));
@@ -174,8 +171,8 @@ public class CustomerView {
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty) { setGraphic(null); return; }
-                HBox buttons = new HBox(5, editBtn, viewBtn, deleteBtn);
-                buttons.setAlignment(Pos.CENTER);
+                HBox buttons = new HBox(6, viewBtn, editBtn, deleteBtn);
+                buttons.setAlignment(Pos.CENTER_LEFT);
                 setGraphic(buttons);
             }
         });

@@ -57,7 +57,7 @@ public class PromoView {
         HBox bar = new HBox(12);
         bar.setAlignment(Pos.CENTER_LEFT);
 
-        Label title = new Label("🏷️ Promo Codes");
+        Label title = new Label("Promo Codes");
         title.setFont(Font.font("System", FontWeight.BOLD, 18));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -72,8 +72,8 @@ public class PromoView {
         addBtn.setOnAction(e -> showPromoDialog(null));
         addBtn.setDisable(!currentUser.hasFullAccess());
 
-        Button refreshBtn = new Button("🔄");
-        refreshBtn.setStyle("-fx-background-color: #ecf0f1; -fx-padding: 9 14; -fx-cursor: hand;");
+        Button refreshBtn = new Button("Refresh");
+        refreshBtn.setStyle("-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-weight: bold; -fx-padding: 9 16; -fx-background-radius: 6; -fx-cursor: hand;");
         refreshBtn.setOnAction(e -> loadTable());
 
         bar.getChildren().addAll(title, spacer, refreshBtn, addBtn);
@@ -171,12 +171,14 @@ public class PromoView {
         TableColumn<Promo, Void> actionCol = new TableColumn<>("Actions");
         actionCol.setPrefWidth(170);
         actionCol.setCellFactory(col -> new TableCell<>() {
-            private final Button editBtn   = new Button("✏️");
+            private final Button editBtn   = new Button("Edit");
             private final Button toggleBtn = new Button();
-            private final Button deleteBtn = new Button("🗑️");
+            private final Button deleteBtn = new Button("Delete");
             {
                 editBtn.setStyle(btnStyle("#f39c12"));
                 deleteBtn.setStyle(btnStyle("#e74c3c"));
+                editBtn.setTooltip(new Tooltip("Edit this promo"));
+                deleteBtn.setTooltip(new Tooltip("Delete this promo"));
 
                 editBtn.setOnAction(e ->
                     showPromoDialog(getTableView().getItems().get(getIndex())));
@@ -204,7 +206,7 @@ public class PromoView {
                 super.updateItem(v, empty);
                 if (empty) { setGraphic(null); return; }
                 Promo p = getTableView().getItems().get(getIndex());
-                toggleBtn.setText(p.isActive() ? "⏸ Pause" : "▶ Enable");
+                toggleBtn.setText(p.isActive() ? "Pause" : "Enable");
                 toggleBtn.setStyle(btnStyle(p.isActive() ? "#7f8c8d" : "#27ae60"));
                 boolean canEdit = currentUser.hasFullAccess();
                 editBtn.setDisable(!canEdit);
