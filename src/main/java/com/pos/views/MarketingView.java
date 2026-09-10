@@ -43,43 +43,32 @@ public class MarketingView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        // No ScrollPane anywhere on this page: on some Windows GPUs every
-        // label inside a ScrollPane renders blank. Instead each column is a
-        // TabPane showing one card at a time, so the whole page always fits
-        // the window without needing to scroll.
-        TabPane leftTabs = new TabPane(
-            tab("Compose & Send",  createComposeCard()),
-            tab("Unsubscribe Requests", createUnsubscribeCard()),
-            tab("Subscribers",     createSubscribersCard()));
-        leftTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        VBox leftCol = new VBox(18,
+            createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
+        VBox rightCol = new VBox(18,
+            createHistoryCard(), createOptOutLogCard());
 
-        TabPane rightTabs = new TabPane(
-            tab("Campaign History", createHistoryCard()),
-            tab("Recent Opt-Outs",  createOptOutLogCard()));
-        rightTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        leftCol.setPrefWidth(460);
+        rightCol.setPrefWidth(680);
+        leftCol.setMaxWidth(Double.MAX_VALUE);
+        rightCol.setMaxWidth(Double.MAX_VALUE);
 
-        leftTabs.setPrefWidth(460);
-        rightTabs.setPrefWidth(680);
-
-        HBox columns = new HBox(20, leftTabs, rightTabs);
-        HBox.setHgrow(leftTabs, Priority.ALWAYS);
-        HBox.setHgrow(rightTabs, Priority.ALWAYS);
+        HBox columns = new HBox(20, leftCol, rightCol);
+        HBox.setHgrow(leftCol, Priority.ALWAYS);
+        HBox.setHgrow(rightCol, Priority.ALWAYS);
 
         VBox content = new VBox(18, createStatsRow(), columns);
         content.setPadding(new Insets(20));
-        VBox.setVgrow(columns, Priority.ALWAYS);
 
-        layout.setCenter(content);
+        // Vertical scroll for small windows. The background MUST be opaque —
+        // a transparent ScrollPane background makes the labels inside render
+        // blank on some Windows GPUs.
+        ScrollPane scroll = new ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
+        layout.setCenter(scroll);
         return layout;
-    }
-
-    /** A non-closable tab wrapping one card, with a little breathing room. */
-    private Tab tab(String title, javafx.scene.Node card) {
-        VBox wrap = new VBox(card);
-        wrap.setPadding(new Insets(14, 4, 4, 4));
-        VBox.setVgrow(card, Priority.ALWAYS);
-        Tab t = new Tab(title, wrap);
-        return t;
     }
 
     private HBox createTopBar() {

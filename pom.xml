@@ -159,9 +159,6 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.pos.POSApplication</mainClass>
-                    <options>
-                        <option>-Dprism.dirtyopts=false</option>
-                    </options>
                 </configuration>
             </plugin>
 
@@ -356,15 +353,6 @@
                                 <!-- ── JVM flags forwarded to the launched app ───── -->
                                 <argument>--java-options</argument>
                                 <argument>-Xmx512m</argument>
-
-                                <!--
-                                    Force full-scene repaints. Without this, text inside a
-                                    ScrollPane can render blank until the pane is scrolled or
-                                    the window resized — a prism dirty-region bug seen on some
-                                    Windows GPUs.
-                                -->
-                                <argument>--java-options</argument>
-                                <argument>-Dprism.dirtyopts=false</argument>
 
                                 <argument>--java-options</argument>
                                 <argument>--add-opens=javafx.graphics/com.sun.javafx.application=ALL-UNNAMED</argument>

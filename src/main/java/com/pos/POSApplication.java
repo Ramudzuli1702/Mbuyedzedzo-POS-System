@@ -159,14 +159,6 @@ public class POSApplication extends Application {
     // ── Entry point ────────────────────────────────────────────────────────────
 
     public static void main(String[] args) {
-        // Force full-scene repaints. Without this, text inside a ScrollPane can
-        // render blank until the pane is scrolled or the window is resized — a
-        // prism dirty-region bug seen on some Windows GPUs. Must be set before
-        // the JavaFX toolkit initialises. Also passed as a -D flag by the
-        // javafx-maven-plugin and jpackage in case the toolkit is already up.
-        if (System.getProperty("prism.dirtyopts") == null) {
-            System.setProperty("prism.dirtyopts", "false");
-        }
         launch(args);
     }
 }
