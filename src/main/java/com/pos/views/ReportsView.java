@@ -30,6 +30,12 @@ public class ReportsView {
     private ComboBox<String> reportCombo;
     private VBox            contentArea;
 
+    // Remembered across navigation within a session (a fresh ReportsView is
+    // built every time the user returns to the Reports tab).
+    private static LocalDate sessionStart  = LocalDate.now().withDayOfMonth(1);
+    private static LocalDate sessionEnd    = LocalDate.now();
+    private static String    sessionReport = "Executive Dashboard";
+
     // Palette - Updated to consistent teal theme
     private static final String C_BLUE   = "#0f766e";
     private static final String C_GREEN  = "#16a34a";
@@ -112,12 +118,12 @@ public class ReportsView {
             "Returns & Exchanges",
             "Promotions & Marketing"
         );
-        reportCombo.setValue("Executive Dashboard");
+        reportCombo.setValue(reportCombo.getItems().contains(sessionReport) ? sessionReport : "Executive Dashboard");
         reportCombo.setPrefWidth(220);
         reportCombo.setOnAction(e -> render());
 
-        startPicker = new DatePicker(LocalDate.now().withDayOfMonth(1));
-        endPicker   = new DatePicker(LocalDate.now());
+        startPicker = new DatePicker(sessionStart);
+        endPicker   = new DatePicker(sessionEnd);
 
         Button applyBtn = pill("Apply", C_BLUE);
         applyBtn.setOnAction(e -> render());
@@ -154,6 +160,17 @@ public class ReportsView {
 
     private void render() {
         contentArea.getChildren().clear();
+
+        sessionStart  = start();
+        sessionEnd    = end();
+        sessionReport = reportCombo.getValue();
+
+        if (start() == null || end() == null || end().isBefore(start())) {
+            contentArea.getChildren().add(
+                emptyState("Pick a valid date range — “From” must be on or before “To”."));
+            return;
+        }
+
         switch (reportCombo.getValue()) {
             case "Executive Dashboard"      -> buildExecutiveDashboard();
             case "Sales & Revenue"          -> buildSalesRevenue();
@@ -168,6 +185,11 @@ public class ReportsView {
 
     private LocalDate start() { return startPicker.getValue(); }
     private LocalDate end()   { return endPicker.getValue();   }
+
+    /** A drill-through action for a KPI card: switch the report selector. */
+    private Runnable goTo(String report) {
+        return () -> reportCombo.setValue(report);
+    }
 
     private void buildExecutiveDashboard() {
         LocalDate s = start(), e = end();
@@ -186,17 +208,25 @@ public class ReportsView {
         int        prevCust = svc.getNewCustomers(prior[0], prior[1]);
         double     repRate  = svc.getRepeatCustomerRate(s, e);
 
+        Runnable toSales     = goTo("Sales & Revenue");
+        Runnable toCustomers  = goTo("Customer Insights");
+
         GridPane kpi1 = kpiGrid(3);
-        kpi1.add(kpiCard("💰 Gross Revenue",    fmtR(rev),    svc.calculateGrowth(prevRev, rev),    C_GREEN,  "vs prior period"), 0, 0);
-        kpi1.add(kpiCard("📈 Gross Profit",     fmtR(profit), svc.calculateGrowth(prevProfit, profit), C_BLUE, fmtPct(margin) + " margin"), 1, 0);
-        kpi1.add(kpiCard("🛒 Total Sales",      String.valueOf(sales), svc.calculateGrowth(prevSales, sales), C_PURPLE, "transactions"), 2, 0);
+        kpi1.add(kpiCard("💰 Gross Revenue",    fmtR(rev),    svc.calculateGrowth(prevRev, rev),    C_GREEN,  "vs prior period", toSales), 0, 0);
+        kpi1.add(kpiCard("📈 Gross Profit",     fmtR(profit), svc.calculateGrowth(prevProfit, profit), C_BLUE, fmtPct(margin) + " margin", toSales), 1, 0);
+        kpi1.add(kpiCard("🛒 Total Sales",      String.valueOf(sales), svc.calculateGrowth(prevSales, sales), C_PURPLE, "transactions", toSales), 2, 0);
         contentArea.getChildren().add(kpi1);
 
         GridPane kpi2 = kpiGrid(3);
-        kpi2.add(kpiCard("💳 Avg Sale Value", fmtR(avgSale),           svc.calculateGrowth(prevAvg, avgSale), C_TEAL,  "per transaction"), 0, 0);
-        kpi2.add(kpiCard("🆕 New Customers", String.valueOf(newCust),  svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered"), 1, 0);
-        kpi2.add(kpiCard("🔁 Repeat Rate",   fmtPct(repRate),          0,                                     C_SLATE, "loyal customers"), 2, 0);
+        kpi2.add(kpiCard("💳 Avg Sale Value", fmtR(avgSale),           svc.calculateGrowth(prevAvg, avgSale), C_TEAL,  "per transaction", toSales), 0, 0);
+        kpi2.add(kpiCard("🆕 New Customers", String.valueOf(newCust),  svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered", toCustomers), 1, 0);
+        kpi2.add(kpiCard("🔁 Repeat Rate",   fmtPct(repRate),          0,                                     C_SLATE, "loyal customers", toCustomers), 2, 0);
         contentArea.getChildren().add(kpi2);
+
+        Label drillHint = new Label("Tip: click a metric card to open its detailed report.");
+        drillHint.setFont(Font.font("System", 11));
+        drillHint.setTextFill(Color.web("#94a3b8"));
+        contentArea.getChildren().add(drillHint);
 
         contentArea.getChildren().add(sectionLabel("Revenue Overview"));
         GridPane charts1 = chartGrid(2);
@@ -819,6 +849,9 @@ public class ReportsView {
         TableView<T> t = new TableView<>();
         t.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         t.setStyle("-fx-font-size: 12;");
+        Label ph = new Label("No data for the selected period.");
+        ph.setTextFill(Color.web("#94a3b8"));
+        t.setPlaceholder(ph);
         return t;
     }
 
@@ -888,12 +921,24 @@ public class ReportsView {
     }
 
     private VBox kpiCard(String title, String value, double growth, String color, String sub) {
+        return kpiCard(title, value, growth, color, sub, null);
+    }
+
+    private VBox kpiCard(String title, String value, double growth, String color, String sub, Runnable drill) {
         VBox card = new VBox(10);
         card.setPadding(new Insets(20));
-        card.setStyle(
+        String base =
             "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 10, 0, 0, 3);"
-        );
+            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 10, 0, 0, 3);";
+        card.setStyle(base);
+
+        if (drill != null) {
+            card.setStyle(base + "-fx-cursor: hand;");
+            card.setOnMouseEntered(e -> card.setStyle(base +
+                "-fx-cursor: hand; -fx-border-color: " + color + "; -fx-border-radius: 10; -fx-border-width: 1.5;"));
+            card.setOnMouseExited(e -> card.setStyle(base + "-fx-cursor: hand;"));
+            card.setOnMouseClicked(e -> drill.run());
+        }
 
         Label t = new Label(title);
         t.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
@@ -960,10 +1005,79 @@ public class ReportsView {
         Label lbl = new Label(title);
         lbl.setFont(Font.font("System", FontWeight.BOLD, 14));
         lbl.setTextFill(Color.web("#1e293b"));
-        chart.setMinHeight(280);
-        VBox.setVgrow(chart, Priority.ALWAYS);
-        c.getChildren().addAll(lbl, chart);
+
+        if (chartIsEmpty(chart)) {
+            c.getChildren().addAll(lbl, emptyState("No data in this date range."));
+        } else {
+            instrumentChart(chart);
+            chart.setMinHeight(280);
+            VBox.setVgrow(chart, Priority.ALWAYS);
+            c.getChildren().addAll(lbl, chart);
+        }
         return c;
+    }
+
+    private static boolean chartIsEmpty(Chart chart) {
+        if (chart instanceof PieChart pie) return pie.getData().isEmpty();
+        if (chart instanceof XYChart<?, ?> xy)
+            return xy.getData().stream().allMatch(s -> s.getData().isEmpty());
+        return false;
+    }
+
+    /** Turns off the re-animate-on-every-render churn and adds hover tooltips
+     *  showing the exact value behind each bar / point / slice. */
+    private void instrumentChart(Chart chart) {
+        chart.setAnimated(false);
+        if (chart instanceof PieChart pie) {
+            double total = pie.getData().stream().mapToDouble(PieChart.Data::getPieValue).sum();
+            for (PieChart.Data d : pie.getData()) {
+                double pct = total > 0 ? d.getPieValue() / total * 100 : 0;
+                tip(d.nodeProperty(), () -> d.getName() + "  ·  " + fmtNum(d.getPieValue())
+                        + String.format("  (%.1f%%)", pct));
+            }
+        } else if (chart instanceof XYChart<?, ?> xy) {
+            for (XYChart.Series<?, ?> s : xy.getData()) {
+                for (XYChart.Data<?, ?> d : s.getData()) {
+                    double y = (d.getYValue() instanceof Number n) ? n.doubleValue() : 0;
+                    String x = String.valueOf(d.getXValue());
+                    tip(d.nodeProperty(), () -> x + "  ·  " + fmtNum(y));
+                }
+            }
+        }
+    }
+
+    private void tip(javafx.beans.property.ObjectProperty<javafx.scene.Node> nodeProp,
+                     java.util.function.Supplier<String> text) {
+        Runnable apply = () -> {
+            javafx.scene.Node n = nodeProp.get();
+            if (n == null) return;
+            Tooltip t = new Tooltip(text.get());
+            t.setShowDelay(javafx.util.Duration.millis(120));
+            Tooltip.install(n, t);
+        };
+        if (nodeProp.get() != null) apply.run();
+        else nodeProp.addListener((o, a, b) -> { if (b != null) apply.run(); });
+    }
+
+    private static String fmtNum(double v) {
+        return (v == Math.rint(v) && Math.abs(v) < 1e15)
+            ? String.format("%,d", (long) v)
+            : String.format("%,.2f", v);
+    }
+
+    private VBox emptyState(String msg) {
+        VBox b = new VBox(8);
+        b.setAlignment(Pos.CENTER);
+        b.setMinHeight(120);
+        b.setPadding(new Insets(28));
+        Label icon = new Label("📭");
+        icon.setFont(Font.font(26));
+        Label m = new Label(msg);
+        m.setTextFill(Color.web("#94a3b8"));
+        m.setFont(Font.font("System", 13));
+        m.setWrapText(true);
+        b.getChildren().addAll(icon, m);
+        return b;
     }
 
     private VBox card(javafx.scene.Node content, double minHeight) {

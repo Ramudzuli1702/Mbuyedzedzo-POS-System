@@ -36,7 +36,7 @@ public class ReportService {
             FROM Transactions t
             WHERE t.TransactionDate BETWEEN ? AND ?
             """;
-        return queryBigDecimal(sql, ts(start), ts(end));
+        return queryBigDecimal(sql, tsStart(start), tsEnd(end));
     }
 
     /** Total cost of goods sold for the period (cost price × quantity). */
@@ -47,7 +47,7 @@ public class ReportService {
             JOIN Product p ON t.ProductID = p.ProductID
             WHERE t.TransactionDate BETWEEN ? AND ?
             """;
-        return queryBigDecimal(sql, ts(start), ts(end));
+        return queryBigDecimal(sql, tsStart(start), tsEnd(end));
     }
 
     /** Gross profit = revenue − COGS. */
@@ -78,7 +78,7 @@ public class ReportService {
             WHERE r.ReturnDate BETWEEN ? AND ?
               AND r.Status = 'Approved'
             """;
-        return queryBigDecimal(sql, ts(start), ts(end));
+        return queryBigDecimal(sql, tsStart(start), tsEnd(end));
     }
 
     /** Daily revenue breakdown ordered by date. */
@@ -94,8 +94,8 @@ public class ReportService {
         Map<LocalDate, BigDecimal> result = new LinkedHashMap<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next())
                 result.put(rs.getDate("day").toLocalDate(), rs.getBigDecimal("total"));
@@ -116,7 +116,7 @@ public class ReportService {
             GROUP BY method
             ORDER BY total DESC
             """;
-        return queryStringBigDecimalMap(sql, ts(start), ts(end));
+        return queryStringBigDecimalMap(sql, tsStart(start), tsEnd(end));
     }
 
     /** Monthly revenue for a given calendar year. */
@@ -156,8 +156,8 @@ public class ReportService {
         Map<Integer, BigDecimal> result = new TreeMap<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next())
                 result.put(rs.getInt("hr"), rs.getBigDecimal("total"));
@@ -176,7 +176,7 @@ public class ReportService {
             GROUP BY day_name, DAYOFWEEK(t.TransactionDate)
             ORDER BY DAYOFWEEK(t.TransactionDate)
             """;
-        return queryStringBigDecimalMap(sql, ts(start), ts(end));
+        return queryStringBigDecimalMap(sql, tsStart(start), tsEnd(end));
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ public class ReportService {
             FROM Transactions
             WHERE TransactionDate BETWEEN ? AND ? AND SaleID > 0
             """;
-        return queryInt(sql, ts(start), ts(end));
+        return queryInt(sql, tsStart(start), tsEnd(end));
     }
 
     /** Average value per unique sale. */
@@ -204,7 +204,7 @@ public class ReportService {
                 GROUP BY SaleID
             ) s
             """;
-        return queryBigDecimal(sql, ts(start), ts(end));
+        return queryBigDecimal(sql, tsStart(start), tsEnd(end));
     }
 
     /** Distribution of sale totals into value buckets. */
@@ -223,8 +223,8 @@ public class ReportService {
         dist.put("R 500+",    0);
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 double v = rs.getBigDecimal("sale_total").doubleValue();
@@ -269,8 +269,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ps.setInt(3, limit);
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
@@ -315,8 +315,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -359,8 +359,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -414,7 +414,7 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            Timestamp t1 = ts(start), t2 = ts(end);
+            Timestamp t1 = tsStart(start), t2 = tsEnd(end);
             ps.setTimestamp(1, t1); ps.setTimestamp(2, t2);
             ps.setTimestamp(3, t1); ps.setTimestamp(4, t2);
             ps.setTimestamp(5, t1); ps.setTimestamp(6, t2);
@@ -456,8 +456,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -488,8 +488,8 @@ public class ReportService {
             """;
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return rs.getString("FullNames");
         } catch (SQLException e) { e.printStackTrace(); }
@@ -512,7 +512,7 @@ public class ReportService {
 
     public int getNewCustomers(LocalDate start, LocalDate end) {
         String sql = "SELECT COUNT(*) AS cnt FROM Account WHERE TimeStamp BETWEEN ? AND ?";
-        return queryInt(sql, ts(start), ts(end));
+        return queryInt(sql, tsStart(start), tsEnd(end));
     }
 
     /** Customers who made more than one purchase in the period. */
@@ -530,8 +530,8 @@ public class ReportService {
             """;
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
                 int repeats = rs.getInt("repeats");
@@ -571,8 +571,8 @@ public class ReportService {
         result.put("One-Time", 0);
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) result.put(rs.getString("segment"), rs.getInt("cnt"));
         } catch (SQLException e) { e.printStackTrace(); }
@@ -651,8 +651,8 @@ public class ReportService {
         Map<String, BigDecimal> statusRefunds = new LinkedHashMap<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(statusSql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 statusCounts.put(rs.getString("status"), rs.getInt("cnt"));
@@ -679,8 +679,8 @@ public class ReportService {
         Map<String, Integer> reasons = new LinkedHashMap<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(reasonSql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) reasons.put(rs.getString("reason"), rs.getInt("cnt"));
         } catch (SQLException e) { e.printStackTrace(); }
@@ -702,8 +702,8 @@ public class ReportService {
         Map<String, Integer> statusCounts = new LinkedHashMap<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) statusCounts.put(rs.getString("status"), rs.getInt("cnt"));
         } catch (SQLException e) { e.printStackTrace(); }
@@ -720,8 +720,8 @@ public class ReportService {
         Map<String, Integer> reasons = new LinkedHashMap<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(reasonSql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) reasons.put(rs.getString("reason"), rs.getInt("cnt"));
         } catch (SQLException e) { e.printStackTrace(); }
@@ -792,8 +792,8 @@ public class ReportService {
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, days);
             ps.setLong(2, days);
-            ps.setTimestamp(3, ts(start));
-            ps.setTimestamp(4, ts(end));
+            ps.setTimestamp(3, tsStart(start));
+            ps.setTimestamp(4, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -863,8 +863,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -903,8 +903,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -938,8 +938,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -980,8 +980,8 @@ public class ReportService {
         List<Map<String, Object>> result = new ArrayList<>();
         try (Connection c = DatabaseConnection.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
-            ps.setTimestamp(1, ts(start));
-            ps.setTimestamp(2, ts(end));
+            ps.setTimestamp(1, tsStart(start));
+            ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -1359,15 +1359,20 @@ public class ReportService {
     // INTERNAL HELPERS
     // ─────────────────────────────────────────────────────────────────────
 
-    private Timestamp ts(LocalDate d) {
-        return d == null ? null : Timestamp.valueOf(
-                d.equals(LocalDate.now()) ? d.atTime(23, 59, 59) : d.atStartOfDay()
-        );
+    /**
+     * Range-bound helpers for {@code WHERE col BETWEEN ? AND ?}.
+     * tsStart is 00:00:00 of the start date; tsEnd is 23:59:59 of the end date,
+     * so the whole of both boundary days is always included. (The previous
+     * single ts() helper returned start-of-day for every date except today,
+     * which silently dropped the last day of every historical range — and made
+     * a "Today" filter, where start == end == today, match nothing.)
+     */
+    private Timestamp tsStart(LocalDate d) {
+        return d == null ? null : Timestamp.valueOf(d.atStartOfDay());
     }
-
-    /** ts(start) uses start-of-day; ts(end) uses end-of-day. */
-    private Timestamp tsStart(LocalDate d) { return Timestamp.valueOf(d.atStartOfDay()); }
-    private Timestamp tsEnd  (LocalDate d) { return Timestamp.valueOf(d.atTime(23, 59, 59)); }
+    private Timestamp tsEnd(LocalDate d) {
+        return d == null ? null : Timestamp.valueOf(d.atTime(23, 59, 59));
+    }
 
     private BigDecimal queryBigDecimal(String sql, Object... params) {
         try (Connection c = DatabaseConnection.getConnection();
