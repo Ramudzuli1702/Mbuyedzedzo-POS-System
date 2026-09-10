@@ -68,6 +68,11 @@ public class MainDashboard {
     }
 
     private void navigateTo(String section) {
+        // Stop the outgoing SessionView's background poll timer before swapping
+        // it out (otherwise every visit leaks another INDEFINITE timeline).
+        // SalesView/InventoryView keep their resources across navigation and are
+        // only torn down on logout / window close via cleanupCurrentView().
+        if (currentView instanceof SessionView v) v.cleanup();
         resetButtonStyles();
 
         switch (section) {
@@ -147,8 +152,9 @@ public class MainDashboard {
     }
 
     private void cleanupCurrentView() {
-        if (currentView instanceof SalesView v)    v.cleanup();
+        if (currentView instanceof SalesView v)     v.cleanup();
         if (currentView instanceof InventoryView v) v.cleanup();
+        if (currentView instanceof SessionView v)   v.cleanup();
     }
 
     // ── Sidebar ───────────────────────────────────────────────────────────────

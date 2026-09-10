@@ -37,17 +37,28 @@ import com.itextpdf.text.pdf.PdfPTable;
 import com.itextpdf.text.pdf.PdfWriter;
 
 public class SessionView {
+    private static final DateTimeFormatter TIME_FMT     = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
     private User currentUser;
     private SessionService sessionService;
     private UserService userService;
+
     private TableView<BusinessSession> sessionTable;
-    private ListView<SessionActivity> activityFeed;
-    private VBox sessionCard;
+    private TableView<SessionActivity> activityFeed;
+
+    private VBox sessionStrip;
     private Label statusLabel;
     private Label cashLabel;
     private Label cardLabel;
     private Label totalLabel;
     private Button actionButton;
+
+    private TabPane tabPane;
+    private Tab liveTab;
+    private Label liveCountLabel;
+    private boolean userPickedTab = false;
+
     private Timeline refreshTimeline;
 
     private boolean isSupervisor() {
@@ -59,8 +70,13 @@ public class SessionView {
         this.sessionService = new SessionService();
         this.userService = new UserService();
 
-        refreshTimeline = new Timeline(new KeyFrame(Duration.seconds(5), e -> refreshLiveData()));
+        refreshTimeline = new Timeline(new KeyFrame(Duration.seconds(10), e -> refreshLiveData()));
         refreshTimeline.setCycleCount(Animation.INDEFINITE);
+    }
+
+    /** Stop the background refresh timer. Called by MainDashboard when navigating away. */
+    public void cleanup() {
+        if (refreshTimeline != null) refreshTimeline.stop();
     }
 
     public static class SessionActivity {
@@ -84,22 +100,51 @@ public class SessionView {
         public String getStatus()           { return status; }
         public double getAmount()           { return amount; }
 
-        @Override
-        public String toString() {
-            String icon = switch (type) {
+        public String getIcon() {
+            return switch (type) {
                 case "SALE"     -> "💰";
                 case "RETURN"   -> "↩️";
                 case "EXCHANGE" -> "🔄";
                 default         -> "•";
             };
+        }
+
+        public String getTypeLabel() {
+            return switch (type) {
+                case "SALE"     -> "Sale";
+                case "RETURN"   -> "Return";
+                case "EXCHANGE" -> "Exchange";
+                default         -> type;
+            };
+        }
+
+        @Override
+        public String toString() {
             String statusBadge = status != null ? " [" + status + "]" : "";
             String amountStr   = amount > 0 ? String.format(" - R%.2f", amount) : "";
             return String.format("%s %s %s%s%s",
-                    icon,
+                    getIcon(),
                     timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
                     description,
                     statusBadge,
                     amountStr);
+        }
+
+        // Value identity so the live feed can skip a rebuild when nothing changed.
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof SessionActivity a)) return false;
+            return Double.compare(a.amount, amount) == 0
+                    && java.util.Objects.equals(type, a.type)
+                    && java.util.Objects.equals(description, a.description)
+                    && java.util.Objects.equals(timestamp, a.timestamp)
+                    && java.util.Objects.equals(status, a.status);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(type, description, timestamp, status, amount);
         }
     }
 
@@ -109,21 +154,21 @@ public class SessionView {
 
         layout.setTop(createTopBar());
 
-        VBox mainContent = new VBox(20);
+        VBox mainContent = new VBox(16);
         mainContent.setPadding(new Insets(20));
 
-        sessionCard = createSessionCard();
+        sessionStrip = createSessionStrip();
 
-        HBox centerContent = new HBox(20);
+        tabPane = new TabPane();
+        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        VBox tableBox = createSessionTable();
-        HBox.setHgrow(tableBox, Priority.ALWAYS);
+        liveTab = new Tab("Live Feed", createActivityFeed());
+        Tab historyTab = new Tab("Session History", createSessionTable());
+        tabPane.getTabs().addAll(liveTab, historyTab);
+        tabPane.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> userPickedTab = true);
+        VBox.setVgrow(tabPane, Priority.ALWAYS);
 
-        VBox activityBox = createActivityFeed();
-        activityBox.setPrefWidth(350);
-
-        centerContent.getChildren().addAll(tableBox, activityBox);
-        mainContent.getChildren().addAll(sessionCard, centerContent);
+        mainContent.getChildren().addAll(sessionStrip, tabPane);
         layout.setCenter(mainContent);
 
         refreshView();
@@ -166,114 +211,153 @@ public class SessionView {
         return topBar;
     }
 
-    private VBox createSessionCard() {
-        VBox card = new VBox(15);
-        card.setPadding(new Insets(25));
-        card.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 15;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 15, 0, 0, 3);");
+    /**
+     * Compact full-width strip above the tabs: session status + live cash/card/total
+     * + the Start/End button. Replaces the old tall "Current Session" card.
+     */
+    private VBox createSessionStrip() {
+        VBox wrap = new VBox(10);
+        wrap.setPadding(new Insets(18, 20, 18, 20));
+        wrap.setStyle(
+                "-fx-background-color: white; -fx-background-radius: 12;"
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);");
 
-        Label cardTitle = new Label("Current Session");
-        cardTitle.setFont(Font.font("System", FontWeight.BOLD, 20));
-        cardTitle.setTextFill(Color.web("#0f766e"));
+        HBox row = new HBox(28);
+        row.setAlignment(Pos.CENTER_LEFT);
 
-        HBox statusBox = new HBox(10);
+        HBox statusBox = new HBox(8);
         statusBox.setAlignment(Pos.CENTER_LEFT);
-        Label statusIcon = new Label("⚫");
-        statusIcon.setFont(Font.font(18));
-        statusLabel = new Label("No Active Session");
-        statusLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 16));
-        statusBox.getChildren().addAll(statusIcon, statusLabel);
+        statusBox.setMinWidth(260);
+        statusLabel = new Label("No active session");
+        statusLabel.setFont(Font.font("System", FontWeight.BOLD, 15));
+        statusBox.getChildren().add(statusLabel);
 
-        GridPane summaryGrid = new GridPane();
-        summaryGrid.setHgap(40);
-        summaryGrid.setVgap(15);
-        summaryGrid.setPadding(new Insets(15, 0, 15, 0));
+        cashLabel  = metricValue();
+        cardLabel  = metricValue();
+        totalLabel = metricValue();
+        totalLabel.setTextFill(Color.web("#0f766e"));
 
-        VBox cashBox = createSummaryBox("💵 Cash Sales", "R 0.00");
-        cashLabel = (Label) ((VBox) cashBox.getChildren().get(1)).getChildren().get(0);
-        summaryGrid.add(cashBox, 0, 0);
-
-        VBox cardBox = createSummaryBox("💳 Card Sales", "R 0.00");
-        cardLabel = (Label) ((VBox) cardBox.getChildren().get(1)).getChildren().get(0);
-        summaryGrid.add(cardBox, 1, 0);
-
-        VBox totalBox = createSummaryBox("📊 Total Sales", "R 0.00");
-        totalLabel = (Label) ((VBox) totalBox.getChildren().get(1)).getChildren().get(0);
-        summaryGrid.add(totalBox, 2, 0);
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
 
         actionButton = new Button("Start Session");
-        actionButton.setStyle(
-                "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold;"
-                + "-fx-font-size: 14; -fx-padding: 12 30; -fx-background-radius: 8; -fx-cursor: hand;");
         actionButton.setOnAction(e -> handleSessionAction());
+        styleActionButton(false);
+
+        row.getChildren().addAll(
+                statusBox,
+                metric("💵 Cash", cashLabel),
+                metric("💳 Card", cardLabel),
+                metric("📊 Total", totalLabel),
+                spacer,
+                actionButton);
+
+        wrap.getChildren().add(row);
 
         if (!isSupervisor()) {
             Label accessNote = new Label(
-                    "ℹ️ You are starting/ending this session as a cashier. "
-                    + "A manager/admin auth code is not required but the session will be flagged for review.");
+                    "ℹ️ Starting or ending a session without a manager/admin is allowed, "
+                    + "but the session is flagged for review and countersignature.");
             accessNote.setWrapText(true);
             accessNote.setStyle("-fx-text-fill: #856404; -fx-background-color: #fff3cd;"
                     + "-fx-padding: 8 12; -fx-background-radius: 6; -fx-font-size: 12;");
-            card.getChildren().addAll(cardTitle, new Separator(), statusBox, summaryGrid, accessNote, actionButton);
-        } else {
-            card.getChildren().addAll(cardTitle, new Separator(), statusBox, summaryGrid, actionButton);
+            wrap.getChildren().add(accessNote);
         }
 
-        return card;
+        return wrap;
     }
 
-    private VBox createSummaryBox(String title, String value) {
-        VBox box = new VBox(5);
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("System", 12));
-        titleLabel.setTextFill(Color.web("#7f8c8d"));
+    private Label metricValue() {
+        Label l = new Label("R 0.00");
+        l.setFont(Font.font("System", FontWeight.BOLD, 18));
+        l.setTextFill(Color.web("#334155"));
+        return l;
+    }
 
-        VBox valueBox = new VBox();
-        Label valueLabel = new Label(value);
-        valueLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
-        valueLabel.setTextFill(Color.web("#0f766e"));
-        valueBox.getChildren().add(valueLabel);
-
-        box.getChildren().addAll(titleLabel, valueBox);
+    private VBox metric(String caption, Label valueLabel) {
+        VBox box = new VBox(2);
+        box.setAlignment(Pos.CENTER_LEFT);
+        Label c = new Label(caption);
+        c.setFont(Font.font("System", 11));
+        c.setTextFill(Color.web("#7f8c8d"));
+        box.getChildren().addAll(c, valueLabel);
         return box;
     }
 
+    private void styleActionButton(boolean sessionActive) {
+        String colour = sessionActive ? "#e74c3c" : "#27ae60";
+        actionButton.setText(sessionActive ? "End Session" : "Start Session");
+        actionButton.setStyle(
+                "-fx-background-color: " + colour + "; -fx-text-fill: white; -fx-font-weight: bold;"
+                + "-fx-font-size: 14; -fx-padding: 11 26; -fx-background-radius: 8; -fx-cursor: hand;");
+    }
+
+    /** Live feed tab content — a real table that updates in place. */
     private VBox createActivityFeed() {
-        VBox feedBox = new VBox(15);
+        VBox feedBox = new VBox(12);
         feedBox.setStyle(
                 "-fx-background-color: white; -fx-background-radius: 10;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
-        feedBox.setPadding(new Insets(20));
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);");
+        feedBox.setPadding(new Insets(18));
 
-        Label feedTitle = new Label("📋 Live Activity Feed");
-        feedTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+        Label feedTitle = new Label("Activity this session");
+        feedTitle.setFont(Font.font("System", FontWeight.BOLD, 15));
+        liveCountLabel = new Label("");
+        liveCountLabel.setTextFill(Color.web("#7f8c8d"));
+        liveCountLabel.setFont(Font.font("System", 12));
+        header.getChildren().addAll(feedTitle, liveCountLabel);
 
-        activityFeed = new ListView<>();
-        activityFeed.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 11;");
-        activityFeed.setPlaceholder(new Label("No activity yet"));
+        activityFeed = new TableView<>();
+        activityFeed.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        activityFeed.setPlaceholder(new Label("No sales, returns or exchanges yet this session."));
+        VBox.setVgrow(activityFeed, Priority.ALWAYS);
 
-        activityFeed.setCellFactory(lv -> new ListCell<SessionActivity>() {
-            @Override
-            protected void updateItem(SessionActivity item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(item.toString());
-                    switch (item.getType()) {
-                        case "SALE"     -> setStyle("-fx-text-fill: #27ae60;");
-                        case "RETURN"   -> setStyle("-fx-text-fill: #e67e22;");
-                        case "EXCHANGE" -> setStyle("-fx-text-fill: #9b59b6;");
-                    }
-                }
+        TableColumn<SessionActivity, String> timeCol = new TableColumn<>("Time");
+        timeCol.setMaxWidth(110);
+        timeCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().getTimestamp().format(TIME_FMT)));
+
+        TableColumn<SessionActivity, SessionActivity> typeCol = new TableColumn<>("Type");
+        typeCol.setMaxWidth(120);
+        typeCol.setCellValueFactory(d -> new javafx.beans.property.SimpleObjectProperty<>(d.getValue()));
+        typeCol.setCellFactory(c -> new TableCell<>() {
+            @Override protected void updateItem(SessionActivity a, boolean empty) {
+                super.updateItem(a, empty);
+                if (empty || a == null) { setText(null); setStyle(""); return; }
+                setText(a.getIcon() + "  " + a.getTypeLabel());
+                setStyle("-fx-font-weight: bold; -fx-text-fill: " + typeColour(a.getType()) + ";");
             }
         });
 
-        VBox.setVgrow(activityFeed, Priority.ALWAYS);
-        feedBox.getChildren().addAll(feedTitle, activityFeed);
+        TableColumn<SessionActivity, String> descCol = new TableColumn<>("Detail");
+        descCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(d.getValue().getDescription()));
+
+        TableColumn<SessionActivity, String> statusCol = new TableColumn<>("Status");
+        statusCol.setMaxWidth(110);
+        statusCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().getStatus() != null ? d.getValue().getStatus() : ""));
+
+        TableColumn<SessionActivity, String> amtCol = new TableColumn<>("Amount");
+        amtCol.setMaxWidth(120);
+        amtCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        amtCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().getAmount() > 0 ? String.format("R %.2f", d.getValue().getAmount()) : "—"));
+
+        activityFeed.getColumns().addAll(timeCol, typeCol, descCol, statusCol, amtCol);
+
+        feedBox.getChildren().addAll(header, activityFeed);
         return feedBox;
+    }
+
+    private static String typeColour(String type) {
+        return switch (type) {
+            case "SALE"     -> "#16a34a";
+            case "RETURN"   -> "#e67e22";
+            case "EXCHANGE" -> "#9b59b6";
+            default         -> "#334155";
+        };
     }
 
     private VBox createSessionTable() {
@@ -305,7 +389,7 @@ public class SessionView {
             protected void updateItem(LocalDateTime item, boolean empty) {
                 super.updateItem(item, empty);
                 setText(empty || item == null ? null
-                        : item.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+                        : item.format(DATE_TIME_FMT));
             }
         });
 
@@ -320,7 +404,7 @@ public class SessionView {
                     setText("Active");
                     setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
                 } else {
-                    setText(item.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")));
+                    setText(item.format(DATE_TIME_FMT));
                     setStyle("");
                 }
             }
@@ -435,64 +519,71 @@ public class SessionView {
         return tableBox;
     }
 
+    /** Timer-driven refresh: recompute totals and merge new feed rows, nothing else. */
     private void refreshLiveData() {
-        BusinessSession activeSession = sessionService.getActiveSession();
-        if (activeSession != null) {
-            sessionService.updateSessionTotals(activeSession.getSessionID());
-            Platform.runLater(() -> {
-                BusinessSession refreshed = sessionService.getActiveSession();
-                if (refreshed != null) {
-                    cashLabel.setText("R " + String.format("%.2f", refreshed.getTotalCashSales()));
-                    cardLabel.setText("R " + String.format("%.2f", refreshed.getTotalCardSales()));
-                    totalLabel.setText("R " + String.format("%.2f", refreshed.getTotalSales()));
-                    loadActivityFeed(refreshed.getSessionID());
-                }
-            });
-        }
+        BusinessSession active = sessionService.getActiveSession();
+        if (active == null) return;
+
+        sessionService.updateSessionTotals(active.getSessionID());
+        BusinessSession refreshed = sessionService.getActiveSession();
+        if (refreshed == null) return;
+        var activities = sessionService.getSessionActivities(refreshed.getSessionID());
+
+        Platform.runLater(() -> {
+            applyTotals(refreshed);
+            mergeActivityFeed(activities);
+        });
     }
 
+    /** Full refresh: session strip, feed, history table, default tab. */
     private void refreshView() {
-        BusinessSession activeSession = sessionService.getActiveSession();
+        BusinessSession active = sessionService.getActiveSession();
 
-        if (activeSession != null) {
-            sessionService.updateSessionTotals(activeSession.getSessionID());
-            activeSession = sessionService.getActiveSession();
+        if (active != null) {
+            sessionService.updateSessionTotals(active.getSessionID());
+            active = sessionService.getActiveSession();
 
-            statusLabel.setText("Session Active — Started "
-                    + activeSession.getStartDate().format(DateTimeFormatter.ofPattern("HH:mm")));
-            statusLabel.setTextFill(Color.web("#27ae60"));
+            statusLabel.setText("🟢  Session #" + active.getSessionID() + " active — started "
+                    + active.getStartDate().format(TIME_FMT)
+                    + " by " + active.getSupervisorName());
+            statusLabel.setTextFill(Color.web("#16a34a"));
+            applyTotals(active);
+            styleActionButton(true);
+            actionButton.setDisable(false);
 
-            cashLabel.setText("R " + String.format("%.2f", activeSession.getTotalCashSales()));
-            cardLabel.setText("R " + String.format("%.2f", activeSession.getTotalCardSales()));
-            totalLabel.setText("R " + String.format("%.2f", activeSession.getTotalSales()));
-
-            actionButton.setText("End Session");
-            actionButton.setStyle(
-                    "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;"
-                    + "-fx-font-size: 14; -fx-padding: 12 30; -fx-background-radius: 8; -fx-cursor: hand;");
-
-            loadActivityFeed(activeSession.getSessionID());
+            mergeActivityFeed(sessionService.getSessionActivities(active.getSessionID()));
+            if (!userPickedTab) tabPane.getSelectionModel().select(liveTab);
         } else {
-            statusLabel.setText("No Active Session");
+            statusLabel.setText("⚪  No active session");
             statusLabel.setTextFill(Color.web("#7f8c8d"));
-
             cashLabel.setText("R 0.00");
             cardLabel.setText("R 0.00");
             totalLabel.setText("R 0.00");
-
-            actionButton.setText("Start Session");
-            actionButton.setStyle(
-                    "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold;"
-                    + "-fx-font-size: 14; -fx-padding: 12 30; -fx-background-radius: 8; -fx-cursor: hand;");
+            styleActionButton(false);
+            actionButton.setDisable(false);
 
             activityFeed.getItems().clear();
+            liveCountLabel.setText("");
+            if (!userPickedTab) tabPane.getSelectionModel().select(1); // history
         }
 
         sessionTable.getItems().setAll(sessionService.getAllSessions());
     }
 
-    private void loadActivityFeed(int sessionID) {
-        activityFeed.getItems().setAll(sessionService.getSessionActivities(sessionID));
+    private void applyTotals(BusinessSession s) {
+        cashLabel.setText("R " + String.format("%.2f", s.getTotalCashSales()));
+        cardLabel.setText("R " + String.format("%.2f", s.getTotalCardSales()));
+        totalLabel.setText("R " + String.format("%.2f", s.getTotalSales()));
+    }
+
+    /** Replace feed contents only when they actually differ, so the table
+     *  doesn't flicker or lose the user's scroll position every tick. */
+    private void mergeActivityFeed(java.util.List<SessionActivity> latest) {
+        if (!activityFeed.getItems().equals(latest)) {
+            activityFeed.getItems().setAll(latest);
+        }
+        int n = latest.size();
+        liveCountLabel.setText(n == 0 ? "" : "· " + n + (n == 1 ? " event" : " events"));
     }
 
     private void handleSessionAction() {
@@ -818,11 +909,11 @@ public class SessionView {
 
         grid.add(new Label("Start Time:"), 0, 2);
         grid.add(new Label(session.getStartDate()
-                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))), 1, 2);
+                .format(DATE_TIME_FMT)), 1, 2);
 
         grid.add(new Label("End Time:"), 0, 3);
         grid.add(new Label(session.getEndDate() != null
-                ? session.getEndDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                ? session.getEndDate().format(DATE_TIME_FMT)
                 : "—"), 1, 3);
 
         grid.add(new Label("Cash Sales:"), 0, 4);
@@ -1067,8 +1158,8 @@ public class SessionView {
                     "Session ID: " + session.getSessionID() + " | Started By: " + session.getSupervisorName(),
                     normalFont));
             document.add(new com.itextpdf.text.Paragraph(
-                    "Period: " + session.getStartDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
-                    + " to " + session.getEndDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
+                    "Period: " + session.getStartDate().format(DATE_TIME_FMT)
+                    + " to " + session.getEndDate().format(DATE_TIME_FMT),
                     normalFont));
 
             if (!session.isDeclarationSigned()) {
