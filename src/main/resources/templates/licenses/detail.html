@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>License · Mvelelo Licensing</title></head>
+<body>
+<section th:with="l=${d.license()}">
+    <h1 class="h4"><code th:text="${l.licenseKey}">KEY</code>
+        <span class="badge bg-secondary align-middle" th:text="${l.status}">—</span></h1>
+
+    <div class="card card-body my-3" style="max-width:640px">
+        <dl class="row mb-0">
+            <dt class="col-4">Product</dt><dd class="col-8" th:text="${l.product}">—</dd>
+            <dt class="col-4">Type</dt><dd class="col-8" th:text="${l.type}">—</dd>
+            <dt class="col-4">Customer</dt>
+            <dd class="col-8">
+                <a th:if="${d.customer() != null}" th:href="@{'/admin/customers/' + ${d.customer().id}}"
+                   th:text="${d.customer().orgName}">—</a>
+                <span th:unless="${d.customer() != null}">—</span>
+            </dd>
+            <dt class="col-4">Machines</dt>
+            <dd class="col-8" th:text="${d.activeMachines()} + ' / ' + ${l.maxMachines}">0 / 1</dd>
+            <dt class="col-4">Issued</dt><dd class="col-8" th:text="${@fmt.datetime(l.issuedAt)}">—</dd>
+            <dt class="col-4">Expires</dt><dd class="col-8" th:text="${@fmt.date(l.expiresAt)}">never</dd>
+            <dt class="col-4" th:if="${l.revokeReason != null}">Revoked</dt>
+            <dd class="col-8" th:if="${l.revokeReason != null}" th:text="${l.revokeReason}">—</dd>
+            <dt class="col-4">Notes</dt><dd class="col-8" th:text="${l.notes}">—</dd>
+        </dl>
+    </div>
+
+    <!-- Actions -->
+    <div class="card card-body my-3" style="max-width:640px">
+        <h2 class="h6">Actions</h2>
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/transfer'}" class="d-flex gap-1">
+                <input class="form-control form-control-sm" name="reason" placeholder="Transfer reason" required>
+                <button class="btn btn-sm btn-outline-primary">Reset machine binding</button>
+            </form>
+
+            <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/renew'}" class="d-flex gap-1">
+                <input class="form-control form-control-sm" type="date" name="until" required>
+                <button class="btn btn-sm btn-outline-primary">Renew</button>
+            </form>
+
+            <span sec:authorize="hasRole('SUPER_ADMIN')" class="d-flex gap-2">
+                <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/suspend'}"
+                      th:if="${l.status.name() != 'REVOKED'}">
+                    <input type="hidden" name="suspended" th:value="${l.status.name() != 'SUSPENDED'}">
+                    <button class="btn btn-sm btn-outline-warning"
+                            th:text="${l.status.name() == 'SUSPENDED'} ? 'Un-suspend' : 'Suspend'">Suspend</button>
+                </form>
+                <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/revoke'}" class="d-flex gap-1"
+                      th:if="${l.status.name() != 'REVOKED'}"
+                      onsubmit="return confirm('Revoke this license permanently?')">
+                    <input class="form-control form-control-sm" name="reason" placeholder="Revoke reason" required>
+                    <button class="btn btn-sm btn-outline-danger">Revoke</button>
+                </form>
+            </span>
+        </div>
+    </div>
+
+    <h2 class="h6">Activations</h2>
+    <table class="table bg-white">
+        <thead><tr><th>Machine</th><th>Label</th><th>App</th><th>Active</th><th>Activated</th><th>Last seen</th></tr></thead>
+        <tbody>
+        <tr th:each="a : ${d.activations()}">
+            <td><code th:text="${#strings.abbreviate(a.machineFingerprint, 20)}">fp</code></td>
+            <td th:text="${a.machineLabel}">—</td>
+            <td th:text="${a.appVersion}">—</td>
+            <td th:text="${a.active} ? 'yes' : 'no'">—</td>
+            <td th:text="${@fmt.datetime(a.activatedAt)}">—</td>
+            <td th:text="${@fmt.datetime(a.lastSeenAt)}">—</td>
+        </tr>
+        <tr th:if="${d.activations().isEmpty()}"><td colspan="6" class="text-muted">Never activated.</td></tr>
+        </tbody>
+    </table>
+
+    <h2 class="h6">Transfer history</h2>
+    <table class="table bg-white">
+        <thead><tr><th>When</th><th>Old machine</th><th>Reason</th></tr></thead>
+        <tbody>
+        <tr th:each="t : ${d.transfers()}">
+            <td th:text="${@fmt.datetime(t.performedAt)}">—</td>
+            <td><code th:text="${#strings.abbreviate(t.oldFingerprint, 20)}">—</code></td>
+            <td th:text="${t.reason}">—</td>
+        </tr>
+        <tr th:if="${d.transfers().isEmpty()}"><td colspan="3" class="text-muted">No transfers.</td></tr>
+        </tbody>
+    </table>
+</section>
+</body>
+</html>

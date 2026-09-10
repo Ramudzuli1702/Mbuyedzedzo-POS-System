@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Audit log · Mvelelo Licensing</title></head>
+<body>
+<section>
+    <h1 class="h3 mb-4">Audit log</h1>
+    <table class="table bg-white">
+        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+        <tbody>
+        <tr th:each="e : ${entries.content}">
+            <td th:text="${@fmt.datetime(e.at)}">—</td>
+            <td th:text="${e.actor}">—</td>
+            <td th:text="${e.action}">—</td>
+            <td th:text="${e.target}">—</td>
+            <td th:text="${e.detail}">—</td>
+        </tr>
+        <tr th:if="${entries.isEmpty()}"><td colspan="5" class="text-muted">Nothing logged yet.</td></tr>
+        </tbody>
+    </table>
+</section>
+</body>
+</html>

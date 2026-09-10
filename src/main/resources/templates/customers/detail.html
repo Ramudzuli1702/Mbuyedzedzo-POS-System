@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Customer · Mvelelo Licensing</title></head>
+<body>
+<section>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0" th:text="${customer.orgName}">Org</h1>
+        <a class="btn btn-primary" th:href="@{'/admin/licenses/new?customerId=' + ${customer.id}}">Issue license</a>
+    </div>
+
+    <div class="card card-body mb-4" style="max-width:560px">
+        <dl class="row mb-0">
+            <dt class="col-4">Contact</dt><dd class="col-8" th:text="${customer.contactName}">—</dd>
+            <dt class="col-4">Email</dt><dd class="col-8" th:text="${customer.email}">—</dd>
+            <dt class="col-4">Phone</dt><dd class="col-8" th:text="${customer.phone}">—</dd>
+            <dt class="col-4">Notes</dt><dd class="col-8" th:text="${customer.notes}">—</dd>
+        </dl>
+    </div>
+
+    <h2 class="h5">Licenses</h2>
+    <table class="table bg-white">
+        <thead><tr><th>Key</th><th>Product</th><th>Type</th><th>Status</th><th>Expires</th></tr></thead>
+        <tbody>
+        <tr th:each="l : ${licenses}">
+            <td><a th:href="@{'/admin/licenses/' + ${l.id}}" th:text="${l.licenseKey}">KEY</a></td>
+            <td th:text="${l.product}">—</td>
+            <td th:text="${l.type}">—</td>
+            <td><span class="badge bg-secondary" th:text="${l.status}">—</span></td>
+            <td th:text="${@fmt.date(l.expiresAt)}">—</td>
+        </tr>
+        <tr th:if="${licenses.isEmpty()}"><td colspan="5" class="text-muted">No licenses yet.</td></tr>
+        </tbody>
+    </table>
+</section>
+</body>
+</html>

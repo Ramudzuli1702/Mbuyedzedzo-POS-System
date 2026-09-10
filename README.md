@@ -55,8 +55,19 @@ Token = RS256 JWT, claims: `sub`=key, `product`, `fingerprint`, `licenseType`,
 ```bash
 docker compose up -d db                      # MySQL on :3307
 mvn spring-boot:run                          # signing keys auto-generated into ./config on first run
-# admin UI:  http://localhost:8080/admin   (Phase 3)
+# admin UI:  http://localhost:8080/admin
+# first login: BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD (see application.yml)
 ```
+
+### Admin portal
+
+| Screen | Who | Does |
+| --- | --- | --- |
+| Dashboard | all | counts, activations (30d), licenses expiring soon |
+| Customers | agent sees own · admin sees all | list/search, create, view a customer's licenses |
+| Licenses | agent sees own · admin sees all | **generate key**, view activations & transfer history, **reset machine binding** (transfer), renew; **revoke / suspend** are super-admin only |
+| Agents | super-admin only | create sales agents, deactivate, reset password |
+| Audit | all | every issue / activate / revoke / transfer |
 
 Integration test against a real MySQL (own schema; skipped otherwise):
 

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Licenses · Mvelelo Licensing</title></head>
+<body>
+<section>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">Licenses</h1>
+        <a class="btn btn-primary" href="/admin/licenses/new">Generate key</a>
+    </div>
+
+    <table class="table bg-white">
+        <thead><tr>
+            <th>Key</th><th>Product</th><th>Type</th><th>Status</th>
+            <th>Customer</th><th>Machines</th><th>Expires</th><th>Issued</th>
+        </tr></thead>
+        <tbody>
+        <tr th:each="l : ${licenses.content}">
+            <td><a th:href="@{'/admin/licenses/' + ${l.id}}" th:text="${l.licenseKey}">KEY</a></td>
+            <td th:text="${l.product}">—</td>
+            <td th:text="${l.type}">—</td>
+            <td><span class="badge"
+                      th:classappend="${l.status.name() == 'ACTIVE'} ? 'bg-success' :
+                                      (${l.status.name() == 'REVOKED' or l.status.name() == 'EXPIRED'} ? 'bg-danger' : 'bg-secondary')"
+                      th:text="${l.status}">—</span></td>
+            <td th:text="${l.customerId != null ? customerNames.get(l.customerId) : '—'}">—</td>
+            <td th:text="${l.maxMachines}">1</td>
+            <td th:text="${@fmt.date(l.expiresAt)}">—</td>
+            <td th:text="${@fmt.date(l.issuedAt)}">—</td>
+        </tr>
+        <tr th:if="${licenses.isEmpty()}"><td colspan="8" class="text-muted">No licenses.</td></tr>
+        </tbody>
+    </table>
+    <span class="text-muted" th:if="${licenses.totalPages > 1}"
+          th:text="'Page ' + (${licenses.number} + 1) + ' of ' + ${licenses.totalPages}"></span>
+</section>
+</body>
+</html>

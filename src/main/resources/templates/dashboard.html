@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Dashboard · Mvelelo Licensing</title></head>
+<body>
+<section>
+    <h1 class="h3 mb-4">Dashboard</h1>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3"><div class="card card-body">
+            <div class="display-6" th:text="${stats.activeLicenses()}">0</div>
+            <div class="text-muted">Active licenses</div></div></div>
+        <div class="col-6 col-md-3"><div class="card card-body">
+            <div class="display-6" th:text="${stats.trialsOrIssued()}">0</div>
+            <div class="text-muted">Issued / not yet activated</div></div></div>
+        <div class="col-6 col-md-3"><div class="card card-body">
+            <div class="display-6" th:text="${stats.customers()}">0</div>
+            <div class="text-muted">Customers</div></div></div>
+        <div class="col-6 col-md-3"><div class="card card-body">
+            <div class="display-6" th:text="${stats.activationsThisMonth()}">0</div>
+            <div class="text-muted">Activations · 30 days</div></div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Expiring in the next 30 days</div>
+        <table class="table mb-0">
+            <thead><tr><th>Key</th><th>Product</th><th>Type</th><th>Expires</th></tr></thead>
+            <tbody>
+            <tr th:each="l : ${stats.expiringSoon()}">
+                <td><a th:href="@{'/admin/licenses/' + ${l.id}}" th:text="${l.licenseKey}">KEY</a></td>
+                <td th:text="${l.product}">—</td>
+                <td th:text="${l.type}">—</td>
+                <td th:text="${@fmt.date(l.expiresAt)}">—</td>
+            </tr>
+            <tr th:if="${stats.expiringSoon().isEmpty()}"><td colspan="4" class="text-muted">Nothing expiring soon.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>
