@@ -5,6 +5,7 @@ import com.pos.views.SalesView.CartItem;
 import javafx.collections.ObservableList;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.*;
 
 public class TransactionService {
@@ -35,20 +36,44 @@ public class TransactionService {
 
     public boolean processTransaction(int staffID, int accountID, ObservableList<CartItem> cartItems,
                                        PaymentInfo paymentInfo) {
-        return processTransaction(staffID, accountID, cartItems, paymentInfo, null);
+        return processTransaction(staffID, accountID, cartItems, paymentInfo, null, BigDecimal.ZERO);
     }
 
     /**
-     * Full overload — pass the applied promo code (or null) so it is stored
-     * in Transactions.PromoCode for every line item of this sale.
+     * Processes a sale.
+     *
+     * <p>The promo discount is distributed across the line items so that the
+     * stored {@code SalePrice} is the <em>net</em> unit price actually charged.
+     * Every report and session total computes revenue as
+     * {@code SUM(SalePrice * Quantity)}, so pushing the discount into the line
+     * prices keeps all of those figures equal to the amount the customer paid —
+     * without a schema change. (Per-unit 2-decimal rounding can leave a sub-cent
+     * difference from the exact discounted total on multi-quantity lines; the
+     * printed receipt shows the authoritative subtotal / discount / total.)
+     *
+     * <p>Payment fields ({@code AmountPaid} / {@code ChangeGiven}) are recorded
+     * once, on the first line of the sale, and left at 0 on the rest so a
+     * per-SaleID sum is correct. {@code PaymentMethod} is stored on every line
+     * because reports and the session cash/card split filter on it row-by-row.
+     *
+     * @param promo          the applied promo (or null) — sets PromoID + PromoCode
+     * @param discountAmount total discount to distribute (or ZERO)
      */
     public boolean processTransaction(int staffID, int accountID, ObservableList<CartItem> cartItems,
-                                       PaymentInfo paymentInfo, String promoCode) {
-        // Check if session is active
+                                       PaymentInfo paymentInfo,
+                                       PromoService.Promo promo, BigDecimal discountAmount) {
         SessionService.BusinessSession activeSession = sessionService.getActiveSession();
         if (activeSession == null) {
             throw new RuntimeException("No active business session. Please start a session first.");
         }
+        if (cartItems == null || cartItems.isEmpty()) {
+            throw new RuntimeException("Cannot process an empty cart.");
+        }
+
+        final int n = cartItems.size();
+        final BigDecimal[] netUnitPrice = distributeDiscount(cartItems, discountAmount);
+        final Integer promoID   = promo != null ? promo.getPromoID() : null;
+        final String  promoCode = promo != null ? promo.getPromoCode() : null;
 
         Connection conn = null;
         int saleID = -1;
@@ -61,7 +86,6 @@ public class TransactionService {
             }
             conn.setAutoCommit(false);
 
-            // Generate unique SaleID
             saleID = getNextSaleID(conn);
             if (saleID == -1) {
                 throw new SQLException("Failed to generate SaleID");
@@ -71,29 +95,29 @@ public class TransactionService {
                 INSERT INTO Transactions
                 (SaleID, StaffID, AccountID, ProductID, PromoID, Quantity, PromoCode, SalePrice,
                  PaymentMethod, AmountPaid, ChangeGiven, TransactionDate)
-                VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """;
 
             try (PreparedStatement pstmt = conn.prepareStatement(insertQuery)) {
-                for (CartItem item : cartItems) {
+                for (int i = 0; i < n; i++) {
+                    CartItem item = cartItems.get(i);
+                    boolean firstLine = (i == 0);
+
                     pstmt.setInt(1, saleID);
                     pstmt.setInt(2, staffID);
                     pstmt.setInt(3, accountID);
                     pstmt.setInt(4, item.getProductId());
-                    pstmt.setInt(5, item.getQuantity());
-                    // PromoCode — store on every line so it's visible per-item in history
-                    if (promoCode != null && !promoCode.isBlank()) {
-                        pstmt.setString(6, promoCode);
-                    } else {
-                        pstmt.setNull(6, java.sql.Types.VARCHAR);
-                    }
-                    pstmt.setBigDecimal(7, item.getPrice());
-                    pstmt.setString(8, paymentInfo.getPaymentMethod());
-                    pstmt.setBigDecimal(9, paymentInfo.getAmountPaid());
-                    pstmt.setBigDecimal(10, paymentInfo.getChangeGiven());
+                    if (promoID != null) pstmt.setInt(5, promoID);
+                    else                 pstmt.setNull(5, Types.INTEGER);
+                    pstmt.setInt(6, item.getQuantity());
+                    if (promoCode != null && !promoCode.isBlank()) pstmt.setString(7, promoCode);
+                    else                                           pstmt.setNull(7, Types.VARCHAR);
+                    pstmt.setBigDecimal(8, netUnitPrice[i]);
+                    pstmt.setString(9, paymentInfo.getPaymentMethod());
+                    pstmt.setBigDecimal(10, firstLine ? paymentInfo.getAmountPaid()  : BigDecimal.ZERO);
+                    pstmt.setBigDecimal(11, firstLine ? paymentInfo.getChangeGiven() : BigDecimal.ZERO);
                     pstmt.executeUpdate();
 
-                    // Update stock using the same connection
                     productService.updateStock(conn, item.getProductId(), item.getQuantity());
                 }
             }
@@ -127,8 +151,7 @@ public class TransactionService {
             }
         }
 
-        // Perform session-related operations after transaction is committed/rolled back.
-        // Use a new connection for these to avoid issues with the previous connection.
+        // Session bookkeeping runs on a fresh connection after the sale commits.
         if (committed && saleID != -1) {
             try (Connection sessionConn = DatabaseConnection.getConnection()) {
                 if (sessionConn != null) {
@@ -136,7 +159,6 @@ public class TransactionService {
                     sessionService.updateSessionTotals(activeSession.getSessionID());
                 }
             } catch (Exception sessionEx) {
-                // Log the error but don't fail the transaction since the main transaction succeeded
                 System.err.println("Session update failed: " + sessionEx.getMessage());
                 sessionEx.printStackTrace();
             }
@@ -146,23 +168,45 @@ public class TransactionService {
     }
 
     /**
+     * Splits {@code discountAmount} across the cart in proportion to each line's
+     * subtotal and returns the resulting net <em>unit</em> price for each line
+     * (index-aligned with {@code cartItems}). The discount is clamped to
+     * [0, cartTotal]; the final line absorbs any rounding remainder so the line
+     * totals sum back to (cartTotal - discount).
+     */
+    private BigDecimal[] distributeDiscount(ObservableList<CartItem> cartItems, BigDecimal discountAmount) {
+        final int n = cartItems.size();
+        final BigDecimal[] netUnit = new BigDecimal[n];
+
+        BigDecimal cartTotal = BigDecimal.ZERO;
+        for (CartItem it : cartItems) cartTotal = cartTotal.add(it.getSubtotal());
+
+        BigDecimal discount = discountAmount == null ? BigDecimal.ZERO : discountAmount;
+        if (discount.signum() < 0) discount = BigDecimal.ZERO;
+        if (discount.compareTo(cartTotal) > 0) discount = cartTotal;
+
+        if (discount.signum() == 0 || cartTotal.signum() == 0) {
+            for (int i = 0; i < n; i++) netUnit[i] = cartItems.get(i).getPrice();
+            return netUnit;
+        }
+
+        BigDecimal target    = cartTotal.subtract(discount); // amount actually charged
+        BigDecimal allocated = BigDecimal.ZERO;
+        for (int i = 0; i < n; i++) {
+            CartItem it = cartItems.get(i);
+            BigDecimal qty = BigDecimal.valueOf(it.getQuantity());
+            BigDecimal lineNet = (i < n - 1)
+                    ? it.getSubtotal().multiply(target).divide(cartTotal, 2, RoundingMode.HALF_UP)
+                    : target.subtract(allocated);
+            allocated = allocated.add(lineNet);
+            netUnit[i] = lineNet.divide(qty, 2, RoundingMode.HALF_UP);
+        }
+        return netUnit;
+    }
+
+    /**
      * Atomically increments the SaleSequence counter and returns the new value.
-     *
-     * Uses UPDATE-first (SET nextID = nextID + 1) which is a single atomic MySQL
-     * write — no two concurrent transactions can ever receive the same ID.
-     * The subsequent SELECT reads back the value this connection just wrote,
-     * which is safe because we are inside an open transaction (autoCommit=false).
-     *
-     * Both statements are explicitly scoped to the pinned row (id = 1).
-     * SaleSequence.id is a fixed identity column (always 1) and is the
-     * table's PRIMARY KEY; nextID is a plain counter column and must never
-     * be the primary key. Scoping by id = 1 also protects against any
-     * stray extra rows that might exist from a previous schema version —
-     * the UPDATE/SELECT pair only ever touches the single canonical row.
-     *
-     * If the pinned row is missing (e.g. after a manual TRUNCATE), a seed
-     * row is inserted and 1 is returned so the system self-heals without
-     * manual intervention.
+     * See the schema notes in DatabaseSetup for why id=1 scoping matters.
      */
     private int getNextSaleID(Connection conn) throws SQLException {
         String updateQuery = "UPDATE SaleSequence SET nextID = nextID + 1 WHERE id = 1";
@@ -174,7 +218,6 @@ public class TransactionService {
             int rowsAffected = updateStmt.executeUpdate();
 
             if (rowsAffected == 0) {
-                // Pinned row missing — seed it and return 1
                 try (PreparedStatement insertStmt = conn.prepareStatement(
                         "INSERT INTO SaleSequence (id, nextID) VALUES (1, 1)")) {
                     insertStmt.executeUpdate();

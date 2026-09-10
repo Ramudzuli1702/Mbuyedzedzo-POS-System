@@ -59,9 +59,8 @@ public class SalesView {
 
     private Label activeCashierLabel;
 
-    // ── Active promo state ────────────────────────────────────────────────
+    // ── Active promo state (valid only for the sale currently being rung up) ──
     private PromoService.Promo activePromo = null;
-    private String activePromoCode = null;
     private BigDecimal activeDiscount = BigDecimal.ZERO;
 
     private WiFiHandler wifiHandler;
@@ -762,6 +761,11 @@ public class SalesView {
             cartTotal = cartTotal.add(item.getSubtotal());
         }
 
+        // Start from a clean promo state — a promo is only valid for the sale it
+        // was entered on. showPaymentDialog() sets these if the cashier applies one.
+        activePromo = null;
+        activeDiscount = BigDecimal.ZERO;
+
         // ── Promo + payment dialog ────────────────────────────────────────
         Optional<PaymentInfo> paymentResult = showPaymentDialog(cartTotal);
 
@@ -777,7 +781,8 @@ public class SalesView {
                         customer.getAccountID(),
                         cartItems,
                         paymentInfo,
-                        activePromoCode);
+                        activePromo,
+                        activeDiscount);
 
                 if (success) {
                     // Determine the sale ID for receipt saving (use 0 as fallback; update if
