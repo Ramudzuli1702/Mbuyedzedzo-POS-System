@@ -9,6 +9,7 @@ import java.util.Optional;
 
 public interface ActivationRepo extends JpaRepository<Activation, Long> {
     Optional<Activation> findByLicenseIdAndMachineFingerprint(Long licenseId, String fingerprint);
+    List<Activation> findByMachineFingerprint(String fingerprint);
     long countByLicenseIdAndActiveTrue(Long licenseId);
     List<Activation> findByLicenseIdOrderByActivatedAtDesc(Long licenseId);
     long countByActivatedAtAfter(Instant since);

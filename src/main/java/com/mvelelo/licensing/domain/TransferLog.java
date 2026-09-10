@@ -24,7 +24,8 @@ public class TransferLog {
 
     private String reason;
 
-    @Column(name = "performed_by", nullable = false)
+    /** null = self-service / system reset. */
+    @Column(name = "performed_by")
     private Long performedBy;
 
     @Column(name = "performed_at", nullable = false, updatable = false)

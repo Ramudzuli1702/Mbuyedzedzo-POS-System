@@ -37,7 +37,8 @@ public class License {
     @Column(name = "customer_id")
     private Long customerId;
 
-    @Column(name = "issued_by", nullable = false)
+    /** null = issued by the API (e.g. a self-service trial). */
+    @Column(name = "issued_by")
     private Long issuedBy;
 
     @Column(name = "issued_at", nullable = false, updatable = false)

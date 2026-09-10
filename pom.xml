@@ -19,6 +19,10 @@
 
     <properties>
         <java.version>21</java.version>
+        <!-- Integration tests skip unless a DB is supplied here -->
+        <licensing.it.jdbcUrl></licensing.it.jdbcUrl>
+        <licensing.it.user></licensing.it.user>
+        <licensing.it.password></licensing.it.password>
     </properties>
 
     <dependencies>
@@ -85,32 +89,29 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>mysql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
-
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>1.20.4</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <systemPropertyVariables>
+                        <licensing.it.jdbcUrl>${licensing.it.jdbcUrl}</licensing.it.jdbcUrl>
+                        <licensing.it.user>${licensing.it.user}</licensing.it.user>
+                        <licensing.it.password>${licensing.it.password}</licensing.it.password>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

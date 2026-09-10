@@ -32,7 +32,7 @@ CREATE TABLE license (
     status         VARCHAR(20)  NOT NULL,         -- ISSUED | ACTIVE | SUSPENDED | REVOKED | EXPIRED
     max_machines   INT          NOT NULL DEFAULT 1,
     customer_id    BIGINT,
-    issued_by      BIGINT       NOT NULL,
+    issued_by      BIGINT,                        -- NULL = issued by the API (e.g. a trial)
     issued_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     expires_at     DATETIME,                      -- NULL = never (perpetual)
     revoked_at     DATETIME,
@@ -63,7 +63,7 @@ CREATE TABLE transfer_log (
     license_id      BIGINT       NOT NULL,
     old_fingerprint VARCHAR(64),
     reason          VARCHAR(300),
-    performed_by    BIGINT       NOT NULL,
+    performed_by    BIGINT,                        -- NULL = self-service / system
     performed_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_transfer_license FOREIGN KEY (license_id)   REFERENCES license(id) ON DELETE CASCADE,
     CONSTRAINT fk_transfer_actor   FOREIGN KEY (performed_by) REFERENCES admin_user(id)
