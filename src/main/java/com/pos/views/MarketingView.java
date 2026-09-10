@@ -43,10 +43,6 @@ public class MarketingView {
         layout.setStyle("-fx-background-color: #f5f7fa;");
         layout.setTop(createTopBar());
 
-        // No wrapping ScrollPane — a ScrollPane around these cards renders the
-        // left column's text blank on this hardware (a Windows prism/text-cache
-        // bug). Instead the layout fits the viewport: the two tall tables grow
-        // and shrink with the window and scroll internally.
         VBox leftCol = new VBox(18,
             createComposeCard(), createUnsubscribeCard(), createSubscribersCard());
         VBox rightCol = new VBox(18,
@@ -57,19 +53,21 @@ public class MarketingView {
         leftCol.setMaxWidth(Double.MAX_VALUE);
         rightCol.setMaxWidth(Double.MAX_VALUE);
 
-        // Subscribed Customers (left) and Campaign History (right) absorb slack.
-        VBox.setVgrow(leftCol.getChildren().get(2), Priority.ALWAYS);
-        VBox.setVgrow(rightCol.getChildren().get(0), Priority.ALWAYS);
-
         HBox columns = new HBox(20, leftCol, rightCol);
         HBox.setHgrow(leftCol, Priority.ALWAYS);
         HBox.setHgrow(rightCol, Priority.ALWAYS);
 
-        VBox root = new VBox(18, createStatsRow(), columns);
-        root.setPadding(new Insets(20));
-        VBox.setVgrow(columns, Priority.ALWAYS);
+        VBox content = new VBox(18, createStatsRow(), columns);
+        content.setPadding(new Insets(20));
 
-        layout.setCenter(root);
+        // Vertical scroll for small windows. The blank-text bug this used to
+        // trigger is fixed globally by -Dprism.dirtyopts=false (see
+        // POSApplication.main).
+        ScrollPane scroll = new ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        layout.setCenter(scroll);
         return layout;
     }
 
