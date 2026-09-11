@@ -128,13 +128,27 @@ public class POSApplication extends Application {
             return;
         }
 
-        // ── 2. Decide: registration or login ──────────────────────────────────
+        // ── 2. Licence gate ──────────────────────────────────────────────────
+        com.pos.license.LicenseManager licence = new com.pos.license.LicenseManager();
+        com.pos.license.LicenseManager.Status ls = licence.check();
+        log.info("Licence check: {} — {}", ls.state(), ls.message());
+
+        if (!ls.canRun()) {
+            new com.pos.views.ActivationView(primaryStage, licence, ls.message(),
+                    () -> proceedToLoginOrRegister(primaryStage)).show();
+            return;
+        }
+        licence.revalidateInBackground();   // best-effort refresh on every launch
+
+        // ── 3. Registration or login ─────────────────────────────────────────
+        proceedToLoginOrRegister(primaryStage);
+    }
+
+    private void proceedToLoginOrRegister(Stage primaryStage) {
         if (isFirstUser()) {
-            RegisterView registerView = new RegisterView(primaryStage);
-            registerView.show();
+            new RegisterView(primaryStage).show();
         } else {
-            LoginView loginView = new LoginView(primaryStage);
-            loginView.show();
+            new LoginView(primaryStage).show();
         }
     }
 
