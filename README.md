@@ -16,20 +16,23 @@ One Spring Boot app:
    product (`POS_STANDARD` or `POS_RETAIL`), type (`PERPETUAL` / `SUBSCRIPTION` /
    `TRIAL`) and machine limit.
 2. On first launch the desktop app shows an **activation screen**. The user
-   enters the key; the app also sends a **machine fingerprint** (hashed disk +
-   MAC + CPU id).
-3. The server checks the key (valid, right product, not revoked/expired, machine
-   slots available), records the activation, and returns a short-lived
-   **RS256-signed token** bound to `{key, product, fingerprint, expiry}`.
-4. Every launch the desktop verifies that token **offline** using a bundled
-   public key. Periodically it calls `/validate` to refresh; if the server says
-   `REVOKED` the app blocks on the next launch. A 14-day offline grace covers
-   temporary loss of connectivity.
+   enters the key; the app also sends a **machine fingerprint** — SHA-256 of the
+   physical MAC addresses + machine name + OS user.
+3. The server checks the key (valid checksum, right product, not
+   revoked/suspended/expired, machine slots available), records the activation,
+   and returns a short-lived **RS256 token** bound to
+   `{key, product, fingerprint, expiry}`.
+4. Every launch the desktop verifies that token **offline** with the public key
+   bundled at `point-of-sale-system/src/main/resources/license-public.pem`.
+   It also calls `/validate` in the background; if the server says the licence
+   is dead the app clears the activation and blocks on the next launch. A
+   14-day offline grace covers temporary loss of connectivity.
 5. **Trials**: the activation screen can start a 30-day machine-bound trial
    without a purchased key.
 6. **Transfers**: if a customer changes computers, an admin/agent resets the
-   machine binding from the PMS (logged), or the customer self-services it up to
-   a yearly limit (planned).
+   machine binding from the portal (logged); customer self-service is planned.
+7. **Expiry**: a scheduled task flips ISSUED/ACTIVE licences past their expiry
+   date to `EXPIRED` hourly.
 
 ## Not built (portfolio scope)
 
@@ -49,6 +52,9 @@ payment webhook would call the same "issue license" service.
 
 Token = RS256 JWT, claims: `sub`=key, `product`, `fingerprint`, `licenseType`,
 `licenseStatus`, `maxMachines`, `licenseExpiresAt`, short `exp` (7 days).
+Signed with `dev-keys/license-private.pem` (a committed throwaway pair — pass
+`LICENSE_PRIVATE_KEY` / `LICENSE_PUBLIC_KEY` in production and re-bundle the
+public key in the POS build).
 
 ## Run locally
 
@@ -56,7 +62,7 @@ Token = RS256 JWT, claims: `sub`=key, `product`, `fingerprint`, `licenseType`,
 # 1. In your existing MySQL:
 mysql -u root -e "CREATE DATABASE mvelelo_licensing;"
 
-# 2. Run it (signing keys auto-generate into ./config on first start):
+# 2. Run it:
 mvn spring-boot:run
 #   ...if your MySQL root has a password:  DB_PASSWORD=yourpass mvn spring-boot:run
 
@@ -83,6 +89,14 @@ Integration test against a real MySQL (own schema; skipped otherwise):
 mvn -Dlicensing.it.jdbcUrl=jdbc:mysql://localhost:3306/mvelelo_licensing_test \
     -Dlicensing.it.user=root -Dlicensing.it.password=secret verify
 ```
+
+## Deploying
+
+Runnable jar: `mvn clean package` → `java -jar target/mvelelo-licensing-1.0.0.jar`.
+Set `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`, `LICENSE_PRIVATE_KEY` /
+`LICENSE_PUBLIC_KEY` (absolute paths to a real keypair), and
+`BOOTSTRAP_ADMIN_EMAIL/PASSWORD`. Put it behind HTTPS (reverse proxy or
+`server.ssl.*`). A small VPS (e.g. Hetzner) is plenty.
 
 ## Stack
 
