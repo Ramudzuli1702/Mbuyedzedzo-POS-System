@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>License · Mbuyedzedzo Licensing</title></head>
+<body>
+<section th:with="l=${d.license()}">
+    <div class="page-header">
+        <div>
+            <h1 class="d-flex align-items-center gap-2">
+                <code th:text="${l.licenseKey}">KEY</code>
+                <span class="badge"
+                      th:classappend="${l.status.name() == 'ACTIVE'} ? ' s-active' :
+                                      (${l.status.name() == 'ISSUED'} ? ' s-issued' :
+                                      (${l.status.name() == 'SUSPENDED'} ? ' s-warn' : ' s-danger'))"
+                      th:text="${l.status}">—</span>
+            </h1>
+            <div class="sub" th:text="${l.product} + ' · ' + ${l.type}">product</div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card"><div class="card-body">
+                <dl class="meta row mb-0">
+                    <dt class="col-5">Customer</dt>
+                    <dd class="col-7">
+                        <a th:if="${d.customer() != null}" th:href="@{'/admin/customers/' + ${d.customer().id}}"
+                           th:text="${d.customer().orgName}">—</a>
+                        <span th:unless="${d.customer() != null}">—</span>
+                    </dd>
+                    <dt class="col-5">Machines</dt>
+                    <dd class="col-7" th:text="${d.activeMachines()} + ' of ' + ${l.maxMachines}">0 of 1</dd>
+                    <dt class="col-5">Issued</dt><dd class="col-7" th:text="${@fmt.datetime(l.issuedAt)}">—</dd>
+                    <dt class="col-5">Expires</dt><dd class="col-7" th:text="${l.expiresAt != null ? @fmt.date(l.expiresAt) : 'never'}">never</dd>
+                    <th:block th:if="${l.revokeReason != null}">
+                        <dt class="col-5">Revoked</dt><dd class="col-7" th:text="${l.revokeReason}">—</dd>
+                    </th:block>
+                    <dt class="col-5">Notes</dt><dd class="col-7" th:text="${l.notes ?: '—'}">—</dd>
+                </dl>
+            </div></div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header">Actions</div>
+                <div class="card-body d-flex flex-column gap-3">
+                    <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/transfer'}" class="d-flex gap-2">
+                        <input class="form-control form-control-sm" name="reason" placeholder="Transfer reason" required>
+                        <button class="btn btn-sm btn-outline-primary text-nowrap">Reset machine binding</button>
+                    </form>
+                    <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/renew'}" class="d-flex gap-2">
+                        <input class="form-control form-control-sm" type="date" name="until" required>
+                        <button class="btn btn-sm btn-outline-primary text-nowrap">Renew</button>
+                    </form>
+                    <div sec:authorize="hasRole('SUPER_ADMIN')" class="d-flex flex-wrap gap-2 pt-2 border-top">
+                        <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/suspend'}"
+                              th:if="${l.status.name() != 'REVOKED'}">
+                            <input type="hidden" name="suspended" th:value="${l.status.name() != 'SUSPENDED'}">
+                            <button class="btn btn-sm btn-outline-warning"
+                                    th:text="${l.status.name() == 'SUSPENDED'} ? 'Un-suspend' : 'Suspend'">Suspend</button>
+                        </form>
+                        <form method="post" th:action="@{'/admin/licenses/' + ${l.id} + '/revoke'}" class="d-flex gap-2"
+                              th:if="${l.status.name() != 'REVOKED'}"
+                              onsubmit="return confirm('Revoke this license permanently?')">
+                            <input class="form-control form-control-sm" name="reason" placeholder="Revoke reason" required>
+                            <button class="btn btn-sm btn-outline-danger">Revoke</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header">Activations</div>
+        <table class="table">
+            <thead><tr><th>Machine</th><th>Label</th><th>App</th><th>Active</th><th>Activated</th><th>Last seen</th></tr></thead>
+            <tbody>
+            <tr th:each="a : ${d.activations()}">
+                <td><code th:text="${#strings.abbreviate(a.machineFingerprint, 18)}">fp</code></td>
+                <td th:text="${a.machineLabel ?: '—'}">—</td>
+                <td th:text="${a.appVersion ?: '—'}">—</td>
+                <td><span class="badge" th:classappend="${a.active} ? ' s-active' : ' s-muted'"
+                          th:text="${a.active} ? 'yes' : 'no'">—</span></td>
+                <td th:text="${@fmt.datetime(a.activatedAt)}">—</td>
+                <td th:text="${@fmt.datetime(a.lastSeenAt)}">—</td>
+            </tr>
+            <tr th:if="${d.activations().isEmpty()}"><td colspan="6" class="text-muted">Never activated.</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-header">Transfer history</div>
+        <table class="table">
+            <thead><tr><th>When</th><th>Old machine</th><th>Reason</th></tr></thead>
+            <tbody>
+            <tr th:each="t : ${d.transfers()}">
+                <td th:text="${@fmt.datetime(t.performedAt)}">—</td>
+                <td><code th:text="${#strings.abbreviate(t.oldFingerprint, 18)}">—</code></td>
+                <td th:text="${t.reason}">—</td>
+            </tr>
+            <tr th:if="${d.transfers().isEmpty()}"><td colspan="3" class="text-muted">No transfers.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

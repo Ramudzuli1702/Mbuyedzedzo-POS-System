@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Customer · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div>
+            <h1 th:text="${customer.orgName}">Org</h1>
+            <div class="sub" th:text="${customer.contactName} + ' · ' + ${customer.email}">contact</div>
+        </div>
+        <a class="btn btn-primary" th:href="@{'/admin/licenses/new?customerId=' + ${customer.id}}">
+            <i class="bi bi-key me-1"></i> Issue license</a>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-5">
+            <div class="card"><div class="card-body">
+                <dl class="meta row mb-0">
+                    <dt class="col-4">Contact</dt><dd class="col-8" th:text="${customer.contactName}">—</dd>
+                    <dt class="col-4">Email</dt><dd class="col-8" th:text="${customer.email}">—</dd>
+                    <dt class="col-4">Phone</dt><dd class="col-8" th:text="${customer.phone ?: '—'}">—</dd>
+                    <dt class="col-4">Notes</dt><dd class="col-8" th:text="${customer.notes ?: '—'}">—</dd>
+                </dl>
+            </div></div>
+        </div>
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header">Licenses</div>
+                <table class="table">
+                    <thead><tr><th>Key</th><th>Product</th><th>Status</th><th>Expires</th></tr></thead>
+                    <tbody>
+                    <tr th:each="l : ${licenses}">
+                        <td><a th:href="@{'/admin/licenses/' + ${l.id}}" th:text="${l.licenseKey}">KEY</a></td>
+                        <td th:text="${l.product}">—</td>
+                        <td><span class="badge s-muted" th:text="${l.status}">—</span></td>
+                        <td th:text="${@fmt.date(l.expiresAt)}">—</td>
+                    </tr>
+                    <tr th:if="${licenses.isEmpty()}"><td colspan="4" class="text-muted">No licenses yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+</body>
+</html>

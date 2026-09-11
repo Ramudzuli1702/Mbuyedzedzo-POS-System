@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Not allowed</title></head>
+<body><section>
+    <div class="page-header"><div><h1>Not allowed</h1></div></div>
+    <div class="card"><div class="card-body">
+        <p class="text-muted mb-3">That action needs a super-admin account.</p>
+        <a class="btn btn-outline-primary" href="/admin">Back to dashboard</a>
+    </div></div>
+</section></body>
+</html>

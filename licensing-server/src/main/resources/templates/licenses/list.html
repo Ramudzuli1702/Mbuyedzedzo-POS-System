@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Licenses · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div><h1>Licenses</h1><div class="sub">Issued keys and their activations</div></div>
+        <a class="btn btn-primary" href="/admin/licenses/new"><i class="bi bi-plus-lg me-1"></i> Generate key</a>
+    </div>
+
+    <div class="card">
+        <table class="table">
+            <thead><tr>
+                <th>Key</th><th>Product</th><th>Type</th><th>Status</th>
+                <th>Customer</th><th>Machines</th><th>Expires</th><th>Issued</th>
+            </tr></thead>
+            <tbody>
+            <tr th:each="l : ${licenses.content}">
+                <td><a th:href="@{'/admin/licenses/' + ${l.id}}" th:text="${l.licenseKey}">KEY</a></td>
+                <td th:text="${l.product}">—</td>
+                <td th:text="${l.type}">—</td>
+                <td><span class="badge"
+                          th:classappend="${l.status.name() == 'ACTIVE'} ? ' s-active' :
+                                          (${l.status.name() == 'ISSUED'} ? ' s-issued' :
+                                          (${l.status.name() == 'SUSPENDED'} ? ' s-warn' : ' s-danger'))"
+                          th:text="${l.status}">—</span></td>
+                <td th:text="${l.customerId != null ? customerNames.get(l.customerId) : '—'}">—</td>
+                <td th:text="${l.maxMachines}">1</td>
+                <td th:text="${@fmt.date(l.expiresAt)}">—</td>
+                <td th:text="${@fmt.date(l.issuedAt)}">—</td>
+            </tr>
+            <tr th:if="${licenses.isEmpty()}"><td colspan="8" class="text-muted">No licenses yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-muted small mt-2" th:if="${licenses.totalPages > 1}"
+         th:text="'Page ' + (${licenses.number} + 1) + ' of ' + ${licenses.totalPages}"></div>
+</section>
+</body>
+</html>

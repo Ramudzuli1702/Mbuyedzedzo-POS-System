@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Dashboard · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div><h1>Dashboard</h1><div class="sub">Licence and activation overview</div></div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-check2-circle"></i></div>
+                <div><div class="n" th:text="${stats.activeLicenses()}">0</div><div class="l">Active licenses</div></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-hourglass-split"></i></div>
+                <div><div class="n" th:text="${stats.trialsOrIssued()}">0</div><div class="l">Issued, not activated</div></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-people"></i></div>
+                <div><div class="n" th:text="${stats.customers()}">0</div><div class="l">Customers</div></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-lightning-charge"></i></div>
+                <div><div class="n" th:text="${stats.activationsThisMonth()}">0</div><div class="l">Activations · 30 days</div></div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><i class="bi bi-calendar-event me-1"></i> Expiring in the next 30 days</div>
+        <table class="table">
+            <thead><tr><th>Key</th><th>Product</th><th>Type</th><th>Expires</th></tr></thead>
+            <tbody>
+            <tr th:each="l : ${stats.expiringSoon()}">
+                <td><a th:href="@{'/admin/licenses/' + ${l.id}}" th:text="${l.licenseKey}">KEY</a></td>
+                <td th:text="${l.product}">—</td>
+                <td th:text="${l.type}">—</td>
+                <td th:text="${@fmt.date(l.expiresAt)}">—</td>
+            </tr>
+            <tr th:if="${stats.expiringSoon().isEmpty()}"><td colspan="4" class="text-muted">Nothing expiring soon.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

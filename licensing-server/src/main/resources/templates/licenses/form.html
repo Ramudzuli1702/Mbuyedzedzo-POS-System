@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Generate key · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header"><div><h1>Generate license key</h1></div></div>
+
+    <div class="card" style="max-width:580px">
+        <div class="card-body">
+            <form method="post" th:action="@{/admin/licenses}" th:object="${form}">
+                <div class="mb-3">
+                    <label class="form-label">Customer</label>
+                    <select class="form-select" th:field="*{customerId}">
+                        <option th:value="${null}">— none (internal / demo) —</option>
+                        <option th:each="c : ${customers.content}" th:value="${c.id}" th:text="${c.orgName}">Org</option>
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col mb-3">
+                        <label class="form-label">Product</label>
+                        <select class="form-select" th:field="*{product}">
+                            <option th:each="p : ${products}" th:value="${p}" th:text="${p}">P</option>
+                        </select>
+                    </div>
+                    <div class="col mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" th:field="*{type}">
+                            <option th:each="t : ${types}" th:value="${t}" th:text="${t}">T</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col mb-3">
+                        <label class="form-label">Max machines</label>
+                        <input class="form-control" type="number" min="1" th:field="*{maxMachines}">
+                    </div>
+                    <div class="col mb-3">
+                        <label class="form-label">Expires on</label>
+                        <input class="form-control" type="date" th:field="*{expiresOn}">
+                        <div class="form-text">Leave blank for a perpetual licence.</div>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Notes</label>
+                    <input class="form-control" th:field="*{notes}">
+                </div>
+                <button class="btn btn-primary">Generate key</button>
+                <a class="btn btn-link text-muted" href="/admin/licenses">Cancel</a>
+            </form>
+        </div>
+    </div>
+</section>
+</body>
+</html>

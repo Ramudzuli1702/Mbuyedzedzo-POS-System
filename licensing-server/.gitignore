@@ -1,0 +1,11 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.idea/
+*.iml
+*.log
+
+# Local overrides & runtime-generated keys
+config/
+
+# dev-keys/ IS committed on purpose — a throwaway keypair so the demo is
+# reproducible. Production supplies real keys via LICENSE_PRIVATE_KEY.

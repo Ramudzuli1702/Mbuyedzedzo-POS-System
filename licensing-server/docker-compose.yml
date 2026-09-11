@@ -1,0 +1,21 @@
+# OPTIONAL — only if you don't want to use your existing MySQL.
+# By default the app connects to a local MySQL on :3306 (see application.yml);
+# you just need:  CREATE DATABASE mbuyedzedzo_licensing;
+#
+# If you use this instead, run it and start the app with:
+#   DB_PORT=3307 DB_USER=licensing DB_PASSWORD=licensing mvn spring-boot:run
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mbuyedzedzo_licensing
+      MYSQL_USER: licensing
+      MYSQL_PASSWORD: licensing
+    ports:
+      - "3307:3306"
+    volumes:
+      - licensing-db:/var/lib/mysql
+
+volumes:
+  licensing-db:

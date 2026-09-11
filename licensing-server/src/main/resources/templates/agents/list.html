@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Agents · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header"><div><h1>Sales agents</h1><div class="sub">Restricted accounts that onboard customers and issue keys</div></div></div>
+
+    <div class="card mb-3" style="max-width:620px">
+        <div class="card-header">Add an agent</div>
+        <div class="card-body">
+            <form method="post" th:action="@{/admin/agents}">
+                <div class="row g-2 mb-2">
+                    <div class="col"><input class="form-control" name="fullName" placeholder="Full name" required></div>
+                    <div class="col"><input class="form-control" type="email" name="email" placeholder="Email" required></div>
+                </div>
+                <div class="row g-2">
+                    <div class="col"><input class="form-control" type="password" name="password" placeholder="Temporary password" required></div>
+                    <div class="col-auto"><button class="btn btn-primary">Add agent</button></div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <table class="table">
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="a : ${agents}">
+                <td th:text="${a.fullName}">—</td>
+                <td th:text="${a.email}">—</td>
+                <td th:text="${a.role}">—</td>
+                <td><span class="badge" th:classappend="${a.active} ? ' s-active' : ' s-muted'"
+                          th:text="${a.active} ? 'Active' : 'Disabled'">—</span></td>
+                <td class="text-end" th:if="${a.role.name() == 'SALES_AGENT'}">
+                    <form method="post" th:action="@{'/admin/agents/' + ${a.id} + '/toggle'}" class="d-inline">
+                        <input type="hidden" name="active" th:value="${!a.active}">
+                        <button class="btn btn-sm btn-outline-secondary"
+                                th:text="${a.active} ? 'Deactivate' : 'Activate'">Toggle</button>
+                    </form>
+                    <form method="post" th:action="@{'/admin/agents/' + ${a.id} + '/reset-password'}" class="d-inline ms-1"
+                          onsubmit="return confirm('Reset this password to \'changeme\'?')">
+                        <input type="hidden" name="password" value="changeme">
+                        <button class="btn btn-sm btn-outline-secondary">Reset pw</button>
+                    </form>
+                </td>
+                <td th:unless="${a.role.name() == 'SALES_AGENT'}"></td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

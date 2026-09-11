@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html th:fragment="page(pageTitle, content)" lang="en"
+      xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:replace="${pageTitle}">Mbuyedzedzo Licensing</title>
+    <link rel="icon" href="/img/logo-mark.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/app.css" rel="stylesheet">
+</head>
+<body>
+
+<aside class="app-sidebar" id="sidebar">
+    <a class="brand" href="/admin">
+        <img src="/img/logo-mark.png" alt="Mbuyedzedzo">
+        <span>Licensing</span>
+    </a>
+    <nav class="app-nav">
+        <div class="nav-section">Overview</div>
+        <a class="nav-link" href="/admin"
+           th:classappend="${uri == '/admin'} ? ' active'"><i class="bi bi-grid-1x2"></i> Dashboard</a>
+
+        <div class="nav-section">Manage</div>
+        <a class="nav-link" href="/admin/customers"
+           th:classappend="${uri != null and #strings.startsWith(uri, '/admin/customers')} ? ' active'"><i class="bi bi-people"></i> Customers</a>
+        <a class="nav-link" href="/admin/licenses"
+           th:classappend="${uri != null and #strings.startsWith(uri, '/admin/licenses')} ? ' active'"><i class="bi bi-key"></i> Licenses</a>
+        <a class="nav-link" href="/admin/agents" sec:authorize="hasRole('SUPER_ADMIN')"
+           th:classappend="${uri != null and #strings.startsWith(uri, '/admin/agents')} ? ' active'"><i class="bi bi-person-badge"></i> Agents</a>
+
+        <div class="nav-section">System</div>
+        <a class="nav-link" href="/admin/audit"
+           th:classappend="${uri != null and #strings.startsWith(uri, '/admin/audit')} ? ' active'"><i class="bi bi-clock-history"></i> Audit log</a>
+    </nav>
+    <div class="sidebar-foot">Mbuyedzedzo Licensing · v1.0</div>
+</aside>
+<div class="sidebar-backdrop" id="backdrop"></div>
+
+<div class="app-main">
+    <header class="app-topbar">
+        <button class="sidebar-toggle" id="sbToggle" type="button"><i class="bi bi-list"></i></button>
+        <div class="spacer"></div>
+        <div class="dropdown" th:if="${me != null}">
+            <a class="user dropdown-toggle text-decoration-none" data-bs-toggle="dropdown" href="#">
+                <span class="av" th:text="${me.displayName() != null and !me.displayName().isEmpty()} ? ${me.displayName().substring(0,1)} : '?'">A</span>
+                <span th:text="${me.displayName()}">User</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><span class="dropdown-item-text small text-muted" th:text="${me.email()}">email</span></li>
+                <li><span class="dropdown-item-text small text-muted" th:text="${me.role()}">ROLE</span></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <form th:action="@{/logout}" method="post" class="px-1">
+                        <button class="dropdown-item">Sign out</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </header>
+
+    <main class="app-content">
+        <div th:if="${flash}" class="alert alert-success py-2" th:text="${flash}"></div>
+        <div th:if="${error}" class="alert alert-danger py-2" th:text="${error}"></div>
+        <div th:replace="${content}">content</div>
+    </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  (function () {
+    var sb = document.getElementById('sidebar'),
+        bd = document.getElementById('backdrop'),
+        tg = document.getElementById('sbToggle');
+    function toggle() { sb.classList.toggle('show'); bd.classList.toggle('show'); }
+    if (tg) tg.addEventListener('click', toggle);
+    if (bd) bd.addEventListener('click', toggle);
+  })();
+</script>
+</body>
+</html>

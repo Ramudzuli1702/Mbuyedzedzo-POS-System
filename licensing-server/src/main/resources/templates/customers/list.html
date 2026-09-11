@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Customers · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div><h1>Customers</h1><div class="sub">Organisations you've onboarded</div></div>
+        <a class="btn btn-primary" href="/admin/customers/new"><i class="bi bi-plus-lg me-1"></i> New customer</a>
+    </div>
+
+    <form class="mb-3" method="get">
+        <div class="input-group" style="max-width:420px">
+            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+            <input class="form-control" name="q" th:value="${q}" placeholder="Search organisation, contact, email">
+            <button class="btn btn-outline-primary">Search</button>
+        </div>
+    </form>
+
+    <div class="card">
+        <table class="table">
+            <thead><tr><th>Organisation</th><th>Contact</th><th>Email</th><th>Phone</th></tr></thead>
+            <tbody>
+            <tr th:each="c : ${customers.content}">
+                <td><a th:href="@{'/admin/customers/' + ${c.id}}" th:text="${c.orgName}">Org</a></td>
+                <td th:text="${c.contactName}">Contact</td>
+                <td th:text="${c.email}">email</td>
+                <td th:text="${c.phone}">—</td>
+            </tr>
+            <tr th:if="${customers.isEmpty()}"><td colspan="4" class="text-muted">No customers yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="text-muted small mt-2" th:if="${customers.totalPages > 1}"
+         th:text="'Page ' + (${customers.number} + 1) + ' of ' + ${customers.totalPages}"></div>
+</section>
+</body>
+</html>

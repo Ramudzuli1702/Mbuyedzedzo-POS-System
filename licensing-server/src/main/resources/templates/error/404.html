@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Not found</title></head>
+<body><section>
+    <div class="page-header"><div><h1>Not found</h1></div></div>
+    <div class="card"><div class="card-body">
+        <p class="text-muted mb-3">That record doesn't exist, or isn't yours to view.</p>
+        <a class="btn btn-outline-primary" href="/admin">Back to dashboard</a>
+    </div></div>
+</section></body>
+</html>

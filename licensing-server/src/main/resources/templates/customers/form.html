@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>New customer · Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header"><div><h1>New customer</h1></div></div>
+
+    <div class="card" style="max-width:560px">
+        <div class="card-body">
+            <form method="post" th:action="@{/admin/customers}" th:object="${form}">
+                <div class="mb-3">
+                    <label class="form-label">Organisation *</label>
+                    <input class="form-control" th:field="*{orgName}">
+                    <div class="text-danger small" th:if="${#fields.hasErrors('orgName')}" th:errors="*{orgName}"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Contact name *</label>
+                    <input class="form-control" th:field="*{contactName}">
+                    <div class="text-danger small" th:if="${#fields.hasErrors('contactName')}" th:errors="*{contactName}"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email *</label>
+                    <input class="form-control" type="email" th:field="*{email}">
+                    <div class="text-danger small" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Phone</label>
+                    <input class="form-control" th:field="*{phone}">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Notes</label>
+                    <textarea class="form-control" rows="2" th:field="*{notes}"></textarea>
+                </div>
+                <button class="btn btn-primary">Create customer</button>
+                <a class="btn btn-link text-muted" href="/admin/customers">Cancel</a>
+            </form>
+        </div>
+    </div>
+</section>
+</body>
+</html>
