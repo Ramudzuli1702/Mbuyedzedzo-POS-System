@@ -17,21 +17,24 @@ filtered into `pos-edition.properties` inside the jar and read by
 `com.pos.Edition`. The window title, receipts and installer name follow it
 (e.g. *Mvelelo Retail POS*).
 
-## Licensing (planned — portfolio scope)
+## Licensing
 
-The intended model, documented here rather than fully built:
+Without a valid licence this build shows an **Activation screen** instead of the
+login screen. On activation the app sends a licence key + a machine fingerprint
+(hashed MACs + machine name) to the licensing server and stores a short‑lived
+**RS256 token**, which it then verifies **offline** on every launch using the
+bundled public key (`src/main/resources/license-public.pem`). It re‑checks with
+the server in the background each launch, with a 14‑day offline grace window.
+A **30‑day trial** can be started from the same screen.
 
-- Each install requires a **license key** (e.g. `POS-2026-XK29-MNQT-7R4B`) to
-  unlock the system; without a valid key the app stays in a restricted demo
-  mode. Keys are product-specific — a Retail POS key won't activate a Standard
-  POS build and vice-versa.
-- A small **license server** (Spring Boot REST API) validates a key against a
-  machine fingerprint on activation and returns a signed token; the app
-  re-checks it periodically.
-- A web **Product Management System** lets an admin (and restricted sales
-  agents) create customers, generate keys, and revoke / renew / transfer them.
-- Payment gateway integration (PayFast) is **out of scope** for this portfolio
-  build — keys are issued manually from the PMS.
+Keys are product‑specific — a Retail key won't activate a Standard build.
+
+- Server + admin portal: **[`../Mvelelo-Licensing`](../Mvelelo-Licensing)**
+  (Spring Boot; issue / revoke / renew / transfer keys, sales‑agent roles).
+- Licence status and a "Deactivate this machine" button live in **Settings**.
+- Payment gateway integration (PayFast) is out of scope for this portfolio
+  build — keys are issued by hand from the admin portal. In a real deployment a
+  payment webhook would call the same "issue licence" service.
 
 ## Features
 
