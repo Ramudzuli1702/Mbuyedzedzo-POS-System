@@ -4,20 +4,23 @@
 <head><title>Audit log · Mvelelo Licensing</title></head>
 <body>
 <section>
-    <h1 class="h3 mb-4">Audit log</h1>
-    <table class="table bg-white">
-        <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
-        <tbody>
-        <tr th:each="e : ${entries.content}">
-            <td th:text="${@fmt.datetime(e.at)}">—</td>
-            <td th:text="${e.actor}">—</td>
-            <td th:text="${e.action}">—</td>
-            <td th:text="${e.target}">—</td>
-            <td th:text="${e.detail}">—</td>
-        </tr>
-        <tr th:if="${entries.isEmpty()}"><td colspan="5" class="text-muted">Nothing logged yet.</td></tr>
-        </tbody>
-    </table>
+    <div class="page-header"><div><h1>Audit log</h1><div class="sub">Every issue, activation, revoke and transfer</div></div></div>
+
+    <div class="card">
+        <table class="table">
+            <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Detail</th></tr></thead>
+            <tbody>
+            <tr th:each="e : ${entries.content}">
+                <td class="text-nowrap" th:text="${@fmt.datetime(e.at)}">—</td>
+                <td th:text="${e.actor}">—</td>
+                <td><span class="badge s-muted" th:text="${e.action}">—</span></td>
+                <td><code th:text="${e.target}">—</code></td>
+                <td th:text="${e.detail}">—</td>
+            </tr>
+            <tr th:if="${entries.isEmpty()}"><td colspan="5" class="text-muted">Nothing logged yet.</td></tr>
+            </tbody>
+        </table>
+    </div>
 </section>
 </body>
 </html>

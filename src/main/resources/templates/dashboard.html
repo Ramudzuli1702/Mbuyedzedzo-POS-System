@@ -4,26 +4,40 @@
 <head><title>Dashboard · Mvelelo Licensing</title></head>
 <body>
 <section>
-    <h1 class="h3 mb-4">Dashboard</h1>
+    <div class="page-header">
+        <div><h1>Dashboard</h1><div class="sub">Licence and activation overview</div></div>
+    </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3"><div class="card card-body">
-            <div class="display-6" th:text="${stats.activeLicenses()}">0</div>
-            <div class="text-muted">Active licenses</div></div></div>
-        <div class="col-6 col-md-3"><div class="card card-body">
-            <div class="display-6" th:text="${stats.trialsOrIssued()}">0</div>
-            <div class="text-muted">Issued / not yet activated</div></div></div>
-        <div class="col-6 col-md-3"><div class="card card-body">
-            <div class="display-6" th:text="${stats.customers()}">0</div>
-            <div class="text-muted">Customers</div></div></div>
-        <div class="col-6 col-md-3"><div class="card card-body">
-            <div class="display-6" th:text="${stats.activationsThisMonth()}">0</div>
-            <div class="text-muted">Activations · 30 days</div></div></div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-check2-circle"></i></div>
+                <div><div class="n" th:text="${stats.activeLicenses()}">0</div><div class="l">Active licenses</div></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-hourglass-split"></i></div>
+                <div><div class="n" th:text="${stats.trialsOrIssued()}">0</div><div class="l">Issued, not activated</div></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-people"></i></div>
+                <div><div class="n" th:text="${stats.customers()}">0</div><div class="l">Customers</div></div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card card-body"><div class="stat">
+                <div class="ic"><i class="bi bi-lightning-charge"></i></div>
+                <div><div class="n" th:text="${stats.activationsThisMonth()}">0</div><div class="l">Activations · 30 days</div></div>
+            </div></div>
+        </div>
     </div>
 
     <div class="card">
-        <div class="card-header">Expiring in the next 30 days</div>
-        <table class="table mb-0">
+        <div class="card-header"><i class="bi bi-calendar-event me-1"></i> Expiring in the next 30 days</div>
+        <table class="table">
             <thead><tr><th>Key</th><th>Product</th><th>Type</th><th>Expires</th></tr></thead>
             <tbody>
             <tr th:each="l : ${stats.expiringSoon()}">
