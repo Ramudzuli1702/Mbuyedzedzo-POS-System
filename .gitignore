@@ -1,37 +1,14 @@
-# ── Build output ──────────────────────────────────────────────
-target/
-dependency-reduced-pom.xml
-
 # ── Packaged installers (built by jlink/jpackage — 200MB+ each, not source) ──
 dist/
 
-# ── IDE ───────────────────────────────────────────────────────
-.settings/
-.classpath
-bin/
-*.iml
+# ── IDE / OS noise (repo-wide) ─────────────────────────────────
 .idea/
-
-# ── Secrets & machine-specific config ─────────────────────────
-config/app.config
-config/email.properties
-config/db.properties
-
-# ── Generated runtime output (contains customer PII) ──────────
-receipts/
-reports/
-backups/
-
-# ── Large bundled installers (not source) ────────────────────
-installer/*.msi
-installer/jre/
-
-# ── Dev seed data (contains sample credentials / real-looking emails) ──
-MySQL_Scripts/insertions.sql
-
-# ── OS noise ─────────────────────────────────────────────────
+*.iml
 Thumbs.db
 .DS_Store
 
 # ── Local tooling ────────────────────────────────────────────
 .claude/settings.local.json
+
+# Each component also has its own .gitignore for build-tool-specific output
+# (pos-desktop/ — Maven; licensing-server/ — Maven; mobile-scanner/ — Gradle).
