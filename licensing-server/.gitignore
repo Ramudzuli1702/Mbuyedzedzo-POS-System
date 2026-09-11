@@ -4,8 +4,10 @@ target/
 *.iml
 *.log
 
-# Local overrides & runtime-generated keys
-config/
+# Local overrides & runtime-generated keys (the top-level folder only —
+# unanchored "config/" also matched src/.../licensing/config/, silently
+# excluding two real source files from every commit ever made here)
+/config/
 
 # dev-keys/ IS committed on purpose — a throwaway keypair so the demo is
 # reproducible. Production supplies real keys via LICENSE_PRIVATE_KEY.
