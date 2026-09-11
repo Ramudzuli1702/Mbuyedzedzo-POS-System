@@ -4,6 +4,7 @@ import com.pos.Branding;
 import com.pos.Edition;
 import com.pos.license.LicenseClient.LicenseServerException;
 import com.pos.license.LicenseManager;
+import com.pos.utils.BrandAssets;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -34,6 +35,8 @@ public class ActivationView {
     }
 
     public void show() {
+        var logo = BrandAssets.logo(56);
+
         Label title = new Label("Activate " + Branding.APP_NAME);
         title.setFont(Font.font("System", FontWeight.BOLD, 22));
         title.setTextFill(Color.web("#0f766e"));
@@ -91,6 +94,7 @@ public class ActivationView {
 
         VBox card = new VBox(14, title, edition, new Separator(), why,
                 keyLbl, keyField, actions, status, advanced);
+        if (logo != null) card.getChildren().add(0, logo);
         card.setPadding(new Insets(32));
         card.setMaxWidth(460);
         card.setStyle("-fx-background-color: white; -fx-background-radius: 12;"

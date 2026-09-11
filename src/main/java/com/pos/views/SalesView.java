@@ -1001,6 +1001,12 @@ public class SalesView {
         actions.setAlignment(Pos.CENTER_LEFT);
 
         VBox content = new VBox(10, ok, saved, new Separator(), receiptArea, actions);
+        var logo = com.pos.utils.BrandAssets.logoMark(28);
+        if (logo != null) {
+            HBox logoRow = new HBox(logo);
+            logoRow.setAlignment(Pos.CENTER);
+            content.getChildren().add(logoRow);
+        }
         content.setPadding(new Insets(18));
         dialog.getDialogPane().setContent(content);
         dialog.showAndWait();

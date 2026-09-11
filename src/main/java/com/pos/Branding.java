@@ -6,17 +6,26 @@ package com.pos;
  * Settings — that one appears on receipts and in customer emails.
  *
  * The name reflects the build's {@link Edition}: the Retail build is a
- * separate product ("Mvelelo Retail POS").
+ * separate product ("Mbuyedzedzo Retail POS").
  */
 public final class Branding {
 
     public static final String APP_NAME  = Edition.current().isRetail()
-            ? "Mvelelo Retail POS"
-            : "Mvelelo POS System";
+            ? "Mbuyedzedzo Retail POS"
+            : "Mbuyedzedzo POS System";
 
     public static final String APP_SHORT = Edition.current().isRetail()
-            ? "Mvelelo Retail"
-            : "Mvelelo POS";
+            ? "Mbuyedzedzo Retail"
+            : "Mbuyedzedzo POS";
+
+    /** The brand's meaning, shown under the logo on the login/activation screens and receipts. */
+    public static final String APP_TAGLINE = "Restoration";
+
+    /** Classpath location of the full logo (mark + wordmark), bundled as a resource. */
+    public static final String LOGO_PATH = "/brand/logo.png";
+
+    /** Classpath location of the mark-only logo (transparent background). */
+    public static final String LOGO_MARK_PATH = "/brand/logo-mark.png";
 
     private Branding() {}
 }

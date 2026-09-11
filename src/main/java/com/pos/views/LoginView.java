@@ -3,11 +3,13 @@ package com.pos.views;
 import com.pos.database.DatabaseConnection;
 import com.pos.models.User;
 import com.pos.services.UserService;
+import com.pos.utils.BrandAssets;
 import com.pos.utils.PasswordUtil;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -43,10 +45,12 @@ public class LoginView {
         card.setPadding(new Insets(40));
         card.setStyle("-fx-background-color: white; -fx-background-radius: 15; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 20, 0, 0, 5);");
         
+        ImageView logo = BrandAssets.logo(72);
+
         Label title = new Label(com.pos.Branding.APP_NAME);
-        title.setFont(Font.font("System", FontWeight.BOLD, 28));
+        title.setFont(Font.font("System", FontWeight.BOLD, 22));
         title.setTextFill(Color.web("#0f766e"));
-        
+
         Label subtitle = new Label("Sign in to continue");
         subtitle.setFont(Font.font("System", 14));
         subtitle.setTextFill(Color.web("#666666"));
@@ -113,6 +117,7 @@ public class LoginView {
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
         
+        if (logo != null) card.getChildren().add(logo);
         card.getChildren().addAll(title, subtitle, emailBox, passwordBox, errorLabel, loginBtn, spacer);
         
         return card;

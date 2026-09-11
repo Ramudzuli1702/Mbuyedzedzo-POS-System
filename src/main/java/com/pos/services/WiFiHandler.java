@@ -134,7 +134,7 @@ public class WiFiHandler {
                 System.out.println("📡 Streams ready. isConnected = " + isConnected.get());
 
                 // Send welcome message
-                sendData("{\"type\":\"connected\",\"message\":\"Connected to Mvelelo POS System\"}");
+                sendData("{\"type\":\"connected\",\"message\":\"Connected to " + com.pos.Branding.APP_NAME + "\"}");
 
                 // FIXED: Send all categories to the app for dropdown population
                 sendCategoriesToApp();

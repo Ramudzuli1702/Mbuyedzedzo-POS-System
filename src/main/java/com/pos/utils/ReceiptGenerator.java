@@ -168,7 +168,13 @@ public class ReceiptGenerator {
             if (job == null) return;
             Text text = new Text(receiptText);
             text.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 9pt;");
-            if (job.printPage(new TextFlow(text))) job.endJob();
+
+            javafx.scene.layout.VBox page = new javafx.scene.layout.VBox(6, new TextFlow(text));
+            page.setAlignment(javafx.geometry.Pos.CENTER);
+            var logo = com.pos.utils.BrandAssets.logoMark(30);
+            if (logo != null) page.getChildren().add(logo);
+
+            if (job.printPage(page)) job.endJob();
         } catch (Exception e) {
             System.err.println("Printing not available: " + e.getMessage());
         }
@@ -242,6 +248,7 @@ public class ReceiptGenerator {
         for (String l : wrapCentre(msg)) r.append(l).append('\n');
         r.append('\n');
         r.append(centre("Powered by " + com.pos.Branding.APP_NAME)).append('\n');
+        r.append(centre(com.pos.Branding.APP_TAGLINE)).append('\n');
         r.append(DRULE);
     }
 
