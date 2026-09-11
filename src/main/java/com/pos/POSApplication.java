@@ -3,11 +3,14 @@ package com.pos;
 import com.pos.database.DatabaseConnection;
 import com.pos.database.DatabaseSetup;
 import com.pos.setup.FirstRunSetup;
+import com.pos.setup.TermsAcceptance;
 import com.pos.utils.Dialogs;
 import com.pos.utils.LogSetup;
 import com.pos.views.LoginView;
 import com.pos.views.RegisterView;
 import com.pos.views.SetupView;
+import com.pos.views.SplashView;
+import com.pos.views.TermsView;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
@@ -26,6 +29,12 @@ import java.sql.Statement;
  * Launch sequence
  * ──────────────
  * start()
+ *   │
+ *   ├─ SplashView — brand moment shown on every launch
+ *   │
+ *   ├─ terms-accepted.flag exists?
+ *   │     NO  → TermsView — must Accept to continue (Decline exits)
+ *   │     YES → skip straight through
  *   │
  *   ├─ db.properties exists?
  *   │     NO  → show SetupView
@@ -70,6 +79,20 @@ public class POSApplication extends Application {
             System.exit(0);
         });
 
+        SplashView.show(primaryStage, () -> {
+            if (TermsAcceptance.isAccepted()) {
+                proceedPastTerms(primaryStage);
+            } else {
+                new TermsView(primaryStage,
+                        () -> proceedPastTerms(primaryStage),
+                        () -> { Platform.exit(); System.exit(0); }
+                ).show();
+            }
+        });
+    }
+
+    /** Called once the licence-agreement gate is satisfied (or was already, on past launches). */
+    private void proceedPastTerms(Stage primaryStage) {
         if (FirstRunSetup.isAlreadyConfigured()) {
             // ── Normal launch — config exists ──────────────────────────────────
             // DatabaseConnection already loaded it in its static initialiser.

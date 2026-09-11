@@ -2,6 +2,9 @@
 target/
 dependency-reduced-pom.xml
 
+# ── Packaged installers (built by jlink/jpackage — 200MB+ each, not source) ──
+dist/
+
 # ── IDE ───────────────────────────────────────────────────────
 .settings/
 .classpath
