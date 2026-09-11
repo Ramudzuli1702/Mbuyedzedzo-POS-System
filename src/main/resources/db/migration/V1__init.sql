@@ -1,4 +1,4 @@
--- Mvelelo Licensing — initial schema (MySQL 8)
+-- Mbuyedzedzo Licensing — initial schema (MySQL 8)
 
 CREATE TABLE admin_user (
     id            BIGINT AUTO_INCREMENT PRIMARY KEY,

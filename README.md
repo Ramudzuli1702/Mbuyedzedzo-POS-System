@@ -1,7 +1,7 @@
-# Mvelelo Licensing
+# Mbuyedzedzo Licensing
 
 License issuance, machine-bound activation, and product management for the
-**Mvelelo POS** desktop systems (Standard and Retail editions).
+**Mbuyedzedzo POS** desktop systems (Standard and Retail editions).
 
 One Spring Boot app:
 
@@ -60,7 +60,7 @@ public key in the POS build).
 
 ```bash
 # 1. In your existing MySQL:
-mysql -u root -e "CREATE DATABASE mvelelo_licensing;"
+mysql -u root -e "CREATE DATABASE mbuyedzedzo_licensing;"
 
 # 2. Run it:
 mvn spring-boot:run
@@ -86,13 +86,13 @@ your MySQL — see the notes in that file. Flyway builds the schema on startup.
 Integration test against a real MySQL (own schema; skipped otherwise):
 
 ```bash
-mvn -Dlicensing.it.jdbcUrl=jdbc:mysql://localhost:3306/mvelelo_licensing_test \
+mvn -Dlicensing.it.jdbcUrl=jdbc:mysql://localhost:3306/mbuyedzedzo_licensing_test \
     -Dlicensing.it.user=root -Dlicensing.it.password=secret verify
 ```
 
 ## Deploying
 
-Runnable jar: `mvn clean package` → `java -jar target/mvelelo-licensing-1.0.0.jar`.
+Runnable jar: `mvn clean package` → `java -jar target/mbuyedzedzo-licensing-1.0.0.jar`.
 Set `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`, `LICENSE_PRIVATE_KEY` /
 `LICENSE_PUBLIC_KEY` (absolute paths to a real keypair), and
 `BOOTSTRAP_ADMIN_EMAIL/PASSWORD`. Put it behind HTTPS (reverse proxy or

@@ -11,11 +11,11 @@
         <relativePath/>
     </parent>
 
-    <groupId>com.mvelelo</groupId>
-    <artifactId>mvelelo-licensing</artifactId>
+    <groupId>com.mbuyedzedzo</groupId>
+    <artifactId>mbuyedzedzo-licensing</artifactId>
     <version>1.0.0</version>
-    <name>Mvelelo Licensing</name>
-    <description>License issuance, activation and product management for the Mvelelo POS systems</description>
+    <name>Mbuyedzedzo Licensing</name>
+    <description>License issuance, activation and product management for the Mbuyedzedzo POS systems</description>
 
     <properties>
         <java.version>21</java.version>

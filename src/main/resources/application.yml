@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    # Uses your existing MySQL. Create the database once:  CREATE DATABASE mvelelo_licensing;
+    # Uses your existing MySQL. Create the database once:  CREATE DATABASE mbuyedzedzo_licensing;
     # Override host/port/user/password with env vars if needed.
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:mvelelo_licensing}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:mbuyedzedzo_licensing}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${DB_USER:root}
     password: ${DB_PASSWORD:}
   jpa:
@@ -26,7 +26,7 @@ spring:
 # public key in the POS build).
 licensing:
   token:
-    issuer: mvelelo-licensing
+    issuer: mbuyedzedzo-licensing
     ttl-days: 7                # short-lived; desktop re-validates before this
     private-key-path: ${LICENSE_PRIVATE_KEY:dev-keys/license-private.pem}
     public-key-path:  ${LICENSE_PUBLIC_KEY:dev-keys/license-public.pem}
@@ -34,7 +34,7 @@ licensing:
     days: 30
     max-per-machine: 1
   bootstrap-admin:            # created on first run if no admin exists
-    email: ${BOOTSTRAP_ADMIN_EMAIL:admin@mvelelo.local}
+    email: ${BOOTSTRAP_ADMIN_EMAIL:admin@mbuyedzedzo.local}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:changeme}
 
 logging:

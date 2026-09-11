@@ -1,4 +1,4 @@
-/* Mvelelo Licensing — admin portal theme (Portal-style shell, #0f766e accent) */
+/* Mbuyedzedzo Licensing — admin portal theme (Portal-style shell, #0f766e accent) */
 
 :root {
     --bs-primary: #0f766e;
@@ -136,7 +136,7 @@ dl.meta dd { color: var(--ink); }
 /* ── Login ───────────────────────────────────────────────── */
 .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; }
 .login-card { width: 100%; max-width: 396px; }
-.login-logo { height: 54px; margin-bottom: 1.25rem; }
+.login-logo { height: 128px; margin-bottom: 1.25rem; }
 
 /* ── Mobile ──────────────────────────────────────────────── */
 .sidebar-toggle { display: none; background: none; border: 0; font-size: 1.4rem; color: #5b6675; }
