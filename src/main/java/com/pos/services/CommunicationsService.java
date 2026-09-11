@@ -2,8 +2,10 @@ package com.pos.services;
 
 import com.pos.database.DatabaseConnection;
 
+import javax.activation.DataHandler;
 import javax.mail.*;
 import javax.mail.internet.*;
+import javax.mail.util.ByteArrayDataSource;
 import java.sql.*;
 import java.util.Properties;
 import java.util.List;
@@ -124,19 +126,28 @@ public class CommunicationsService {
             message.setRecipient(Message.RecipientType.TO, new InternetAddress(toEmail));
             message.setSubject("Your Receipt from " + bizName());
 
-            String htmlBody = buildReceiptHtml(receiptText);
-
-            MimeMultipart multipart = new MimeMultipart("alternative");
+            // multipart/alternative(text, multipart/related(html, inline logo))
+            // — the "related" wrapper is what lets the HTML reference the logo
+            // as "cid:logo" and have it render inline instead of as an attachment.
+            MimeBodyPart logoPart = logoInlinePart();
 
             MimeBodyPart textPart = new MimeBodyPart();
             textPart.setText(receiptText, "utf-8");
 
             MimeBodyPart htmlPart = new MimeBodyPart();
-            htmlPart.setContent(htmlBody, "text/html; charset=utf-8");
+            htmlPart.setContent(buildReceiptHtml(receiptText, logoPart != null), "text/html; charset=utf-8");
 
-            multipart.addBodyPart(textPart);
-            multipart.addBodyPart(htmlPart);
-            message.setContent(multipart);
+            MimeMultipart related = new MimeMultipart("related");
+            related.addBodyPart(htmlPart);
+            if (logoPart != null) related.addBodyPart(logoPart);
+
+            MimeBodyPart relatedPart = new MimeBodyPart();
+            relatedPart.setContent(related);
+
+            MimeMultipart alternative = new MimeMultipart("alternative");
+            alternative.addBodyPart(textPart);
+            alternative.addBodyPart(relatedPart);
+            message.setContent(alternative);
 
             Transport.send(message);
             System.out.println("✅ Receipt emailed to: " + toEmail);
@@ -146,6 +157,22 @@ public class CommunicationsService {
             System.err.println("❌ Failed to send receipt email: " + e.getMessage());
             e.printStackTrace();
             return false;
+        }
+    }
+
+    /** The brand mark as an inline (Content-ID "logo") image part, or null if the asset is missing. */
+    private MimeBodyPart logoInlinePart() {
+        try (var in = getClass().getResourceAsStream(com.pos.Branding.LOGO_MARK_PATH)) {
+            if (in == null) return null;
+            MimeBodyPart part = new MimeBodyPart();
+            part.setDataHandler(new DataHandler(new ByteArrayDataSource(in.readAllBytes(), "image/png")));
+            part.setContentID("<logo>");
+            part.setDisposition(MimeBodyPart.INLINE);
+            part.setFileName("logo.png");
+            return part;
+        } catch (Exception e) {
+            System.err.println("Could not attach logo to receipt email: " + e.getMessage());
+            return null;
         }
     }
 
@@ -447,38 +474,55 @@ public class CommunicationsService {
     // ─────────────────────────────────────────────
     // HTML builders
     // ─────────────────────────────────────────────
-    private String buildReceiptHtml(String receiptText) {
+    private String buildReceiptHtml(String receiptText, boolean includeLogo) {
         String escaped = receiptText
                 .replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
                 .replace("\n", "<br>");
 
+        // logo-mark.png is 557x324 (~1.72:1, wider than tall) — width/height must
+        // keep that ratio or the mark comes out squashed ("skinny"). 40px tall
+        // -> ~69px wide. It also isn't visually centered in its own bounding
+        // box (the arrow accent extends further right than the M-body extends
+        // left, so "margin: 0 auto" alone centers a box that *looks* off-center)
+        // — "position:relative; left:13px" nudges the rendered pixels right
+        // without disturbing the auto-centering that placed the box.
+        String logoImg = includeLogo
+                ? "<img src=\"cid:logo\" alt=\"" + bizName() + "\" width=\"69\" height=\"40\" "
+                        + "style=\"display:block;margin:0 auto 10px;position:relative;left:13px;\">"
+                : "";
+
         return """
                 <!DOCTYPE html>
                 <html>
-                <body style="font-family: Arial, sans-serif; background: #f5f7fa; padding: 20px;">
-                  <div style="max-width: 480px; margin: auto; background: white;
-                              border-radius: 10px; overflow: hidden;
-                              box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <div style="background: #667eea; padding: 20px; text-align: center;">
-                      <h2 style="color: white; margin: 0;">🧾 Your Receipt</h2>
-                      <p style="color: #e0e6ff; margin: 4px 0 0;">Thank you for shopping with us!</p>
+                <body style="margin:0; padding:0; background:#f4f6f8; font-family:Arial,Helvetica,sans-serif;">
+                  <div style="max-width:480px; margin:24px auto; background:#ffffff; border-radius:12px;
+                              overflow:hidden; border:1px solid #e2e8f0; box-shadow:0 2px 10px rgba(15,23,42,0.08);">
+                    <div style="background:#0f766e; padding:28px 24px; text-align:center;">
+                      <div style="color:#ffffff; font-size:18px; font-weight:bold;">%s</div>
+                      <div style="color:#d3ece9; font-size:12px; margin-top:4px;">Thanks for shopping with us</div>
                     </div>
-                    <div style="padding: 24px; font-family: monospace; font-size: 13px;
-                                line-height: 1.6; color: #2c3e50; white-space: pre-wrap;">
+                    <div style="padding:22px 24px;">
+                      <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;
+                                  padding:18px 16px; font-family:'Courier New',Courier,monospace;
+                                  font-size:12.5px; line-height:1.6; color:#1f2937; white-space:pre-wrap;">
+                        %s
+                      </div>
+                    </div>
+                    <div style="background:#f8fafc; padding:18px 20px 16px; text-align:center;
+                                font-size:11px; color:#64748b; border-top:1px solid #e2e8f0;">
                       %s
-                    </div>
-                    <div style="background: #f5f7fa; padding: 16px; text-align: center;
-                                font-size: 11px; color: #7f8c8d;">
                       %s &nbsp;|&nbsp; %s<br>
                       <a href="mailto:%s?subject=Unsubscribe%%20from%%20receipts"
-                         style="color: #95a5a6;">Unsubscribe from email receipts</a>
+                         style="color:#0f766e; text-decoration:none;">Unsubscribe from email receipts</a><br>
+                      <span style="color:#94a3b8;">Powered by %s &middot; %s</span>
                     </div>
                   </div>
                 </body>
                 </html>
-                """.formatted(escaped, bizName(), bizEmail(), bizEmail());
+                """.formatted(bizName(), escaped, logoImg, bizName(), bizEmail(), bizEmail(),
+                        com.pos.Branding.APP_NAME, com.pos.Branding.APP_TAGLINE);
     }
 
     private String buildMarketingHtml(String customerName, String bodyHtml, String unsubToken) {
