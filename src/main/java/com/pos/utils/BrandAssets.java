@@ -47,7 +47,19 @@ public final class BrandAssets {
     /** The mark-only logo (transparent background), fit to the given height. Null if missing. */
     public static ImageView logoMark(double height) {
         ensureLoaded();
-        return view(logoMark, height);
+        ImageView iv = view(logoMark, height);
+        if (iv != null) {
+            // The arrow accent extends further right than the M-body extends
+            // left, so the image's bounding box isn't visually centered — its
+            // alpha-weighted centroid sits ~19.3% of the image width left of the
+            // bbox's own center. Nudge the rendered pixels right so it *looks*
+            // centered wherever this is placed in a centered container.
+            // translateX is a paint-only offset (doesn't affect layout bounds),
+            // so it doesn't disturb whatever alignment positions the ImageView.
+            double renderedWidth = height * (logoMark.getWidth() / logoMark.getHeight());
+            iv.setTranslateX(renderedWidth * 0.193);
+        }
+        return iv;
     }
 
     private static ImageView view(Image img, double height) {

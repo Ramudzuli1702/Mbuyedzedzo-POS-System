@@ -45,7 +45,10 @@ public class LoginView {
         card.setPadding(new Insets(40));
         card.setStyle("-fx-background-color: white; -fx-background-radius: 15; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 20, 0, 0, 5);");
         
-        ImageView logo = BrandAssets.logo(72);
+        // logoMark is the genuinely transparent (RGBA) asset — logo() is a flat
+        // RGB PNG with a baked-in white background, invisible on this white card
+        // but not truly transparent (e.g. if the card style ever changes).
+        ImageView logo = BrandAssets.logoMark(120);
 
         Label title = new Label(com.pos.Branding.APP_NAME);
         title.setFont(Font.font("System", FontWeight.BOLD, 22));
@@ -116,8 +119,20 @@ public class LoginView {
         
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
-        
-        if (logo != null) card.getChildren().add(logo);
+
+        if (logo != null) {
+            // VBox stretches resizable children (ImageView included) to its full
+            // width by default. A StackPane wrapper alone isn't enough — StackPane
+            // itself passes that same stretch on to its child, so the (narrower,
+            // aspect-preserved) image still ends up anchored top-left inside a
+            // too-wide box. Capping the wrapper's max width to its own content
+            // size stops the stretch at the source, so what VBox centers is a
+            // box that's actually only as wide as the logo.
+            StackPane logoBox = new StackPane(logo);
+            logoBox.setAlignment(Pos.CENTER);
+            logoBox.setMaxWidth(Region.USE_PREF_SIZE);
+            card.getChildren().add(logoBox);
+        }
         card.getChildren().addAll(title, subtitle, emailBox, passwordBox, errorLabel, loginBtn, spacer);
         
         return card;

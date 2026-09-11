@@ -35,7 +35,9 @@ public class ActivationView {
     }
 
     public void show() {
-        var logo = BrandAssets.logo(56);
+        // logoMark is the truly transparent (RGBA) asset — logo() is flat RGB
+        // with a baked-in white background.
+        var logo = BrandAssets.logoMark(96);
 
         Label title = new Label("Activate " + Branding.APP_NAME);
         title.setFont(Font.font("System", FontWeight.BOLD, 22));
@@ -94,7 +96,17 @@ public class ActivationView {
 
         VBox card = new VBox(14, title, edition, new Separator(), why,
                 keyLbl, keyField, actions, status, advanced);
-        if (logo != null) card.getChildren().add(0, logo);
+        if (logo != null) {
+            // A raw ImageView gets stretched to the VBox's full width, and a
+            // StackPane wrapper alone doesn't stop that — it just passes the
+            // stretch on to its child. Capping the wrapper's own max width to
+            // its content size is what actually stops it, so VBox has only a
+            // logo-sized box to center.
+            StackPane logoBox = new StackPane(logo);
+            logoBox.setAlignment(Pos.CENTER);
+            logoBox.setMaxWidth(Region.USE_PREF_SIZE);
+            card.getChildren().add(0, logoBox);
+        }
         card.setPadding(new Insets(32));
         card.setMaxWidth(460);
         card.setStyle("-fx-background-color: white; -fx-background-radius: 12;"
