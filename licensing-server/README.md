@@ -1,5 +1,8 @@
 # Mbuyedzedzo Licensing
 
+*Part of the [Mbuyedzedzo](../README.md) suite — see the root README for
+how this fits with [`pos-desktop`](../pos-desktop) and [`mobile-scanner`](../mobile-scanner).*
+
 License issuance, machine-bound activation, and product management for the
 **Mbuyedzedzo POS** desktop systems (Standard and Retail editions).
 
@@ -23,7 +26,7 @@ One Spring Boot app:
    and returns a short-lived **RS256 token** bound to
    `{key, product, fingerprint, expiry}`.
 4. Every launch the desktop verifies that token **offline** with the public key
-   bundled at `point-of-sale-system/src/main/resources/license-public.pem`.
+   bundled at `pos-desktop/src/main/resources/license-public.pem`.
    It also calls `/validate` in the background; if the server says the licence
    is dead the app clears the activation and blocks on the next launch. A
    14-day offline grace covers temporary loss of connectivity.

@@ -1,11 +1,18 @@
-# Point of Sale System
+# Mbuyedzedzo POS (desktop)
 
-A comprehensive JavaFX-based Point of Sale (POS) System with a modern, beautiful UI designed for retail business management.
+*Part of the [Mbuyedzedzo](../README.md) suite — see the root README for
+how this fits with [`licensing-server`](../licensing-server) and
+[`mobile-scanner`](../mobile-scanner).*
 
-## Editions — two separate products from one codebase
+A JavaFX point-of-sale application: sales terminal, inventory, staff
+accounts, customer/marketing tooling, and reporting, packaged as a
+self-contained Windows installer with no separate Java or MySQL install
+required.
 
-The build produces **two distinct installers**. A customer licenses one; the
-other isn't in their build (it's not a setting they can flip).
+## Editions — two products, one codebase
+
+The build produces **two distinct installers**. A customer licenses one;
+the other isn't in their build — it's not a setting they can flip.
 
 | Edition | For | Difference | Build |
 | --- | --- | --- | --- |
@@ -14,115 +21,116 @@ other isn't in their build (it's not a setting they can flip).
 
 The edition is baked in at build time: the Maven `pos.edition` property is
 filtered into `pos-edition.properties` inside the jar and read by
-`com.pos.Edition`. The window title, receipts and installer name follow it
-(e.g. *Mbuyedzedzo Retail POS*).
+`com.pos.Edition`. The window title, receipts, app icon, and installer name
+all follow it (e.g. *Mbuyedzedzo Retail POS*).
+
+Both editions are built by the same `jlink` (custom minimal JRE) →
+`jpackage` (Windows `.exe`, via WiX) pipeline — see `pom.xml`'s `exec-maven-plugin`
+section for the exact steps. **Building both back-to-back:** each profile's
+`mvn clean` wipes `target/`, which is where the other edition's installer
+also lives — copy each `.exe` out before building the next one.
+
+## First run
+
+1. **Splash** — the brand mark, shown briefly on every launch.
+2. **Licence agreement** — shown once per machine (a flag file next to
+   `db.properties`); declining exits the app.
+3. **MySQL setup** — detects an existing MySQL install or silently installs
+   the bundled one, generates a root password, and writes
+   `%PROGRAMDATA%\POS System\config\db.properties`. Fully automatic; the
+   installer requires admin rights specifically so this step can run.
+4. **Licence activation** — see below.
+5. **Registration** — if the `Staff` table is empty, the first account you
+   create becomes the Admin.
+
+Every step after the first is skipped on subsequent launches once its
+one-time condition is satisfied.
 
 ## Licensing
 
-Without a valid licence this build shows an **Activation screen** instead of the
-login screen. On activation the app sends a licence key + a machine fingerprint
-(hashed MACs + machine name) to the licensing server and stores a short‑lived
-**RS256 token**, which it then verifies **offline** on every launch using the
-bundled public key (`src/main/resources/license-public.pem`). It re‑checks with
-the server in the background each launch, with a 14‑day offline grace window.
-A **30‑day trial** can be started from the same screen.
+Without a valid licence this build shows an **Activation screen** instead of
+the login screen. On activation the app sends a licence key + a machine
+fingerprint (hashed MACs + machine name) to the licensing server and stores
+a short-lived **RS256 token**, which it then verifies **offline** on every
+launch using the bundled public key (`src/main/resources/license-public.pem`).
+It re-checks with the server in the background each launch, with a 14-day
+offline grace window. A **30-day trial** can be started from the same
+screen.
 
-Keys are product‑specific — a Retail key won't activate a Standard build.
+Keys are product-specific — a Retail key won't activate a Standard build.
 
-- Server + admin portal: **[`../Mbuyedzedzo-Licensing`](../Mbuyedzedzo-Licensing)**
-  (Spring Boot; issue / revoke / renew / transfer keys, sales‑agent roles).
+- Server + admin portal: **[`../licensing-server`](../licensing-server)**
+  (Spring Boot; issue / revoke / renew / transfer keys, sales-agent roles).
 - Licence status and a "Deactivate this machine" button live in **Settings**.
 - Payment gateway integration (PayFast) is out of scope for this portfolio
   build — keys are issued by hand from the admin portal. In a real deployment a
   payment webhook would call the same "issue licence" service.
 
+## Mobile scanner companion
+
+The desktop runs a small TCP/JSON server (`WiFiHandler`, port 8888) so the
+**[`../mobile-scanner`](../mobile-scanner)** Android app can push barcode
+scans and new products into the running sale over the local network —
+useful as a wireless alternative to a USB scanner, or for adding stock from
+the shelf. Pairing is a QR code shown on the desktop; see that project's
+README for the wire protocol.
+
 ## Features
 
-### 🎯 Core Functionality
-- **Sales Terminal**: Fast product scanning via QR/Barcode, shopping cart management, customer selection
-- **Inventory Management**: Product CRUD operations, stock tracking, automatic QR code generation, low-stock alerts
-- **User Management**: Role-based access control (Admin, Manager, Cashier), secure password hashing
-- **Customer Management**: Customer database, purchase history tracking, customer analytics
-- **Reports & Analytics**: Sales trends, top products, category analysis, Excel export functionality
+### Core functionality
+- **Sales terminal** — barcode/QR scanning (webcam or the mobile companion), cart management, customer selection, promo codes
+- **Inventory** — product CRUD, stock tracking, auto-generated QR codes, low-stock alerts
+- **Staff accounts** — role-based access (Admin, Manager, Cashier), salted PBKDF2-HMAC-SHA256 password hashing
+- **Customers & marketing** (Standard edition only) — customer database, purchase history, opt-in marketing email campaigns, unsubscribe handling
+- **Reports** — sales trends, top products, category performance, Excel export
+- **Receipts** — 40-column thermal-format text receipts; printed, saved to disk, and/or emailed (branded HTML with the logo)
 
-### 🔐 Security
-- Password hashing using salted PBKDF2-HMAC-SHA256 (legacy SHA-256 hashes upgrade on next login)
-- Minimum 8-character password requirement
+### Security
+- Salted PBKDF2-HMAC-SHA256 password hashing (legacy SHA-256 hashes upgrade transparently on next login)
 - Role-based access control
-- Session management with login/logout tracking
+- Session/login tracking
+- Offline-verifiable, machine-bound software licensing (RS256)
 
-### 📊 Business Intelligence
-- Daily sales tracking
-- Top-selling products analysis
-- Category performance metrics
-- Low stock alerts
-- Customer purchase patterns
-- Exportable Excel reports
+## Technology stack
 
-## Technology Stack
+- **Language:** Java 22
+- **UI:** JavaFX 22
+- **Database:** MySQL (bundled installer, provisioned automatically on first run)
+- **Build:** Maven
+- **Packaging:** Shade fat-JAR → `jlink` custom runtime → `jpackage` Windows `.exe` (WiX)
+- **Libraries:** MySQL Connector/J · ZXing (QR generation) · Apache POI (Excel export) · iText 5 (PDF reports) · Jakarta Mail (email receipts & marketing) · Gson (JSON — scanner protocol & licensing) · HikariCP (connection pooling) · Nimbus JOSE (RS256 licence tokens)
 
-- **Language**: Java 22
-- **UI Framework**: JavaFX 22
-- **Database**: MySQL 8.4 (bundled installer, set up automatically on first run)
-- **Build Tool**: Maven
-- **Packaging**: Shade fat-JAR → `jlink` custom runtime → `jpackage` Windows `.exe`
-- **Libraries**:
-  - MySQL Connector/J
-  - ZXing (QR code generation)
-  - Apache POI (Excel export)
-  - iText 5 (PDF reports)
-  - Jakarta Mail (email receipts & marketing)
-  - Gson (JSON for the WiFi scanner companion)
-
-## Project Structure
+## Project structure
 
 ```
-point-of-sale-system/
-├── src/
-│   └── main/
-│       └── java/
-│           └── com/
-│               └── pos/
-│                   ├── POSApplication.java (Main entry point)
-│                   ├── database/
-│                   │   └── DatabaseConnection.java
-│                   ├── models/
-│                   │   ├── User.java
-│                   │   ├── Product.java
-│                   │   └── Customer.java
-│                   ├── services/
-│                   │   ├── UserService.java
-│                   │   ├── ProductService.java
-│                   │   ├── CustomerService.java
-│                   │   ├── TransactionService.java
-│                   │   ├── CategoryService.java
-│                   │   └── ReportService.java
-│                   ├── utils/
-│                   │   ├── PasswordUtil.java
-│                   │   ├── QRCodeUtil.java
-│                   │   └── ReceiptGenerator.java
-│                   └── views/
-│                       ├── LoginView.java
-│                       ├── MainDashboard.java
-│                       ├── SalesView.java
-│                       ├── InventoryView.java
-│                       ├── UserManagementView.java
-│                       ├── CustomerView.java
-│                       └── ReportsView.java
-├── pom.xml
-└── README.md
+pos-desktop/
+├── src/main/java/com/pos/
+│   ├── POSApplication.java      # entry point: splash → terms → setup → licence → login
+│   ├── Branding.java, Edition.java, Terms.java
+│   ├── database/                # connection pool, schema setup/migrations
+│   ├── license/                 # activation, offline token verification, fingerprinting
+│   ├── setup/                   # first-run MySQL provisioning, terms acceptance
+│   ├── models/                  # User, Product, Customer, ...
+│   ├── services/                # business logic — sales, inventory, reports, comms, WiFi bridge
+│   ├── utils/                   # password hashing, QR codes, receipts, brand assets
+│   ├── components/, dialogs/    # reusable JavaFX widgets
+│   └── views/                   # one class per screen (Login, Sales, Inventory, Reports, ...)
+├── src/main/resources/          # FXML-free — views are built in code; brand assets, license-public.pem
+├── MySQL_Scripts/                # reference schema (the app creates it itself; this is a readable copy)
+├── installer/                   # legacy Inno Setup script (superseded by the jlink/jpackage pipeline below)
+└── pom.xml
 ```
 
-## Database Setup
+## Database setup
 
 **No manual setup is required.** On first launch the application:
 
-1. Detects or silently installs MySQL 8.4 (`installer/mysql-installer.msi`, bundled by `jpackage`), generating a random root password.
+1. Detects or silently installs MySQL (`installer/mysql-installer.msi`, bundled by `jpackage`), generating a random root password.
 2. Writes the connection details to `%PROGRAMDATA%\POS System\config\db.properties`.
 3. Creates the `pos_db` schema and every table (`com.pos.database.DatabaseSetup`, idempotent — safe to re-run on every launch).
 4. Runs any pending column migrations.
 
-For development against an existing local MySQL, create `%PROGRAMDATA%\POS System\config\db.properties`:
+For development against an existing local MySQL, create `%PROGRAMDATA%\POS System\config\db.properties` yourself:
 
 ```properties
 db.host=127.0.0.1
@@ -134,184 +142,45 @@ db.password=your-password
 db.timezone=Africa/Johannesburg
 ```
 
-`MySQL_Scripts/Tables_creation_script.sql` is a **reference copy** of the schema; the app never reads it. `MySQL_Scripts/insertions.sql` (git-ignored) is optional demo data.
+`MySQL_Scripts/Tables_creation_script.sql` is a **reference copy** of the schema; the app never reads it.
 
-## Installation & Setup
+## Running it
 
-### Step 1: Install Java 22
-Ensure you have Java JDK 22 installed. Verify with:
+Requires JDK 22 and Maven.
+
 ```bash
-java -version
-javac -version
-```
-
-### Step 2: Install Maven
-Download and install Apache Maven from https://maven.apache.org/download.cgi
-
-Verify installation:
-```bash
-mvn -version
-```
-
-### Step 3: Clone/Download Project
-Download all the Java files and organize them according to the project structure above.
-
-### Step 4: Install Dependencies
-Navigate to the project root directory (where pom.xml is located) and run:
-```bash
-mvn clean install
-```
-
-This downloads JavaFX, MySQL Connector/J, ZXing, Apache POI, iText, Jakarta Mail and Gson.
-
-### Step 5: Run the Application
-
-Development:
-```bash
+# Development — runs straight from source
 mvn javafx:run
-```
 
-Fat JAR:
-```bash
+# Fat JAR
 mvn clean package
 java -jar target/point-of-sale-system-1.0.0.jar
+
+# Windows installer (.exe) — see pom.xml's exec-maven-plugin section for
+# the jlink/jpackage/WiX prerequisites
+mvn clean verify              # Standard edition
+mvn -P retail clean verify    # Retail edition
 ```
 
-Windows installer (`.exe`) — see the `pom.xml` build section for the `jlink` / `jpackage` prerequisites:
-```bash
-mvn clean verify
-```
+## First login
 
-## First Login
+There is **no default account**. On first run — when the `Staff` table is
+empty — the app opens the registration screen, and the first account you
+create becomes the Admin.
 
-There is **no default account**. On the first run — when the `Staff` table is empty — the app opens the registration screen and the first account you create becomes the Admin. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes; older unsalted hashes are upgraded automatically on next login.
+## Roles
 
-## User Roles & Permissions
-
-### Admin
-- Full access to all features
-- User management
-- Full inventory control
-- Access to all reports
-- System configuration
-
-### Manager
-- Full access to all features
-- User management
-- Full inventory control
-- Access to all reports
-
-### Cashier
-- Access to Sales terminal only
-- Cannot access other management features
-
-## Usage Guide
-
-### 1. Sales Terminal
-1. Select a customer (or add new customer)
-2. Scan product QR/Barcode or use quick-add buttons
-3. Review shopping cart
-4. Click "Checkout" to complete transaction
-5. Receipt will be printed/saved
-
-### 2. Inventory Management
-1. View all products with stock levels
-2. Add new products (QR codes generated automatically)
-3. Edit product details
-4. Restock products
-5. Monitor low-stock alerts
-6. View QR codes for products
-
-### 3. User Management
-1. Add new staff members
-2. Assign roles (Admin/Manager/Cashier)
-3. Reset passwords
-4. Activate/Deactivate users
-5. Search and filter users
-
-### 4. Customer Management
-1. Add customer accounts
-2. View customer details and purchase history
-3. Track customer patterns
-4. Search customers
-
-### 5. Reports & Analytics
-1. View sales trends (line chart)
-2. Analyze top-selling products (bar chart)
-3. Category performance (pie chart)
-4. Export reports to Excel
-5. Customize date ranges
-
-## Features to Implement Later
-
-If you want to extend the system, consider:
-1. Barcode scanner integration (USB/Bluetooth)
-2. Webcam QR code scanning
-3. Email receipts to customers
-4. SMS notifications
-5. Loyalty program
-6. Multi-store support
-7. Tax calculations
-8. Discount/coupon system (structure is already there)
-9. Employee performance tracking
-10. Backup/restore functionality
+| Role | Access |
+| --- | --- |
+| Admin / Manager | Everything — sales, inventory, staff, reports, settings |
+| Cashier | Sales terminal only |
 
 ## Troubleshooting
 
-### Database Connection Issues
-- Verify the MySQL service is running
-- Check `%PROGRAMDATA%\POS System\config\db.properties` has the right host/port/user/password
-- The default database name is `pos_db` and is created automatically
-
-### JavaFX Issues
-If you get JavaFX runtime errors:
-```bash
-mvn clean javafx:run
-```
-
-### Missing Dependencies
-```bash
-mvn clean install -U
-```
-
-### Port Already in Use
-If MySQL's port (3306) is blocked, check firewall settings or MySQL's `my.ini`.
-The WiFi scanner companion server uses port 8888 (auto-increments if taken).
-
-## Screenshots
-
-The system features:
-- Modern gradient design with purple/blue theme
-- Clean, professional interface
-- Responsive layouts
-- Interactive charts and graphs
-- Beautiful card-based dashboards
-- Smooth animations and hover effects
-
-## Support & Maintenance
-
-For issues or questions:
-1. Check the console for error messages
-2. Verify database connection
-3. Ensure all Maven dependencies are installed
-4. Check Java version compatibility
+- **Database connection issues** — confirm the MySQL service is running and check `%PROGRAMDATA%\POS System\config\db.properties`.
+- **JavaFX runtime errors in dev** — `mvn clean javafx:run`.
+- **Port 8888 in use** — the mobile-scanner bridge auto-increments up to 10 times; check nothing else is bound to that range.
 
 ## License
 
-This project is for educational/business purposes.
-
-## Version History
-
-**Version 1.0.0** (Current)
-- Initial release
-- Core POS functionality
-- Inventory management
-- User management
-- Customer management
-- Reports and analytics
-- QR code generation
-- Excel export
-
----
-
-**Built with ❤️ using Java & JavaFX**
+Portfolio/personal project — not licensed for redistribution.
