@@ -1,0 +1,84 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.pos.scanner'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.pos.scanner"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    
+    // Camera and Barcode Scanning
+    implementation 'com.google.zxing:core:3.5.2'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+    
+    // Gson for JSON
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // CardView
+    implementation 'androidx.cardview:cardview:1.0.0'
+    
+    // RecyclerView
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    
+    // LocalBroadcastManager
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+// ── "gradlew run" ────────────────────────────────────────────────────────
+// Android app modules don't have a run task out of the box (there's no JVM
+// entry point to run — the app only makes sense on a device/emulator). This
+// installs the debug build on whatever's connected and launches it, so
+// `gradlew run` does what you'd expect. Requires a device/emulator connected
+// via adb (`adb devices` to check).
+//
+// IMPORTANT: use the wrapper — .\gradlew.bat on Windows, ./gradlew on
+// mac/Linux — NOT a bare `gradle` on your PATH. This project is pinned to
+// Gradle 8.9 (gradle/wrapper/gradle-wrapper.properties), which is what the
+// Android Gradle Plugin 8.2.0 here expects; a newer system-wide Gradle
+// (9.x) is not compatible with it.
+tasks.register("run") {
+    group = "run"
+    description = "Installs the debug APK on a connected device/emulator and launches it."
+    dependsOn "installDebug"
+    doLast {
+        exec {
+            commandLine android.adbExecutable.absolutePath, "shell", "am", "start", "-n",
+                    "${android.namespace}/com.pos.scanner.MainActivity"
+        }
+    }
+}

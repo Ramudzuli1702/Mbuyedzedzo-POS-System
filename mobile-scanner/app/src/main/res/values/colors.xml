@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand — matches the Mbuyedzedzo POS / Licensing portal -->
+    <color name="brand_primary">#0F766E</color>
+    <color name="brand_primary_dark">#0C5C57</color>
+    <color name="brand_primary_light">#E6F4F2</color>
+
+    <color name="ink">#1F2937</color>
+    <color name="muted">#64748B</color>
+    <color name="border">#E2E8F0</color>
+    <color name="bg">#F4F6F8</color>
+    <color name="surface">#FFFFFF</color>
+
+    <!-- Status -->
+    <color name="status_success">#16A34A</color>
+    <color name="status_success_bg">#E6F4EA</color>
+    <color name="status_warn">#D97706</color>
+    <color name="status_warn_bg">#FEF3C7</color>
+    <color name="status_error">#DC2626</color>
+    <color name="status_error_bg">#FEE2E2</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+
+    <!-- Legacy names kept so nothing else in the project breaks -->
+    <color name="purple_primary">#0F766E</color>
+    <color name="purple_secondary">#0C5C57</color>
+    <color name="green_success">#16A34A</color>
+    <color name="red_error">#DC2626</color>
+    <color name="orange_warning">#D97706</color>
+    <color name="gray_background">#F4F6F8</color>
+</resources>

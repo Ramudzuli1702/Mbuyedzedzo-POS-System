@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mbuyedzedzo Scanner</string>
+    <string name="scan_button">Start Scanning</string>
+    <string name="view_receipts">View Receipts</string>
+    <string name="connection_status">Connection Status</string>
+    <string name="not_connected">Not Connected</string>
+    <string name="connected">Connected to POS System</string>
+    <string name="ready_to_scan">Ready to Scan</string>
+    <string name="no_receipts">No receipts yet</string>
+    <string name="receipt_details">Receipt Details</string>
+</resources>

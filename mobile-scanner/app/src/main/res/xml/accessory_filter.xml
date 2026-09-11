@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <usb-accessory
+        manufacturer="POS System"
+        model="Sales Terminal"
+        description="USB Scanner"
+        version="1.0"
+        uri="https://pos.example.com"
+        serial="POS-SCANNER-001" />
+</resources>

@@ -1,0 +1,19 @@
+# ── Build output ──────────────────────────────────────────────
+build/
+.gradle/
+*.apk
+*.aab
+
+# ── Local machine config (SDK path — different on every dev machine) ──
+local.properties
+
+# ── IDE ───────────────────────────────────────────────────────
+.idea/
+*.iml
+.cxx/
+captures/
+.externalNativeBuild/
+
+# ── OS noise ─────────────────────────────────────────────────
+Thumbs.db
+.DS_Store
