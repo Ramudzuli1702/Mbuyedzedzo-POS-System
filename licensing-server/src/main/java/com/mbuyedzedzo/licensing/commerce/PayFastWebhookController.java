@@ -1,10 +1,7 @@
 package com.mbuyedzedzo.licensing.commerce;
 
-import com.mbuyedzedzo.licensing.domain.Order;
-import com.mbuyedzedzo.licensing.repo.OrderRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -14,7 +11,6 @@ import org.springframework.web.util.UriUtils;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Receives PayFast's Instant Transaction Notification (ITN) — a server-to-
@@ -32,12 +28,10 @@ public class PayFastWebhookController {
     private static final Logger log = LoggerFactory.getLogger(PayFastWebhookController.class);
 
     private final PayFastClient payFast;
-    private final OrderRepo orders;
     private final OrderFulfillmentService fulfillment;
 
-    public PayFastWebhookController(PayFastClient payFast, OrderRepo orders, OrderFulfillmentService fulfillment) {
+    public PayFastWebhookController(PayFastClient payFast, OrderFulfillmentService fulfillment) {
         this.payFast = payFast;
-        this.orders = orders;
         this.fulfillment = fulfillment;
     }
 
@@ -57,25 +51,18 @@ public class PayFastWebhookController {
         }
 
         if (reference == null) return ResponseEntity.ok("ignored");
-        Optional<Order> maybeOrder = orders.findByReference(reference);
-        if (maybeOrder.isEmpty()) {
-            log.warn("PayFast ITN for unknown order reference {} — ignoring", reference);
-            return ResponseEntity.ok("ignored");
-        }
-        Order order = maybeOrder.get();
 
         if (!"COMPLETE".equalsIgnoreCase(params.get("payment_status"))) {
             log.info("Order {} payment_status={} — not fulfilling", reference, params.get("payment_status"));
             return ResponseEntity.ok("ok");
         }
 
-        BigDecimal paid = parseAmount(params.get("amount_gross"));
-        if (paid == null || paid.compareTo(order.getAmount()) < 0) {
-            log.warn("Order {} amount mismatch: expected {}, ITN said {} — NOT fulfilling", reference, order.getAmount(), paid);
-            return ResponseEntity.status(HttpStatus.OK).body("amount mismatch");
-        }
-
-        fulfillment.fulfil(order, params.get("pf_payment_id"));
+        // Locked fetch + amount check + fulfillment all happen inside one transaction in
+        // handleVerifiedPayment, so a resent/concurrent ITN for the same order can't race
+        // past the idempotency check the way a separate lookup-then-act here could.
+        var outcome = fulfillment.handleVerifiedPayment(
+                reference, parseAmount(params.get("amount_gross")), params.get("pf_payment_id"));
+        log.info("Order {}: {}", reference, outcome);
         return ResponseEntity.ok("ok");
     }
 

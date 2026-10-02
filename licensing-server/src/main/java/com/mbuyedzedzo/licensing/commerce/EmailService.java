@@ -37,6 +37,9 @@ public class EmailService {
      */
     public void sendLicenseEmail(String toEmail, String buyerName, String productName,
                                   String licenseKey, String licenseType, String setPasswordUrl) {
+        // buyerName is free text the buyer typed at checkout — escape before it goes into
+        // HTML. (productName/licenseType/licenseKey are all server-generated, not user input.)
+        String safeBuyerName = escapeHtml(buyerName);
         String subject = "Your " + productName + " licence key";
         String accountBlock = setPasswordUrl == null ? "" : """
                 <p style="color:#1f2937;">Set up your account to manage this licence online
@@ -80,7 +83,7 @@ public class EmailService {
                   </div>
                 </body>
                 </html>
-                """.formatted(productName, buyerName, productName, licenseType, licenseKey, accountBlock);
+                """.formatted(productName, safeBuyerName, productName, licenseType, licenseKey, accountBlock);
 
         if (mailUsername == null || mailUsername.isBlank()) {
             log.info("[dev mode — no SMTP configured] Would email {} <{}>: {}\n{}",
@@ -99,5 +102,14 @@ public class EmailService {
         } catch (Exception e) {
             log.error("Failed to send licence email to {}: {}", toEmail, e.getMessage(), e);
         }
+    }
+
+    private static String escapeHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 }

@@ -2,7 +2,6 @@ package com.mbuyedzedzo.licensing.commerce;
 
 import com.mbuyedzedzo.licensing.domain.LicenseType;
 import com.mbuyedzedzo.licensing.domain.Product;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -47,10 +46,19 @@ public class StorefrontController {
     @PostMapping("/buy")
     public String startCheckout(@RequestParam Product product, @RequestParam LicenseType type,
                                  @RequestParam String name, @RequestParam String email, Model model) {
-        CheckoutService.CheckoutResult result = checkout.start(product, type, name, email);
-        model.addAttribute("processUrl", result.processUrl());
-        model.addAttribute("fields", result.payFastFields());
-        return "shop/redirecting";
+        try {
+            CheckoutService.CheckoutResult result = checkout.start(product, type, name, email);
+            model.addAttribute("processUrl", result.processUrl());
+            model.addAttribute("fields", result.payFastFields());
+            return "shop/redirecting";
+        } catch (CheckoutService.InvalidCheckoutException e) {
+            model.addAttribute("product", product);
+            model.addAttribute("type", type);
+            model.addAttribute("productName", pricing.displayName(product));
+            model.addAttribute("price", pricing.priceFor(product, type));
+            model.addAttribute("error", e.getMessage());
+            return "shop/checkout";
+        }
     }
 
     @GetMapping("/buy/success")

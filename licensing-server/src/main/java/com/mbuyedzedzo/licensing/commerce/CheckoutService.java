@@ -32,13 +32,30 @@ public class CheckoutService {
 
     public record CheckoutResult(Order order, Map<String, String> payFastFields, String processUrl) {}
 
+    public static class InvalidCheckoutException extends RuntimeException {
+        public InvalidCheckoutException(String message) { super(message); }
+    }
+
     public CheckoutResult start(Product product, LicenseType type, String buyerName, String buyerEmail) {
+        String name = buyerName == null ? "" : buyerName.trim();
+        String email = buyerEmail == null ? "" : buyerEmail.trim().toLowerCase();
+
+        // Matches customer.org_name/contact_name (VARCHAR 160) and .email (VARCHAR 190) —
+        // reject clearly here rather than let an oversized submission hit a DB constraint
+        // violation later, deep inside payment fulfillment.
+        if (name.isEmpty() || name.length() > 160) {
+            throw new InvalidCheckoutException("Please enter your name (max 160 characters).");
+        }
+        if (email.isEmpty() || email.length() > 190 || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new InvalidCheckoutException("Please enter a valid email address.");
+        }
+
         BigDecimal amount = pricing.priceFor(product, type);
 
         Order order = new Order();
         order.setReference(generateReference());
-        order.setBuyerEmail(buyerEmail.trim().toLowerCase());
-        order.setBuyerName(buyerName.trim());
+        order.setBuyerEmail(email);
+        order.setBuyerName(name);
         order.setProduct(product);
         order.setLicenseType(type);
         order.setAmount(amount);

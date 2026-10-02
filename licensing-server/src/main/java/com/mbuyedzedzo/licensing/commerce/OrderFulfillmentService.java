@@ -9,10 +9,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.Optional;
 
 /**
  * What happens once a PayFast ITN has been verified (signature + the
@@ -45,6 +47,33 @@ public class OrderFulfillmentService {
         // Reuses the same host PayFast redirects back to — simplest single source of truth.
         this.accountBaseUrl = env.getProperty("payfast.return-url", "http://localhost:8080/buy/success")
                 .replaceAll("/buy/success$", "");
+    }
+
+    public enum Outcome { FULFILLED, ALREADY_PAID, UNKNOWN_ORDER, AMOUNT_MISMATCH }
+
+    /**
+     * Entry point for the webhook: locks the order row for the rest of this
+     * transaction (see {@link OrderRepo#findByReferenceForUpdate}), so a
+     * second concurrent ITN for the same order blocks here instead of racing
+     * the idempotency check below, and checks the paid amount under that same
+     * lock — not as a separate, racily-TOCTOU-able step beforehand.
+     */
+    @Transactional
+    public Outcome handleVerifiedPayment(String reference, BigDecimal amountPaid, String gatewayPaymentId) {
+        Optional<Order> maybe = orders.findByReferenceForUpdate(reference);
+        if (maybe.isEmpty()) return Outcome.UNKNOWN_ORDER;
+
+        Order order = maybe.get();
+        if (order.getStatus() == OrderStatus.PAID) return Outcome.ALREADY_PAID;
+
+        if (amountPaid == null || amountPaid.compareTo(order.getAmount()) < 0) {
+            log.warn("Order {} amount mismatch: expected {}, ITN said {} — NOT fulfilling",
+                    reference, order.getAmount(), amountPaid);
+            return Outcome.AMOUNT_MISMATCH;
+        }
+
+        fulfil(order, gatewayPaymentId);
+        return Outcome.FULFILLED;
     }
 
     @Transactional
