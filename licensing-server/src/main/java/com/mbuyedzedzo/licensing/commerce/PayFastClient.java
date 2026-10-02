@@ -2,6 +2,7 @@ package com.mbuyedzedzo.licensing.commerce;
 
 import com.mbuyedzedzo.licensing.config.PayFastProperties;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriUtils;
@@ -28,10 +29,16 @@ import java.util.Map;
 public class PayFastClient {
 
     private final PayFastProperties props;
-    private final RestClient restClient = RestClient.create();
+    private final RestClient restClient;
 
     public PayFastClient(PayFastProperties props) {
         this.props = props;
+        // Explicit timeouts: without them, a slow/hanging PayFast endpoint would tie up
+        // the webhook's request thread indefinitely — an availability risk, not just slow.
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        this.restClient = RestClient.builder().requestFactory(factory).build();
     }
 
     /** Builds the full set of form fields (incl. signature) to POST to {@link PayFastProperties#processUrl()}. */
