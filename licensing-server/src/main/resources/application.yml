@@ -17,6 +17,17 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+  # Gmail SMTP + an app password, same pattern as the desktop POS's own
+  # CommunicationsService. Leave MAIL_USERNAME unset in dev — EmailService
+  # logs the email instead of sending when mail isn't configured.
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
 
 # ── License token signing ────────────────────────────────────────────────
 # RS256. dev-keys/ holds a committed throwaway pair so the demo is
@@ -36,6 +47,32 @@ licensing:
   bootstrap-admin:            # created on first run if no admin exists
     email: ${BOOTSTRAP_ADMIN_EMAIL:admin@mbuyedzedzo.local}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:changeme}
+
+# ── PayFast (storefront payments) ────────────────────────────────────────
+# Defaults are PayFast's own published SANDBOX test credentials — no
+# account needed, works immediately against their sandbox. Override every
+# field via env vars once you have a real merchant account:
+#   https://developers.payfast.co.za/docs#testing
+payfast:
+  merchant-id: ${PAYFAST_MERCHANT_ID:10000100}
+  merchant-key: ${PAYFAST_MERCHANT_KEY:46f0cd694581a}
+  passphrase: ${PAYFAST_PASSPHRASE:}
+  process-url: ${PAYFAST_PROCESS_URL:https://sandbox.payfast.co.za/eng/process}
+  validate-url: ${PAYFAST_VALIDATE_URL:https://sandbox.payfast.co.za/eng/query/validate}
+  return-url: ${PAYFAST_RETURN_URL:http://localhost:8080/buy/success}
+  cancel-url: ${PAYFAST_CANCEL_URL:http://localhost:8080/buy/cancel}
+  notify-url: ${PAYFAST_NOTIFY_URL:http://localhost:8080/webhooks/payfast/itn}
+
+# ── List prices (ZAR) ─────────────────────────────────────────────────────
+# Placeholder figures — change freely, no code touched.
+pricing:
+  pos-standard-perpetual: ${PRICE_STANDARD_PERPETUAL:4999.00}
+  pos-standard-subscription: ${PRICE_STANDARD_SUBSCRIPTION:299.00}
+  pos-retail-perpetual: ${PRICE_RETAIL_PERPETUAL:2999.00}
+  pos-retail-subscription: ${PRICE_RETAIL_SUBSCRIPTION:199.00}
+
+mail:
+  from-name: ${MAIL_FROM_NAME:Mbuyedzedzo}
 
 logging:
   level:

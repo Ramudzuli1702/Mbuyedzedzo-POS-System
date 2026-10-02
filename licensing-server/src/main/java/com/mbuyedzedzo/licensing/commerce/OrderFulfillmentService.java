@@ -1,0 +1,107 @@
+package com.mbuyedzedzo.licensing.commerce;
+
+import com.mbuyedzedzo.licensing.domain.*;
+import com.mbuyedzedzo.licensing.license.LicenseAdminService;
+import com.mbuyedzedzo.licensing.repo.CustomerRepo;
+import com.mbuyedzedzo.licensing.repo.OrderRepo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Base64;
+
+/**
+ * What happens once a PayFast ITN has been verified (signature + the
+ * validate-postback both confirm it): find-or-create the buyer's account,
+ * issue the license, and email it to them. Idempotent — PayFast can and does
+ * resend ITNs, and a second delivery must not issue a second license.
+ */
+@Service
+public class OrderFulfillmentService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderFulfillmentService.class);
+    private static final SecureRandom random = new SecureRandom();
+
+    private final OrderRepo orders;
+    private final CustomerRepo customers;
+    private final LicenseAdminService licenseAdminService;
+    private final EmailService email;
+    private final PricingService pricing;
+    private final String accountBaseUrl;
+
+    public OrderFulfillmentService(OrderRepo orders, CustomerRepo customers,
+                                    LicenseAdminService licenseAdminService, EmailService email,
+                                    PricingService pricing,
+                                    org.springframework.core.env.Environment env) {
+        this.orders = orders;
+        this.customers = customers;
+        this.licenseAdminService = licenseAdminService;
+        this.email = email;
+        this.pricing = pricing;
+        // Reuses the same host PayFast redirects back to — simplest single source of truth.
+        this.accountBaseUrl = env.getProperty("payfast.return-url", "http://localhost:8080/buy/success")
+                .replaceAll("/buy/success$", "");
+    }
+
+    @Transactional
+    public void fulfil(Order order, String gatewayPaymentId) {
+        if (order.getStatus() == OrderStatus.PAID) {
+            log.info("Order {} already fulfilled — ignoring duplicate ITN", order.getReference());
+            return;
+        }
+
+        Customer customer = customers.findByEmail(order.getBuyerEmail()).orElseGet(() -> {
+            Customer c = new Customer();
+            c.setOrgName(order.getBuyerName());
+            c.setContactName(order.getBuyerName());
+            c.setEmail(order.getBuyerEmail());
+            c.setCreatedBy(null); // self-registered via the storefront
+            return customers.save(c);
+        });
+
+        Instant expiresAt = order.getLicenseType() == LicenseType.SUBSCRIPTION
+                ? Instant.now().plus(31, ChronoUnit.DAYS)
+                : null;
+
+        License license = licenseAdminService.issue(
+                order.getProduct(), order.getLicenseType(), 1, expiresAt,
+                customer.getId(), null,
+                "Storefront purchase " + order.getReference(), "storefront");
+
+        order.setStatus(OrderStatus.PAID);
+        order.setGatewayPaymentId(gatewayPaymentId);
+        order.setPaidAt(Instant.now());
+        order.setCustomerId(customer.getId());
+        order.setLicenseId(license.getId());
+        orders.save(order);
+
+        String setPasswordUrl = null;
+        if (customer.getPasswordHash() == null) {
+            String token = generateToken();
+            customer.setSetPasswordToken(token);
+            customer.setSetPasswordTokenExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
+            customers.save(customer);
+            setPasswordUrl = accountBaseUrl + "/account/set-password?token=" + token;
+        }
+
+        String licenseTypeLabel = order.getLicenseType() == LicenseType.SUBSCRIPTION
+                ? "monthly subscription" : "perpetual licence";
+
+        email.sendLicenseEmail(order.getBuyerEmail(), order.getBuyerName(),
+                pricing.displayName(order.getProduct()), license.getLicenseKey(),
+                licenseTypeLabel, setPasswordUrl);
+
+        log.info("Order {} fulfilled: license {} issued to {}",
+                order.getReference(), license.getLicenseKey(), order.getBuyerEmail());
+    }
+
+    private static String generateToken() {
+        byte[] bytes = new byte[24];
+        random.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+}

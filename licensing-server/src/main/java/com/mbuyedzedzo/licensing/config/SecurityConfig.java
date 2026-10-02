@@ -24,12 +24,29 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * PayFast's ITN: no session, no CSRF (it's a server-to-server POST from
+     * PayFast, which can't carry a CSRF token — the ITN's own signature +
+     * validate-postback are what authenticate it instead, in PayFastWebhookController).
+     */
+    @Bean
+    @org.springframework.core.annotation.Order(2)
+    SecurityFilterChain webhookChain(HttpSecurity http) throws Exception {
+        http.securityMatcher("/webhooks/**")
+            .csrf(c -> c.disable())
+            .sessionManagement(s -> s.sessionCreationPolicy(
+                    org.springframework.security.config.http.SessionCreationPolicy.STATELESS))
+            .authorizeHttpRequests(a -> a.anyRequest().permitAll());
+        return http.build();
+    }
+
     /** The admin PMS — form login, roles. */
     @Bean
     SecurityFilterChain webChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(a -> a
                 .requestMatchers("/login", "/error", "/css/**", "/js/**", "/img/**",
-                        "/favicon.ico", "/actuator/health").permitAll()
+                        "/favicon.ico", "/actuator/health",
+                        "/", "/pricing", "/buy/**", "/account/set-password").permitAll()
                 .requestMatchers("/admin/agents/**").hasRole("SUPER_ADMIN")
                 .anyRequest().authenticated())
             .formLogin(f -> f

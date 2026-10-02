@@ -25,12 +25,23 @@ public class Customer {
     @Column(nullable = false)
     private String email;
 
+    /** Set once the customer has followed the "set your password" link. Null = no self-service login yet. */
+    @Column(name = "password_hash")
+    private String passwordHash;
+
+    /** Single-use token emailed after a confirmed purchase so the buyer can set their password. */
+    @Column(name = "set_password_token")
+    private String setPasswordToken;
+
+    @Column(name = "set_password_token_expires_at")
+    private Instant setPasswordTokenExpiresAt;
+
     private String phone;
 
     private String notes;
 
-    /** admin_user.id of the agent/admin who created this customer. */
-    @Column(name = "created_by", nullable = false)
+    /** admin_user.id of the agent/admin who created this customer. Null = self-registered via the storefront. */
+    @Column(name = "created_by")
     private Long createdBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -7,9 +7,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
+
 public interface CustomerRepo extends JpaRepository<Customer, Long> {
 
     Page<Customer> findByCreatedBy(Long createdBy, Pageable pageable);
+
+    Optional<Customer> findByEmail(String email);
+
+    Optional<Customer> findBySetPasswordToken(String token);
 
     @Query("""
            select c from Customer c

@@ -21,11 +21,6 @@ public class AdminController {
         this.audit = audit;
     }
 
-    @GetMapping("/")
-    String root() {
-        return "redirect:/admin";
-    }
-
     @GetMapping("/login")
     String login() {
         return "login";

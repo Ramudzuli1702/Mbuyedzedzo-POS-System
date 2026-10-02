@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/shop-layout :: page(~{::title}, ~{::main})}">
+<head><title>Payment cancelled &middot; Mbuyedzedzo</title></head>
+<body>
+<main>
+    <div class="container py-5 text-center" style="max-width: 560px;">
+        <i class="bi bi-x-circle text-muted" style="font-size: 3rem;"></i>
+        <h1 class="fw-bold mt-3">Payment cancelled</h1>
+        <p class="text-muted">No charge was made. You can try again whenever you're ready.</p>
+        <a href="/pricing" class="btn text-white mt-2" style="background:#0f766e;">Back to pricing</a>
+    </div>
+</main>
+</body>
+</html>
