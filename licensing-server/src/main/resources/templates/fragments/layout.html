@@ -29,6 +29,8 @@
            th:classappend="${uri != null and #strings.startsWith(uri, '/admin/customers')} ? ' active'"><i class="bi bi-people"></i> Customers</a>
         <a class="nav-link" href="/admin/licenses"
            th:classappend="${uri != null and #strings.startsWith(uri, '/admin/licenses')} ? ' active'"><i class="bi bi-key"></i> Licenses</a>
+        <a class="nav-link" href="/admin/transfers"
+           th:classappend="${uri != null and #strings.startsWith(uri, '/admin/transfers')} ? ' active'"><i class="bi bi-arrow-left-right"></i> Transfer requests</a>
         <a class="nav-link" href="/admin/agents" sec:authorize="hasRole('SUPER_ADMIN')"
            th:classappend="${uri != null and #strings.startsWith(uri, '/admin/agents')} ? ' active'"><i class="bi bi-person-badge"></i> Agents</a>
 

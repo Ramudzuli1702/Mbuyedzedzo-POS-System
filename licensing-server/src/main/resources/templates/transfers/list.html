@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Transfer requests &middot; Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div><h1>Transfer requests</h1><div class="sub">Customers asking to move a licence to a new machine</div></div>
+    </div>
+
+    <div class="card">
+        <table class="table align-middle">
+            <thead><tr><th>Requested</th><th>Customer</th><th>Licence</th><th>Reason</th><th></th></tr></thead>
+            <tbody>
+            <tr th:each="item : ${items}">
+                <td class="text-muted small" th:text="${#temporals.format(item.request.requestedAt, 'dd MMM HH:mm')}">date</td>
+                <td>
+                    <span th:if="${item.customer != null}" th:text="${item.customer.orgName}">Customer</span>
+                    <span th:unless="${item.customer != null}" class="text-muted">(deleted customer)</span>
+                </td>
+                <td>
+                    <a th:href="@{'/admin/licenses/' + ${item.license.id}}" th:text="${item.license.licenseKey}">KEY</a>
+                </td>
+                <td class="text-muted small" th:text="${item.request.reason} ?: '—'">reason</td>
+                <td class="text-end">
+                    <form th:action="@{'/admin/transfers/' + ${item.request.id} + '/approve'}" method="post" class="d-inline">
+                        <button class="btn btn-sm btn-success">Approve</button>
+                    </form>
+                    <form th:action="@{'/admin/transfers/' + ${item.request.id} + '/deny'}" method="post" class="d-inline">
+                        <button class="btn btn-sm btn-outline-danger">Deny</button>
+                    </form>
+                </td>
+            </tr>
+            <tr th:if="${items.isEmpty()}"><td colspan="5" class="text-muted">No pending transfer requests.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

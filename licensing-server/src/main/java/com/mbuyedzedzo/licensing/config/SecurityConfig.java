@@ -1,7 +1,10 @@
 package com.mbuyedzedzo.licensing.config;
 
+import com.mbuyedzedzo.licensing.admin.AdminUserDetailsService;
+import com.mbuyedzedzo.licensing.commerce.CustomerUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,15 +43,45 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * The customer self-service portal — its own form login, entirely separate
+     * session/principal type from the admin one. Matched ahead of webChain
+     * (which has no securityMatcher and so runs last, as the catch-all) so
+     * /account/** never falls through to the admin login.
+     */
+    @Bean
+    @org.springframework.core.annotation.Order(3)
+    SecurityFilterChain accountChain(HttpSecurity http, CustomerUserDetailsService uds,
+                                      PasswordEncoder encoder) throws Exception {
+        http.securityMatcher("/account/**")
+            .authorizeHttpRequests(a -> a
+                    .requestMatchers("/account/login", "/account/set-password").permitAll()
+                    .anyRequest().authenticated())
+            .authenticationProvider(daoProvider(uds, encoder))
+            .formLogin(f -> f
+                .loginPage("/account/login")
+                .loginProcessingUrl("/account/login")
+                .defaultSuccessUrl("/account", true)
+                .failureUrl("/account/login?error")
+                .permitAll())
+            .logout(l -> l
+                .logoutUrl("/account/logout")
+                .logoutSuccessUrl("/account/login?logout")
+                .permitAll());
+        return http.build();
+    }
+
     /** The admin PMS — form login, roles. */
     @Bean
-    SecurityFilterChain webChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain webChain(HttpSecurity http, AdminUserDetailsService uds,
+                                 PasswordEncoder encoder) throws Exception {
         http.authorizeHttpRequests(a -> a
                 .requestMatchers("/login", "/error", "/css/**", "/js/**", "/img/**",
                         "/favicon.ico", "/actuator/health",
-                        "/", "/pricing", "/buy/**", "/account/set-password").permitAll()
+                        "/", "/pricing", "/buy/**").permitAll()
                 .requestMatchers("/admin/agents/**").hasRole("SUPER_ADMIN")
                 .anyRequest().authenticated())
+            .authenticationProvider(daoProvider(uds, encoder))
             .formLogin(f -> f
                 .loginPage("/login")
                 .loginProcessingUrl("/login")
@@ -60,6 +93,20 @@ public class SecurityConfig {
                 .logoutSuccessUrl("/login?logout")
                 .permitAll());
         return http.build();
+    }
+
+    /**
+     * Each chain gets its own explicit provider pinned to the right
+     * UserDetailsService — with three UserDetailsService beans now (admin,
+     * customer, plus Spring Boot's default), the shared auto-configured
+     * AuthenticationManager can't pick the right one on its own.
+     */
+    private static DaoAuthenticationProvider daoProvider(
+            org.springframework.security.core.userdetails.UserDetailsService uds, PasswordEncoder encoder) {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(uds);
+        provider.setPasswordEncoder(encoder);
+        return provider;
     }
 
     @Bean

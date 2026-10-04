@@ -1,6 +1,7 @@
 package com.mbuyedzedzo.licensing.admin.web;
 
 import com.mbuyedzedzo.licensing.admin.*;
+import com.mbuyedzedzo.licensing.commerce.CustomerUserDetailsService;
 import com.mbuyedzedzo.licensing.config.SecurityConfig;
 import com.mbuyedzedzo.licensing.domain.*;
 import com.mbuyedzedzo.licensing.license.LicenseAdminService;
@@ -42,6 +43,7 @@ class AdminWebTest {
     @MockBean AgentService agents;
     @MockBean AdminUserDetailsService userDetailsService;
     @MockBean AdminUserRepo adminUserRepo;
+    @MockBean CustomerUserDetailsService customerUserDetailsService;
 
     private static AdminPrincipal principal(Role role) {
         AdminUser u = new AdminUser();

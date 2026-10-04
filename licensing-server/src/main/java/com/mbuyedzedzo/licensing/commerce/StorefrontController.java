@@ -98,6 +98,6 @@ public class StorefrontController {
             model.addAttribute("error", "This link has expired or was already used. Request a new one by contacting support.");
             return "shop/set-password";
         }
-        return "shop/password-set";
+        return "redirect:/account/login?setupComplete";
     }
 }
