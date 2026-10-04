@@ -83,14 +83,29 @@ public class OrderFulfillmentService {
             return;
         }
 
-        Customer customer = customers.findByEmail(order.getBuyerEmail()).orElseGet(() -> {
-            Customer c = new Customer();
-            c.setOrgName(order.getBuyerName());
-            c.setContactName(order.getBuyerName());
-            c.setEmail(order.getBuyerEmail());
-            c.setCreatedBy(null); // self-registered via the storefront
-            return customers.save(c);
-        });
+        // Built and saved exactly once, fully populated — saving a brand-new
+        // customer before its token is generated (a separate save() call
+        // later) inserts it with set_password_token = NULL, and SQL Server
+        // only allows one NULL per row in a unique column: the second new
+        // customer ever created this way collides with the first and the
+        // whole fulfilment fails with a constraint violation.
+        boolean isNewCustomer = customers.findByEmail(order.getBuyerEmail()).isEmpty();
+        Customer customer = customers.findByEmail(order.getBuyerEmail()).orElseGet(Customer::new);
+        if (isNewCustomer) {
+            customer.setOrgName(order.getBuyerName());
+            customer.setContactName(order.getBuyerName());
+            customer.setEmail(order.getBuyerEmail());
+            customer.setCreatedBy(null); // self-registered via the storefront
+        }
+
+        String setPasswordUrl = null;
+        if (customer.getPasswordHash() == null) {
+            String token = generateToken();
+            customer.setSetPasswordToken(token);
+            customer.setSetPasswordTokenExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
+            setPasswordUrl = accountBaseUrl + "/account/set-password?token=" + token;
+        }
+        customer = customers.save(customer);
 
         Instant expiresAt = order.getLicenseType() == LicenseType.SUBSCRIPTION
                 ? Instant.now().plus(31, ChronoUnit.DAYS)
@@ -107,15 +122,6 @@ public class OrderFulfillmentService {
         order.setCustomerId(customer.getId());
         order.setLicenseId(license.getId());
         orders.save(order);
-
-        String setPasswordUrl = null;
-        if (customer.getPasswordHash() == null) {
-            String token = generateToken();
-            customer.setSetPasswordToken(token);
-            customer.setSetPasswordTokenExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
-            customers.save(customer);
-            setPasswordUrl = accountBaseUrl + "/account/set-password?token=" + token;
-        }
 
         String licenseTypeLabel = order.getLicenseType() == LicenseType.SUBSCRIPTION
                 ? "monthly subscription" : "perpetual licence";

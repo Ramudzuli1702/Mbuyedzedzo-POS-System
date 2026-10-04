@@ -62,15 +62,30 @@ public class LicenseRequestAdminService {
     public void approve(AdminPrincipal me, long requestId, int maxMachines) {
         LicenseRequest req = requirePending(requestId);
 
-        Customer customer = customers.findByEmail(req.getEmail()).orElseGet(() -> {
-            Customer c = new Customer();
-            c.setOrgName(req.getBusinessName());
-            c.setContactName(req.getContactName());
-            c.setEmail(req.getEmail());
-            c.setPhone(req.getPhone());
-            c.setCreatedBy(me.id());
-            return customers.save(c);
-        });
+        // Built and saved exactly once, fully populated — saving a brand-new
+        // customer before its token is generated (a separate save() call
+        // later) inserts it with set_password_token = NULL, and SQL Server
+        // only allows one NULL per row in a unique column: the second new
+        // customer ever created this way collides with the first and the
+        // whole approval fails with a constraint violation.
+        boolean isNewCustomer = customers.findByEmail(req.getEmail()).isEmpty();
+        Customer customer = customers.findByEmail(req.getEmail()).orElseGet(Customer::new);
+        if (isNewCustomer) {
+            customer.setOrgName(req.getBusinessName());
+            customer.setContactName(req.getContactName());
+            customer.setEmail(req.getEmail());
+            customer.setPhone(req.getPhone());
+            customer.setCreatedBy(me.id());
+        }
+
+        String setPasswordUrl = null;
+        if (customer.getPasswordHash() == null) {
+            String token = generateToken();
+            customer.setSetPasswordToken(token);
+            customer.setSetPasswordTokenExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
+            setPasswordUrl = accountBaseUrl + "/account/set-password?token=" + token;
+        }
+        customer = customers.save(customer);
 
         Instant expiresAt = req.getLicenseType() == LicenseType.SUBSCRIPTION
                 ? Instant.now().plus(31, ChronoUnit.DAYS)
@@ -80,15 +95,6 @@ public class LicenseRequestAdminService {
                 req.getProduct(), req.getLicenseType(), Math.max(1, maxMachines), expiresAt,
                 customer.getId(), me.id(),
                 "Approved license request #" + req.getId(), me.email());
-
-        String setPasswordUrl = null;
-        if (customer.getPasswordHash() == null) {
-            String token = generateToken();
-            customer.setSetPasswordToken(token);
-            customer.setSetPasswordTokenExpiresAt(Instant.now().plus(7, ChronoUnit.DAYS));
-            customers.save(customer);
-            setPasswordUrl = accountBaseUrl + "/account/set-password?token=" + token;
-        }
 
         String licenseTypeLabel = req.getLicenseType() == LicenseType.SUBSCRIPTION
                 ? "monthly subscription" : "perpetual licence";
