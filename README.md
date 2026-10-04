@@ -14,7 +14,7 @@ flowchart LR
         Desktop -- MySQL --> DB[(pos_db)]
     end
     Desktop -- "HTTPS<br/>activate / validate licence" --> License["licensing-server<br/>(Spring Boot)"]
-    License -- MySQL --> LDB[(licensing db)]
+    License -- "Azure SQL" --> LDB[(licensing db)]
     Agent["Sales agent / admin<br/>(browser)"] -- "issue & manage keys" --> License
 ```
 
@@ -27,6 +27,11 @@ flowchart LR
 | **[`mobile-scanner`](mobile-scanner)** | Android app that turns a phone into a wireless barcode scanner for the desktop till | A hand-rolled JSON-over-socket protocol, QR-code pairing |
 
 Each has its own README with full setup instructions — this one is the map.
+
+**`licensing-server` is live**: https://mbuyedzedzo-licensing.azurewebsites.net
+(storefront + admin portal, running on Azure App Service against Azure SQL;
+`pos-desktop` and `mobile-scanner` run on a customer's own machines, so there's
+nothing to host for those two).
 
 ## Why it's split this way
 
@@ -48,7 +53,7 @@ A few things worth a closer look if you're skimming:
 | | |
 | --- | --- |
 | Desktop | Java 22, JavaFX 22, MySQL, HikariCP, Maven, `jlink`/`jpackage`, WiX |
-| Server | Java 21, Spring Boot 3.3, Spring Security, Thymeleaf, MySQL, Flyway, Nimbus JOSE (RS256) |
+| Server | Java 21, Spring Boot 3.3, Spring Security, Thymeleaf, Azure SQL (SQL Server), Flyway, Nimbus JOSE (RS256) — deployed on Azure App Service |
 | Mobile | Android (Java, min SDK 24), ZXing, Gradle |
 | Shared concerns | Gson (wire protocols), Apache POI (Excel), iText 5 (PDF), Jakarta Mail |
 

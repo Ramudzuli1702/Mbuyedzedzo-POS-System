@@ -61,20 +61,24 @@ public key in the POS build).
 
 ## Run locally
 
-```bash
-# 1. In your existing MySQL:
-mysql -u root -e "CREATE DATABASE mbuyedzedzo_licensing;"
+Defaults to SQL Server (see "Why Azure SQL, not MySQL" below) — point it at
+a local instance, or use `docker-compose.yml`:
 
-# 2. Run it:
-mvn spring-boot:run
-#   ...if your MySQL root has a password:  DB_PASSWORD=yourpass mvn spring-boot:run
+```bash
+# 1. In your SQL Server instance:
+#    CREATE DATABASE mbuyedzedzo_licensing;
+
+# 2. Run it (SQL-auth login, e.g. "sa"):
+DB_USER=sa DB_PASSWORD=yourpass mvn spring-boot:run
+#   ...local instance with no TLS cert:    DB_ENCRYPT=false mvn spring-boot:run
 
 # admin UI:  http://localhost:8080/admin
 # first login: BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD (see application.yml)
 ```
 
-`docker-compose.yml` is an **optional** alternative if you'd rather not touch
-your MySQL — see the notes in that file. Flyway builds the schema on startup.
+`docker-compose.yml` is an **optional** alternative if you'd rather not
+install SQL Server — see the notes in that file. Flyway builds the schema
+on startup.
 
 ### Admin portal
 
@@ -89,19 +93,49 @@ your MySQL — see the notes in that file. Flyway builds the schema on startup.
 Integration test against a real MySQL (own schema; skipped otherwise):
 
 ```bash
-mvn -Dlicensing.it.jdbcUrl=jdbc:mysql://localhost:3306/mbuyedzedzo_licensing_test \
-    -Dlicensing.it.user=root -Dlicensing.it.password=secret verify
+mvn -Dlicensing.it.jdbcUrl="jdbc:sqlserver://localhost:1433;databaseName=mbuyedzedzo_licensing_test;encrypt=false" \
+    -Dlicensing.it.user=sa -Dlicensing.it.password=secret verify
 ```
 
-## Deploying
+## Deployed
+
+Live on Azure: **https://mbuyedzedzo-licensing.azurewebsites.net**
+
+| Resource | Details |
+| --- | --- |
+| Resource group | `mbuyedzedzo-rg` |
+| App Service | `mbuyedzedzo-licensing`, Linux, Java 21 (`JAVA:21-java21`), Free (F1) plan `mbuyedzedzo-asp`, South Africa North |
+| Database | Azure SQL `mbuyedzedzo-sql`/`mbuyedzedzo_licensing`, Free tier, UAE North (the student subscription this runs on only has one free-tier DB slot per region, and South Africa North's was already taken by an unrelated project — see the database engine note below for why Azure SQL at all) |
+| PayFast / email | Sandbox credentials / dev-mode logging (see the main PayFast section above) — swap in real ones via App Service application settings, no redeploy needed |
+
+Redeploy after a change: `mvn clean package` then
+`az webapp deploy --name mbuyedzedzo-licensing --resource-group mbuyedzedzo-rg --src-path target/mbuyedzedzo-licensing-1.0.0.jar --type jar`.
+
+### Why Azure SQL, not MySQL
+
+This runs on an Azure for Students subscription, which blocks
+`Microsoft.DBforMySQL` entirely (every region) but allows `Microsoft.Sql`
+(Azure SQL/SQL Server). `pos-desktop` and `mobile-scanner` are unaffected —
+this is the only component with a database, and only this component's
+Flyway migrations and JDBC driver changed. Elsewhere deploying (a normal
+subscription, your own VPS), MySQL is the simpler default — the historical
+MySQL schema is in this file's git history if you want it back, and the
+port itself (`AUTO_INCREMENT`→`IDENTITY`, `VARCHAR`→`NVARCHAR`,
+`DATETIME`→`DATETIMEOFFSET(6)` for Hibernate's `Instant` mapping,
+inline `INDEX(...)`→separate `CREATE INDEX`) is documented in the V1/V2
+migration file headers.
+
+## Deploying elsewhere
 
 Runnable jar: `mvn clean package` → `java -jar target/mbuyedzedzo-licensing-1.0.0.jar`.
 Set `DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD`, `LICENSE_PRIVATE_KEY` /
 `LICENSE_PUBLIC_KEY` (absolute paths to a real keypair), and
 `BOOTSTRAP_ADMIN_EMAIL/PASSWORD`. Put it behind HTTPS (reverse proxy or
-`server.ssl.*`). A small VPS (e.g. Hetzner) is plenty.
+`server.ssl.*`). A small VPS (e.g. Hetzner) is plenty — swap the datasource
+URL/driver back to MySQL (see above) if you're not on Azure SQL.
 
 ## Stack
 
-Spring Boot 3.3 · Java 21 · Spring MVC + Thymeleaf + Spring Security · MySQL 8 ·
-Flyway · Nimbus JOSE (RS256).
+Spring Boot 3.3 · Java 21 · Spring MVC + Thymeleaf + Spring Security ·
+Azure SQL (SQL Server) · Flyway · Nimbus JOSE (RS256) · deployed on Azure
+App Service (Linux).
