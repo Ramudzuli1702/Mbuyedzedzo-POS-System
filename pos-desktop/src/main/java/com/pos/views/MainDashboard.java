@@ -5,6 +5,9 @@ import com.pos.services.UserService;
 import com.pos.services.WiFiHandler;
 import com.pos.components.WiFiStatusButton;
 import com.pos.database.DatabaseConnection;
+import com.pos.utils.Theme;
+import com.pos.utils.Icons;
+import javafx.scene.Node;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -54,7 +57,8 @@ public class MainDashboard {
 
         navigateTo("sales");
 
-        Scene scene = new Scene(mainLayout, 1400, 800);
+        // No explicit width/height — see LoginView for why.
+        Scene scene = new Scene(mainLayout);
 
         // Make the BorderPane fill the entire scene as the window resizes
         mainLayout.prefWidthProperty().bind(scene.widthProperty());
@@ -184,7 +188,12 @@ public class MainDashboard {
         sb.setPrefWidth(250);
         sb.setMinWidth(250);
         sb.setMaxWidth(250);
-        sb.setStyle("-fx-background-color: #0f766e;");
+        // Flat colour, not a gradient: the ScrollPane below can't reliably paint a
+        // matching gradient without the "transparent ScrollPane renders labels
+        // blank on some Windows GPUs" bug seen elsewhere in this codebase, so an
+        // opaque solid fill shared by sidebar + scroll pane is the safe choice.
+        sb.setStyle("-fx-background-color: " + Theme.BRAND + ";"
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 12, 0, 4, 0);");
 
         // Header — fixed at top
         VBox header = createSidebarHeader();
@@ -196,7 +205,7 @@ public class MainDashboard {
         menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         menuScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         menuScroll.setStyle(
-            "-fx-background: #0f766e; -fx-background-color: #0f766e;" +
+            "-fx-background: " + Theme.BRAND + "; -fx-background-color: " + Theme.BRAND + ";" +
             "-fx-border-color: transparent;"
         );
         VBox.setVgrow(menuScroll, Priority.ALWAYS);
@@ -220,13 +229,13 @@ public class MainDashboard {
 
         Label userName = new Label(currentUser.getFullNames());
         userName.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
-        userName.setTextFill(Color.web("#ecf0f1"));
+        userName.setTextFill(Color.WHITE);
 
         Label userRole = new Label(currentUser.getUserType());
-        userRole.setFont(Font.font("System", 12));
-        userRole.setTextFill(Color.web("#95a5a6"));
+        userRole.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
+        userRole.setTextFill(Color.web("rgba(255,255,255,0.85)"));
         userRole.setStyle(
-            "-fx-background-color: rgba(255,255,255,0.1);" +
+            "-fx-background-color: rgba(255,255,255,0.15);" +
             "-fx-background-radius: 12; -fx-padding: 4 12;"
         );
 
@@ -243,16 +252,16 @@ public class MainDashboard {
 
         boolean full = currentUser.hasFullAccess();
 
-        salesBtn     = createMenuButton("💳  Sales",           true);
-        inventoryBtn = createMenuButton("📦  Inventory",       full);
-        userMgmtBtn  = createMenuButton("👥  User Management", full);
-        customerBtn  = createMenuButton("🛍️  Customers",       full);
-        reportsBtn   = createMenuButton("📊  Reports",         full);
-        sessionsBtn  = createMenuButton("🕐  Sessions",        true);
-        approvalsBtn = createMenuButton("✅  Approvals",       full);
-        marketingBtn = createMenuButton("📣  Marketing",       full);
-        subscriptionBtn = createMenuButton("🔑  Subscription", true);
-        settingsBtn  = createMenuButton("⚙️  Settings",        full);
+        salesBtn     = createMenuButton(Icons.sales(18),        "Sales",           true);
+        inventoryBtn = createMenuButton(Icons.inventory(18),     "Inventory",       full);
+        userMgmtBtn  = createMenuButton(Icons.users(18),         "User Management", full);
+        customerBtn  = createMenuButton(Icons.customers(18),     "Customers",       full);
+        reportsBtn   = createMenuButton(Icons.reports(18),       "Reports",         full);
+        sessionsBtn  = createMenuButton(Icons.sessions(18),      "Sessions",        true);
+        approvalsBtn = createMenuButton(Icons.approvals(18),     "Approvals",       full);
+        marketingBtn = createMenuButton(Icons.marketing(18),     "Marketing",       full);
+        subscriptionBtn = createMenuButton(Icons.subscription(18), "Subscription",  true);
+        settingsBtn  = createMenuButton(Icons.settings(18),      "Settings",        full);
 
         salesBtn.setOnAction(e     -> navigateTo("sales"));
         inventoryBtn.setOnAction(e -> navigateTo("inventory"));
@@ -280,7 +289,7 @@ public class MainDashboard {
     }
 
     private VBox createFooter() {
-        Button logoutBtn = createMenuButton("🚪  Logout", true);
+        Button logoutBtn = createMenuButton(Icons.logout(18), "Logout", true);
         logoutBtn.setOnAction(e -> handleLogout());
 
         VBox footer = new VBox(5);
@@ -306,14 +315,20 @@ public class MainDashboard {
 
     // ── Button helpers ────────────────────────────────────────────────────────
 
-    private Button createMenuButton(String text, boolean enabled) {
+    private Button createMenuButton(Node icon, String text, boolean enabled) {
         Button btn = new Button(text);
+        Icons.tinted(icon, "rgba(255,255,255,0.9)");
+        btn.setGraphic(icon);
+        btn.setGraphicTextGap(12);
         btn.setMaxWidth(Double.MAX_VALUE);
         btn.setAlignment(Pos.CENTER_LEFT);
         btn.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
         btn.setPadding(new Insets(15, 20, 15, 20));
         btn.setStyle(getDefaultButtonStyle());
         btn.setDisable(!enabled);
+        if (!enabled) {
+            btn.setTooltip(new Tooltip("Managers and admins only"));
+        }
 
         if (enabled) {
             btn.setOnMouseEntered(e -> {
@@ -339,18 +354,24 @@ public class MainDashboard {
         }
     }
 
+    // Padding/font are baked into these inline style strings (not left to
+    // setPadding()/setFont() elsewhere) deliberately: an inline style always
+    // wins over any stylesheet rule, so the nav's size can never again be
+    // silently changed by a global CSS tweak.
+    private static final String NAV_SIZE = "-fx-padding: 15 20; -fx-font-size: 14px; -fx-font-weight: bold;";
+
     private String getDefaultButtonStyle() {
-        return "-fx-background-color: transparent; -fx-text-fill: #ecf0f1;" +
-               "-fx-background-radius: 8; -fx-cursor: hand; -fx-border-color: transparent;";
+        return "-fx-background-color: transparent; -fx-text-fill: rgba(255,255,255,0.85);" +
+               "-fx-background-radius: 8; -fx-cursor: hand; -fx-border-color: transparent;" + NAV_SIZE;
     }
 
     private String getHoverButtonStyle() {
         return "-fx-background-color: rgba(255,255,255,0.15); -fx-text-fill: white;" +
-               "-fx-background-radius: 8; -fx-cursor: hand; -fx-border-color: transparent;";
+               "-fx-background-radius: 8; -fx-cursor: hand; -fx-border-color: transparent;" + NAV_SIZE;
     }
 
     private String getActiveButtonStyle() {
-        return "-fx-background-color: #0c5c57; -fx-text-fill: white;" +
-               "-fx-background-radius: 8; -fx-cursor: hand; -fx-border-color: transparent;";
+        return "-fx-background-color: " + Theme.BRAND_DARK + "; -fx-text-fill: white;" +
+               "-fx-background-radius: 8; -fx-cursor: hand; -fx-border-color: transparent;" + NAV_SIZE;
     }
 }

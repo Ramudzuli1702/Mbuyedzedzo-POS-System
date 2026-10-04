@@ -100,15 +100,6 @@ public class SessionView {
         public String getStatus()           { return status; }
         public double getAmount()           { return amount; }
 
-        public String getIcon() {
-            return switch (type) {
-                case "SALE"     -> "💰";
-                case "RETURN"   -> "↩️";
-                case "EXCHANGE" -> "🔄";
-                default         -> "•";
-            };
-        }
-
         public String getTypeLabel() {
             return switch (type) {
                 case "SALE"     -> "Sale";
@@ -122,8 +113,7 @@ public class SessionView {
         public String toString() {
             String statusBadge = status != null ? " [" + status + "]" : "";
             String amountStr   = amount > 0 ? String.format(" - R%.2f", amount) : "";
-            return String.format("%s %s %s%s%s",
-                    getIcon(),
+            return String.format("%s %s%s%s",
                     timestamp.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
                     description,
                     statusBadge,
@@ -181,9 +171,9 @@ public class SessionView {
         HBox topBar = new HBox(20);
         topBar.setPadding(new Insets(20));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("📊 Business Sessions");
+        Label title = new Label("Business Sessions");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -191,7 +181,7 @@ public class SessionView {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         if (isSupervisor()) {
-            Button authKeyBtn = new Button("🔑 Auth Key");
+            Button authKeyBtn = new Button("Auth Key");
             authKeyBtn.setStyle(
                     "-fx-background-color: #9b59b6; -fx-text-fill: white; -fx-font-weight: bold;"
                     + "-fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
@@ -201,9 +191,9 @@ public class SessionView {
             topBar.getChildren().addAll(title, spacer);
         }
 
-        Button refreshBtn = new Button("🔄 Refresh");
+        Button refreshBtn = new Button("Refresh");
         refreshBtn.setStyle(
-                "-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;"
+                "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold;"
                 + "-fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
         refreshBtn.setOnAction(e -> refreshView());
         topBar.getChildren().add(refreshBtn);
@@ -220,7 +210,7 @@ public class SessionView {
         wrap.setPadding(new Insets(18, 20, 18, 20));
         wrap.setStyle(
                 "-fx-background-color: white; -fx-background-radius: 12;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);");
+                + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
 
         HBox row = new HBox(28);
         row.setAlignment(Pos.CENTER_LEFT);
@@ -246,9 +236,9 @@ public class SessionView {
 
         row.getChildren().addAll(
                 statusBox,
-                metric("💵 Cash", cashLabel),
-                metric("💳 Card", cardLabel),
-                metric("📊 Total", totalLabel),
+                metric("Cash", cashLabel),
+                metric("Card", cardLabel),
+                metric("Total", totalLabel),
                 spacer,
                 actionButton);
 
@@ -279,13 +269,13 @@ public class SessionView {
         box.setAlignment(Pos.CENTER_LEFT);
         Label c = new Label(caption);
         c.setFont(Font.font("System", 11));
-        c.setTextFill(Color.web("#7f8c8d"));
+        c.setTextFill(Color.web("#64748b"));
         box.getChildren().addAll(c, valueLabel);
         return box;
     }
 
     private void styleActionButton(boolean sessionActive) {
-        String colour = sessionActive ? "#e74c3c" : "#27ae60";
+        String colour = sessionActive ? "#dc2626" : "#16a34a";
         actionButton.setText(sessionActive ? "End Session" : "Start Session");
         actionButton.setStyle(
                 "-fx-background-color: " + colour + "; -fx-text-fill: white; -fx-font-weight: bold;"
@@ -296,8 +286,8 @@ public class SessionView {
     private VBox createActivityFeed() {
         VBox feedBox = new VBox(12);
         feedBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);");
+                "-fx-background-color: white; -fx-background-radius: 14;"
+                + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         feedBox.setPadding(new Insets(18));
 
         HBox header = new HBox(10);
@@ -305,7 +295,7 @@ public class SessionView {
         Label feedTitle = new Label("Activity this session");
         feedTitle.setFont(Font.font("System", FontWeight.BOLD, 15));
         liveCountLabel = new Label("");
-        liveCountLabel.setTextFill(Color.web("#7f8c8d"));
+        liveCountLabel.setTextFill(Color.web("#64748b"));
         liveCountLabel.setFont(Font.font("System", 12));
         header.getChildren().addAll(feedTitle, liveCountLabel);
 
@@ -326,7 +316,7 @@ public class SessionView {
             @Override protected void updateItem(SessionActivity a, boolean empty) {
                 super.updateItem(a, empty);
                 if (empty || a == null) { setText(null); setStyle(""); return; }
-                setText(a.getIcon() + "  " + a.getTypeLabel());
+                setText(a.getTypeLabel());
                 setStyle("-fx-font-weight: bold; -fx-text-fill: " + typeColour(a.getType()) + ";");
             }
         });
@@ -354,7 +344,7 @@ public class SessionView {
     private static String typeColour(String type) {
         return switch (type) {
             case "SALE"     -> "#16a34a";
-            case "RETURN"   -> "#e67e22";
+            case "RETURN"   -> "#d97706";
             case "EXCHANGE" -> "#9b59b6";
             default         -> "#334155";
         };
@@ -363,8 +353,8 @@ public class SessionView {
     private VBox createSessionTable() {
         VBox tableBox = new VBox(15);
         tableBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+                "-fx-background-color: white; -fx-background-radius: 14;"
+                + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         tableBox.setPadding(new Insets(20));
 
         Label tableTitle = new Label("Session History");
@@ -402,7 +392,7 @@ public class SessionView {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText("Active");
-                    setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+                    setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
                 } else {
                     setText(item.format(DATE_TIME_FMT));
                     setStyle("");
@@ -451,12 +441,12 @@ public class SessionView {
                     setText(null); setStyle(""); return;
                 }
                 if (signed) {
-                    setText("✅ Signed");
+                    setText("Signed");
                     setStyle("-fx-text-fill: #155724; -fx-font-weight: bold;");
                 } else {
                     BusinessSession s = getTableView().getItems().get(getIndex());
                     if ("Closed".equals(s.getStatus())) {
-                        setText("⚠️ Pending");
+                        setText("Pending");
                         setStyle("-fx-text-fill: #856404; -fx-font-weight: bold;");
                     } else {
                         setText("—");
@@ -466,50 +456,19 @@ public class SessionView {
             }
         });
 
-        TableColumn<BusinessSession, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(200);
+        TableColumn<BusinessSession, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button viewBtn        = com.pos.components.Ui.actionButton("Reports", "#3498db", "Generate the session PDF reports");
-            private final Button countersignBtn = com.pos.components.Ui.actionButton("Countersign", "#9b59b6", "Manager/admin sign-off for a cashier session");
-            private final HBox   btnBox         = new HBox(6, viewBtn, countersignBtn);
-
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
             {
-                viewBtn.setStyle(
-                        "-fx-background-color: #3498db; -fx-text-fill: white;"
-                        + "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-                viewBtn.setOnAction(e -> {
-                    BusinessSession session = getTableView().getItems().get(getIndex());
-                    if ("Closed".equals(session.getStatus())) {
-                        viewSessionReports(session);
-                    } else {
-                        showAlert("Session Active", "Cannot generate reports for an active session",
-                                Alert.AlertType.WARNING);
-                    }
-                });
-
-                countersignBtn.setStyle(
-                        "-fx-background-color: #9b59b6; -fx-text-fill: white;"
-                        + "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
-                countersignBtn.setOnAction(e -> {
-                    BusinessSession session = getTableView().getItems().get(getIndex());
-                    showCountersignDialog(session);
-                });
+                viewBtn.setOnAction(e ->
+                    showSessionDetailsDialog(getTableView().getItems().get(getIndex())));
             }
 
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) { setGraphic(null); return; }
-
-                BusinessSession session = getTableView().getItems().get(getIndex());
-                boolean closed  = "Closed".equals(session.getStatus());
-                boolean pending = closed && !session.isDeclarationSigned();
-
-                viewBtn.setDisable(!closed);
-                countersignBtn.setVisible(isSupervisor() && pending);
-                countersignBtn.setManaged(isSupervisor() && pending);
-
-                setGraphic(btnBox);
+                setGraphic(empty ? null : viewBtn);
             }
         });
 
@@ -543,7 +502,7 @@ public class SessionView {
             sessionService.updateSessionTotals(active.getSessionID());
             active = sessionService.getActiveSession();
 
-            statusLabel.setText("🟢  Session #" + active.getSessionID() + " active — started "
+            statusLabel.setText("Session #" + active.getSessionID() + " active — started "
                     + active.getStartDate().format(TIME_FMT)
                     + " by " + active.getSupervisorName());
             statusLabel.setTextFill(Color.web("#16a34a"));
@@ -554,8 +513,8 @@ public class SessionView {
             mergeActivityFeed(sessionService.getSessionActivities(active.getSessionID()));
             if (!userPickedTab) tabPane.getSelectionModel().select(liveTab);
         } else {
-            statusLabel.setText("⚪  No active session");
-            statusLabel.setTextFill(Color.web("#7f8c8d"));
+            statusLabel.setText("  No active session");
+            statusLabel.setTextFill(Color.web("#64748b"));
             cashLabel.setText("R 0.00");
             cardLabel.setText("R 0.00");
             totalLabel.setText("R 0.00");
@@ -627,7 +586,7 @@ public class SessionView {
         grid.setPadding(new Insets(20));
 
         Label warningLabel = new Label(
-                "⚠️  No manager or admin is present. You are starting this session as a cashier.\n"
+                "  No manager or admin is present. You are starting this session as a cashier.\n"
                 + "The session will be flagged for manager/admin review.\n"
                 + "Please confirm your identity to proceed.");
         warningLabel.setWrapText(true);
@@ -693,7 +652,7 @@ public class SessionView {
         grid.setPadding(new Insets(20));
 
         Label warningLabel = new Label(
-                "⚠️  You are ending this session without a manager or admin.\n"
+                "  You are ending this session without a manager or admin.\n"
                 + "The session will be flagged for manager/admin review and countersignature.");
         warningLabel.setWrapText(true);
         warningLabel.setStyle(
@@ -773,12 +732,12 @@ public class SessionView {
 
         Label keyLabel = new Label("");
         keyLabel.setFont(Font.font("Courier New", FontWeight.BOLD, 18));
-        keyLabel.setStyle("-fx-text-fill: #27ae60;");
+        keyLabel.setStyle("-fx-text-fill: #16a34a;");
         keyLabel.setVisible(false);
 
         Button showKeyBtn = new Button("Show Key");
         showKeyBtn.setStyle(
-                "-fx-background-color: #3498db; -fx-text-fill: white; -fx-padding: 8 16; -fx-font-weight: bold;");
+                "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-padding: 8 16; -fx-font-weight: bold;");
 
         showKeyBtn.setOnAction(e -> {
             String password = passwordField.getText();
@@ -792,7 +751,7 @@ public class SessionView {
                 keyLabel.setText(authKey);
                 keyLabel.setVisible(true);
                 passwordField.setDisable(true);
-                showKeyBtn.setText("✓ Key Shown");
+                showKeyBtn.setText("Key Shown");
                 showKeyBtn.setDisable(true);
             } else {
                 showAlert("Error", "Invalid password", Alert.AlertType.ERROR);
@@ -879,6 +838,45 @@ public class SessionView {
                 showAlert("Error", "Failed to end session", Alert.AlertType.ERROR);
             }
         }
+    }
+
+    private void showSessionDetailsDialog(BusinessSession session) {
+        boolean closed  = "Closed".equals(session.getStatus());
+        boolean pending = closed && !session.isDeclarationSigned();
+
+        VBox summary = new VBox(10);
+        summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Started by:", session.getSupervisorName()),
+            com.pos.components.Ui.detailRow("Start time:", session.getStartDate().format(DATE_TIME_FMT)),
+            com.pos.components.Ui.detailRow("End time:", session.getEndDate() != null
+                ? session.getEndDate().format(DATE_TIME_FMT) : "Active"),
+            com.pos.components.Ui.detailRow("Total sales:", "R " + String.format("%.2f", session.getTotalSales())),
+            com.pos.components.Ui.detailRow("Status:", session.getStatus()),
+            com.pos.components.Ui.detailRow("Declaration:", session.isDeclarationSigned() ? "Signed"
+                : (pending ? "Pending sign-off" : "—"))
+        );
+
+        java.util.List<Button> actions = new java.util.ArrayList<>();
+
+        Button reportsBtn = com.pos.components.Ui.actionButton("Generate Reports", "#2563eb", "Generate the session PDF reports");
+        reportsBtn.setDisable(!closed);
+        reportsBtn.setOnAction(e -> {
+            if (closed) {
+                viewSessionReports(session);
+            } else {
+                showAlert("Session Active", "Cannot generate reports for an active session", Alert.AlertType.WARNING);
+            }
+        });
+        actions.add(reportsBtn);
+
+        if (isSupervisor() && pending) {
+            Button countersignBtn = com.pos.components.Ui.actionButton("Countersign", "#9b59b6", "Manager/admin sign-off for a cashier session");
+            countersignBtn.setOnAction(e -> showCountersignDialog(session));
+            actions.add(countersignBtn);
+        }
+
+        com.pos.components.Ui.showDetailDialog("Session Details", "Session #" + session.getSessionID(),
+            summary, actions.toArray(new Button[0]));
     }
 
     private void showCountersignDialog(BusinessSession session) {
@@ -1067,7 +1065,7 @@ public class SessionView {
             if (!session.isDeclarationSigned()) {
                 document.add(Chunk.NEWLINE);
                 com.itextpdf.text.Paragraph flagNote = new com.itextpdf.text.Paragraph(
-                        "⚠ SESSION FLAGGED FOR MANAGER/ADMIN REVIEW — No manager/admin auth code was used.", warningFont);
+                        "WARNING: SESSION FLAGGED FOR MANAGER/ADMIN REVIEW — No manager/admin auth code was used.", warningFont);
                 PdfPCell flagCell = new PdfPCell(flagNote);
                 flagCell.setBackgroundColor(new com.itextpdf.text.BaseColor(255, 243, 205));
                 PdfPTable flagTable = new PdfPTable(1);
@@ -1170,7 +1168,7 @@ public class SessionView {
                         10, com.itextpdf.text.Font.BOLD,
                         new com.itextpdf.text.BaseColor(133, 100, 4));
                 document.add(new com.itextpdf.text.Paragraph(
-                        "⚠ SESSION FLAGGED FOR MANAGER/ADMIN REVIEW", warningFont));
+                        "WARNING: SESSION FLAGGED FOR MANAGER/ADMIN REVIEW", warningFont));
             }
 
             document.add(Chunk.NEWLINE);
@@ -1310,10 +1308,6 @@ public class SessionView {
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
+        com.pos.components.Ui.showAlert(sessionTable, title, content, type);
     }
 }

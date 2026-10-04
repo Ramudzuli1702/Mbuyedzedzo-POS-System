@@ -63,18 +63,18 @@ public class SupervisorApprovalView {
         HBox topBar = new HBox(20);
         topBar.setPadding(new Insets(20));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("✅ Supervisor Approval Portal");
+        Label title = new Label("Supervisor Approval Portal");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        Button refreshBtn = new Button("🔄 Refresh");
+        Button refreshBtn = new Button("Refresh");
         refreshBtn.setStyle(
-            "-fx-background-color: #3498db; -fx-text-fill: white;" +
+            "-fx-background-color: #2563eb; -fx-text-fill: white;" +
             "-fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;"
         );
         refreshBtn.setOnAction(e -> refreshData());
@@ -88,11 +88,11 @@ public class SupervisorApprovalView {
         panel.setPadding(new Insets(20));
         VBox.setVgrow(panel, Priority.ALWAYS);
         panel.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
 
-        Label title = new Label("🔄 Pending Exchanges");
+        Label title = new Label("Pending Exchanges");
         title.setFont(Font.font("System", FontWeight.BOLD, 16));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -135,34 +135,26 @@ public class SupervisorApprovalView {
                 String sign = diff.compareTo(BigDecimal.ZERO) >= 0 ? "+" : "";
                 setText(sign + "R" + String.format("%.2f", diff));
                 setStyle(diff.compareTo(BigDecimal.ZERO) > 0
-                    ? "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
-                    : "-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+                    ? "-fx-text-fill: #dc2626; -fx-font-weight: bold;"
+                    : "-fx-text-fill: #16a34a; -fx-font-weight: bold;");
             }
         });
 
         TableColumn<ExchangeRequest, String> reasonCol = new TableColumn<>("Reason");
         reasonCol.setCellValueFactory(new PropertyValueFactory<>("reason"));
 
-        TableColumn<ExchangeRequest, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(155);
+        TableColumn<ExchangeRequest, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(col -> new TableCell<>() {
-            private final Button approveBtn = new Button("✓ Approve");
-            private final Button rejectBtn  = new Button("✗ Reject");
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
             {
-                approveBtn.setStyle(approveStyle());
-                rejectBtn.setStyle(rejectStyle());
-                approveBtn.setOnAction(e ->
-                    handleExchangeApproval(getTableView().getItems().get(getIndex()), true));
-                rejectBtn.setOnAction(e ->
-                    handleExchangeApproval(getTableView().getItems().get(getIndex()), false));
+                viewBtn.setOnAction(e ->
+                    showExchangeDetailsDialog(getTableView().getItems().get(getIndex())));
             }
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) { setGraphic(null); return; }
-                HBox box = new HBox(5, approveBtn, rejectBtn);
-                box.setAlignment(Pos.CENTER);
-                setGraphic(box);
+                setGraphic(empty ? null : viewBtn);
             }
         });
 
@@ -178,8 +170,8 @@ public class SupervisorApprovalView {
         panel.setPadding(new Insets(20));
         VBox.setVgrow(panel, Priority.ALWAYS);
         panel.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
 
         Label title = new Label("↩️ Pending Returns");
@@ -223,33 +215,25 @@ public class SupervisorApprovalView {
                 super.updateItem(item, empty);
                 if (empty || item == null) { setText(null); setStyle(""); return; }
                 setText("R " + String.format("%.2f", item));
-                setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
+                setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
             }
         });
 
         TableColumn<ReturnRequest, String> reasonCol = new TableColumn<>("Reason");
         reasonCol.setCellValueFactory(new PropertyValueFactory<>("reason"));
 
-        TableColumn<ReturnRequest, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(155);
+        TableColumn<ReturnRequest, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(col -> new TableCell<>() {
-            private final Button approveBtn = new Button("✓ Approve");
-            private final Button rejectBtn  = new Button("✗ Reject");
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
             {
-                approveBtn.setStyle(approveStyle());
-                rejectBtn.setStyle(rejectStyle());
-                approveBtn.setOnAction(e ->
-                    handleReturnApproval(getTableView().getItems().get(getIndex()), true));
-                rejectBtn.setOnAction(e ->
-                    handleReturnApproval(getTableView().getItems().get(getIndex()), false));
+                viewBtn.setOnAction(e ->
+                    showReturnDetailsDialog(getTableView().getItems().get(getIndex())));
             }
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) { setGraphic(null); return; }
-                HBox box = new HBox(5, approveBtn, rejectBtn);
-                box.setAlignment(Pos.CENTER);
-                setGraphic(box);
+                setGraphic(empty ? null : viewBtn);
             }
         });
 
@@ -258,6 +242,51 @@ public class SupervisorApprovalView {
         );
         panel.getChildren().addAll(title, returnTable);
         return panel;
+    }
+
+    private void showExchangeDetailsDialog(ExchangeRequest exchange) {
+        BigDecimal diff = exchange.getNewPrice().subtract(exchange.getOriginalPrice());
+        String sign = diff.compareTo(BigDecimal.ZERO) >= 0 ? "+" : "";
+
+        VBox summary = new VBox(10);
+        summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Date:", exchange.getExchangeDate().format(DT_FMT)),
+            com.pos.components.Ui.detailRow("Original item:", exchange.getProductName()),
+            com.pos.components.Ui.detailRow("New item:", exchange.getNewProductName()),
+            com.pos.components.Ui.detailRow("Price difference:", sign + "R" + String.format("%.2f", diff)),
+            com.pos.components.Ui.detailRow("Reason:", exchange.getReason())
+        );
+
+        Button approveBtn = new Button("Approve");
+        Button rejectBtn  = new Button("Reject");
+        approveBtn.setStyle(approveStyle());
+        rejectBtn.setStyle(rejectStyle());
+        approveBtn.setOnAction(e -> handleExchangeApproval(exchange, true));
+        rejectBtn.setOnAction(e -> handleExchangeApproval(exchange, false));
+
+        com.pos.components.Ui.showDetailDialog("Exchange Request", "Exchange #" + exchange.getExchangeID(),
+            summary, approveBtn, rejectBtn);
+    }
+
+    private void showReturnDetailsDialog(ReturnRequest ret) {
+        VBox summary = new VBox(10);
+        summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Date:", ret.getReturnDate().format(DT_FMT)),
+            com.pos.components.Ui.detailRow("Product:", ret.getProductName()),
+            com.pos.components.Ui.detailRow("Quantity:", String.valueOf(ret.getReturnQuantity())),
+            com.pos.components.Ui.detailRow("Refund:", "R " + String.format("%.2f", ret.getRefundAmount())),
+            com.pos.components.Ui.detailRow("Reason:", ret.getReason())
+        );
+
+        Button approveBtn = new Button("Approve");
+        Button rejectBtn  = new Button("Reject");
+        approveBtn.setStyle(approveStyle());
+        rejectBtn.setStyle(rejectStyle());
+        approveBtn.setOnAction(e -> handleReturnApproval(ret, true));
+        rejectBtn.setOnAction(e -> handleReturnApproval(ret, false));
+
+        com.pos.components.Ui.showDetailDialog("Return Request", "Return #" + ret.getReturnID(),
+            summary, approveBtn, rejectBtn);
     }
 
     private void handleExchangeApproval(ExchangeRequest exchange, boolean approve) {
@@ -379,20 +408,16 @@ public class SupervisorApprovalView {
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
+        com.pos.components.Ui.showAlert(exchangeTable, title, content, type);
     }
 
     private String approveStyle() {
-        return "-fx-background-color: #27ae60; -fx-text-fill: white;" +
+        return "-fx-background-color: #16a34a; -fx-text-fill: white;" +
                "-fx-font-size: 10; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;";
     }
 
     private String rejectStyle() {
-        return "-fx-background-color: #e74c3c; -fx-text-fill: white;" +
+        return "-fx-background-color: #dc2626; -fx-text-fill: white;" +
                "-fx-font-size: 10; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;";
     }
 }

@@ -20,7 +20,7 @@ public class MarketingDialog {
         VBox content = new VBox(14);
         content.setPadding(new Insets(20));
 
-        Label title = new Label("📣 Send Marketing Email to All Opted-In Customers");
+        Label title = new Label("Send Marketing Email to All Opted-In Customers");
         title.setFont(Font.font("System", FontWeight.BOLD, 15));
         title.setWrapText(true);
 
@@ -44,7 +44,7 @@ public class MarketingDialog {
         statusLabel.setWrapText(true);
         statusLabel.setStyle("-fx-font-size: 12;");
 
-        Button sendBtn = new Button("🚀 Send to All Opted-In Customers");
+        Button sendBtn = new Button("Send to All Opted-In Customers");
         sendBtn.setStyle(
             "-fx-background-color: #667eea; -fx-text-fill: white; " +
             "-fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;"
@@ -55,8 +55,8 @@ public class MarketingDialog {
             String body    = bodyArea.getText().trim();
 
             if (subject.isEmpty() || body.isEmpty()) {
-                statusLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-size: 12;");
-                statusLabel.setText("⚠️ Please fill in both subject and body.");
+                statusLabel.setStyle("-fx-text-fill: #dc2626; -fx-font-size: 12;");
+                statusLabel.setText("Please fill in both subject and body.");
                 return;
             }
 
@@ -70,8 +70,8 @@ public class MarketingDialog {
                 if (response != ButtonType.OK) return;
 
                 sendBtn.setDisable(true);
-                statusLabel.setStyle("-fx-text-fill: #2980b9; -fx-font-size: 12;");
-                statusLabel.setText("📤 Sending... please wait.");
+                statusLabel.setStyle("-fx-text-fill: #1d4ed8; -fx-font-size: 12;");
+                statusLabel.setText("Sending... please wait.");
 
                 // Run on background thread — never block JavaFX thread
                 new Thread(() -> {
@@ -79,11 +79,11 @@ public class MarketingDialog {
                     Platform.runLater(() -> {
                         sendBtn.setDisable(false);
                         if (count > 0) {
-                            statusLabel.setStyle("-fx-text-fill: #27ae60; -fx-font-size: 12;");
-                            statusLabel.setText("✅ Successfully sent to " + count + " customer(s).");
+                            statusLabel.setStyle("-fx-text-fill: #16a34a; -fx-font-size: 12;");
+                            statusLabel.setText("Successfully sent to " + count + " customer(s).");
                         } else {
-                            statusLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-size: 12;");
-                            statusLabel.setText("❌ No emails sent. Check console for errors.");
+                            statusLabel.setStyle("-fx-text-fill: #dc2626; -fx-font-size: 12;");
+                            statusLabel.setText("No emails sent. Check console for errors.");
                         }
                     });
                 }, "Marketing-Blast").start();

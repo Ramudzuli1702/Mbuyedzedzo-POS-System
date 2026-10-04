@@ -19,10 +19,11 @@ import java.util.List;
 
 public class MarketingView {
 
-    /** Flat card look — a border, not a dropshadow. */
+    /** Same shadow-based card recipe as com.pos.utils.Theme.card() — every
+     *  card in the app should read as the one component, not several. */
     private static final String CARD_STYLE =
-        "-fx-background-color: white; -fx-background-radius: 10;"
-        + "-fx-border-color: #e2e8f0; -fx-border-radius: 10; -fx-border-width: 1;";
+        "-fx-background-color: white; -fx-background-radius: 14;"
+        + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);";
 
     private final User currentUser;
     private final CommunicationsService commService;
@@ -75,7 +76,7 @@ public class MarketingView {
         HBox bar = new HBox();
         bar.setPadding(new Insets(20));
         bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        bar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
         Label title = new Label("Marketing");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
@@ -93,32 +94,13 @@ public class MarketingView {
         int totalSent        = history.stream().mapToInt(MarketingCampaign::getSuccessCount).sum();
         int totalSubscribers = subscribers.size();
 
-        HBox row = new HBox(12);
-        row.getChildren().addAll(
-            statCard("Campaigns",    String.valueOf(totalCampaigns),   "#0f766e"),
-            statCard("Emails Sent",  String.valueOf(totalSent),        "#16a34a"),
-            statCard("Subscribers",  String.valueOf(totalSubscribers), "#d97706")
+        // Same shared stat-card component Inventory/Customers/Users use — not a
+        // separate one-off implementation, so this reads as the same product.
+        return com.pos.components.SummaryCards.row(
+            new com.pos.components.SummaryCards.Card("Campaigns",   String.valueOf(totalCampaigns),   "#0f766e"),
+            new com.pos.components.SummaryCards.Card("Emails Sent", String.valueOf(totalSent),        "#16a34a"),
+            new com.pos.components.SummaryCards.Card("Subscribers", String.valueOf(totalSubscribers), "#d97706")
         );
-        return row;
-    }
-
-    private VBox statCard(String label, String value, String color) {
-        VBox card = new VBox(6);
-        card.setPadding(new Insets(16));
-        card.setMaxWidth(Double.MAX_VALUE);
-        HBox.setHgrow(card, Priority.ALWAYS);
-        card.setStyle(CARD_STYLE);
-
-        Label valLabel = new Label(value);
-        valLabel.setFont(Font.font("System", FontWeight.BOLD, 26));
-        valLabel.setTextFill(Color.web(color));
-
-        Label lblLabel = new Label(label);
-        lblLabel.setFont(Font.font("System", 12));
-        lblLabel.setTextFill(Color.web("#7f8c8d"));
-
-        card.getChildren().addAll(valLabel, lblLabel);
-        return card;
     }
 
     private VBox createComposeCard() {
@@ -165,8 +147,8 @@ public class MarketingView {
             String body    = bodyArea.getText().trim();
 
             if (subject.isEmpty() || body.isEmpty()) {
-                statusLabel.setStyle("-fx-text-fill: #e74c3c;");
-                statusLabel.setText("⚠️  Please fill in both subject and body.");
+                statusLabel.setStyle("-fx-text-fill: #dc2626;");
+                statusLabel.setText("Please fill in both subject and body.");
                 return;
             }
 
@@ -179,7 +161,7 @@ public class MarketingView {
                 if (res != ButtonType.OK) return;
 
                 sendBtn.setDisable(true);
-                statusLabel.setStyle("-fx-text-fill: #2980b9;");
+                statusLabel.setStyle("-fx-text-fill: #1d4ed8;");
                 statusLabel.setText("Sending… please wait.");
 
                 new Thread(() -> {
@@ -192,11 +174,11 @@ public class MarketingView {
                         bodyArea.clear();
 
                         if (count > 0) {
-                            statusLabel.setStyle("-fx-text-fill: #27ae60;");
-                            statusLabel.setText("✅  Sent to " + count + " customer(s) successfully.");
+                            statusLabel.setStyle("-fx-text-fill: #16a34a;");
+                            statusLabel.setText("  Sent to " + count + " customer(s) successfully.");
                         } else {
-                            statusLabel.setStyle("-fx-text-fill: #e74c3c;");
-                            statusLabel.setText("❌  No emails sent. Check console for errors.");
+                            statusLabel.setStyle("-fx-text-fill: #dc2626;");
+                            statusLabel.setText(" No emails sent. Check console for errors.");
                         }
 
                         loadHistory();
@@ -225,7 +207,7 @@ public class MarketingView {
 
         subscriberCountLabel = new Label("");
         subscriberCountLabel.setFont(Font.font("System", 11));
-        subscriberCountLabel.setTextFill(Color.web("#7f8c8d"));
+        subscriberCountLabel.setTextFill(Color.web("#64748b"));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -258,9 +240,9 @@ public class MarketingView {
                 if (empty || item == null) { setText(null); setStyle(""); return; }
                 setText(item);
                 setAlignment(Pos.CENTER);
-                setStyle(item.equals("✅")
-                    ? "-fx-text-fill: #27ae60; -fx-font-size: 13;"
-                    : "-fx-text-fill: #bdc3c7; -fx-font-size: 13;");
+                setStyle(item.equals("Yes")
+                    ? "-fx-text-fill: #16a34a; -fx-font-weight: bold; -fx-font-size: 13;"
+                    : "-fx-text-fill: #cbd5e1; -fx-font-size: 13;");
             }
         });
 
@@ -269,7 +251,7 @@ public class MarketingView {
         actionCol.setCellFactory(col -> new TableCell<>() {
             private final Button btn = new Button("Unsubscribe");
             {
-                btn.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white;"
+                btn.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white;"
                     + "-fx-font-size: 10; -fx-padding: 4 8; -fx-background-radius: 4; -fx-cursor: hand;");
                 btn.setOnAction(e -> {
                     String[] row = getTableView().getItems().get(getIndex());
@@ -320,7 +302,7 @@ public class MarketingView {
             + "or the unsubscribe code from their message subject line here.");
         help.setWrapText(true);
         help.setFont(Font.font("System", 11));
-        help.setTextFill(Color.web("#7f8c8d"));
+        help.setTextFill(Color.web("#64748b"));
 
         TextField input = new TextField();
         input.setPromptText("customer@example.com  or  Unsubscribe <code>");
@@ -337,8 +319,8 @@ public class MarketingView {
         processBtn.setOnAction(e -> {
             CommunicationsService.UnsubResult res =
                 commService.processUnsubscribeRequest(input.getText(), currentUser.getStaffID());
-            statusMessage.setTextFill(Color.web(res.matched() ? "#16a34a" : "#e74c3c"));
-            statusMessage.setText((res.matched() ? "✅ " : "⚠️ ") + res.message());
+            statusMessage.setTextFill(Color.web(res.matched() ? "#16a34a" : "#dc2626"));
+            statusMessage.setText((res.matched() ? "" : "") + res.message());
             if (res.matched()) {
                 input.clear();
                 loadSubscribers();
@@ -388,7 +370,7 @@ public class MarketingView {
                     if (empty || item == null) { setText(null); setStyle(""); return; }
                     setText(item);
                     setStyle("Unsubscribed".equals(item)
-                        ? "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
+                        ? "-fx-text-fill: #dc2626; -fx-font-weight: bold;"
                         : "-fx-text-fill: #16a34a; -fx-font-weight: bold;");
                 }
             });
@@ -420,14 +402,14 @@ public class MarketingView {
 
         historyCountLabel = new Label("");
         historyCountLabel.setFont(Font.font("System", 12));
-        historyCountLabel.setTextFill(Color.web("#7f8c8d"));
+        historyCountLabel.setTextFill(Color.web("#64748b"));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Button refreshBtn = new Button("Refresh");
         refreshBtn.setStyle(
-            "-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;" +
+            "-fx-background-color: #f1f5f9; -fx-text-fill: #1e293b;" +
             "-fx-font-weight: bold; -fx-padding: 7 14; -fx-background-radius: 6; -fx-cursor: hand;"
         );
         refreshBtn.setOnAction(e -> loadHistory());
@@ -469,23 +451,19 @@ public class MarketingView {
                 setAlignment(Pos.CENTER);
                 MarketingCampaign row = getTableView().getItems().get(getIndex());
                 if (item == 0)
-                    setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold;");
+                    setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
                 else if (item < row.getRecipientsCount())
-                    setStyle("-fx-text-fill: #f39c12; -fx-font-weight: bold;");
+                    setStyle("-fx-text-fill: #d97706; -fx-font-weight: bold;");
                 else
-                    setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold;");
+                    setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
             }
         });
 
         TableColumn<MarketingCampaign, Void> previewCol = new TableColumn<>("Preview");
         previewCol.setPrefWidth(80);
         previewCol.setCellFactory(col -> new TableCell<>() {
-            private final Button btn = new Button("View");
+            private final Button btn = com.pos.components.Ui.viewButton();
             {
-                btn.setStyle(
-                    "-fx-background-color: #3498db; -fx-text-fill: white;" +
-                    "-fx-font-size: 10; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;"
-                );
                 btn.setOnAction(e -> showPreviewDialog(getTableView().getItems().get(getIndex())));
             }
             @Override
@@ -530,7 +508,7 @@ public class MarketingView {
             "/" + campaign.getRecipientsCount()
         );
         metaLbl.setFont(Font.font("System", 11));
-        metaLbl.setTextFill(Color.web("#7f8c8d"));
+        metaLbl.setTextFill(Color.web("#64748b"));
         metaLbl.setWrapText(true);
 
         Label bodyTitle = new Label("Email body (HTML source):");

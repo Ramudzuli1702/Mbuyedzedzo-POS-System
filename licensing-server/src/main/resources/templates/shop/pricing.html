@@ -4,73 +4,78 @@
 <head><title>Pricing &middot; Mbuyedzedzo</title></head>
 <body>
 <main>
-    <div class="container py-5">
-        <h1 class="text-center fw-bold mb-5">Pricing</h1>
+    <section class="section text-center pb-2">
+        <div class="section-eyebrow">Pricing</div>
+        <h2>One licence, however you'd rather pay</h2>
+        <p class="lede mx-auto">Both editions are the same software, built and supported the same way —
+            the difference is whether your shop needs customer accounts.</p>
+    </section>
+
+    <section class="section pt-3">
         <div class="row g-4 justify-content-center">
             <div class="col-md-5">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body p-4">
-                        <h3 class="fw-bold">Standard POS</h3>
-                        <p class="text-muted">For shops that keep customer accounts — loyalty, contracts, marketing.</p>
-                        <hr>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(standardPerpetual, 1, 2)}">R0</div>
-                                <div class="text-muted small">once-off, perpetual</div>
-                            </div>
-                            <form th:action="@{/buy}" method="get">
-                                <input type="hidden" name="product" value="POS_STANDARD">
-                                <input type="hidden" name="type" value="PERPETUAL">
-                                <button class="btn btn-outline-success">Buy</button>
-                            </form>
+                <div class="price-card">
+                    <h3>Standard POS</h3>
+                    <p class="tagline">For shops that keep customer accounts — loyalty, contracts, marketing.</p>
+                    <div class="price-row">
+                        <div>
+                            <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(standardPerpetual, 1, 2)}">R0</div>
+                            <div class="text-muted small">once-off, perpetual</div>
                         </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(standardSubscription, 1, 2)}">R0</div>
-                                <div class="text-muted small">per month</div>
-                            </div>
-                            <form th:action="@{/buy}" method="get">
-                                <input type="hidden" name="product" value="POS_STANDARD">
-                                <input type="hidden" name="type" value="SUBSCRIPTION">
-                                <button class="btn btn-success">Subscribe</button>
-                            </form>
+                        <form th:action="@{/buy}" method="get">
+                            <input type="hidden" name="product" value="POS_STANDARD">
+                            <input type="hidden" name="type" value="PERPETUAL">
+                            <button class="btn-brand-outline">Buy</button>
+                        </form>
+                    </div>
+                    <div class="price-row">
+                        <div>
+                            <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(standardSubscription, 1, 2)}">R0</div>
+                            <div class="text-muted small">per month</div>
                         </div>
+                        <form th:action="@{/buy}" method="get">
+                            <input type="hidden" name="product" value="POS_STANDARD">
+                            <input type="hidden" name="type" value="SUBSCRIPTION">
+                            <button class="btn-brand">Subscribe</button>
+                        </form>
                     </div>
                 </div>
             </div>
             <div class="col-md-5">
-                <div class="card shadow-sm h-100">
-                    <div class="card-body p-4">
-                        <h3 class="fw-bold">Retail POS</h3>
-                        <p class="text-muted">For shops that just sell over the counter — simple, walk-in sales.</p>
-                        <hr>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(retailPerpetual, 1, 2)}">R0</div>
-                                <div class="text-muted small">once-off, perpetual</div>
-                            </div>
-                            <form th:action="@{/buy}" method="get">
-                                <input type="hidden" name="product" value="POS_RETAIL">
-                                <input type="hidden" name="type" value="PERPETUAL">
-                                <button class="btn btn-outline-success">Buy</button>
-                            </form>
+                <div class="price-card">
+                    <h3>Retail POS</h3>
+                    <p class="tagline">For shops that just sell over the counter — simple, walk-in sales.</p>
+                    <div class="price-row">
+                        <div>
+                            <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(retailPerpetual, 1, 2)}">R0</div>
+                            <div class="text-muted small">once-off, perpetual</div>
                         </div>
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(retailSubscription, 1, 2)}">R0</div>
-                                <div class="text-muted small">per month</div>
-                            </div>
-                            <form th:action="@{/buy}" method="get">
-                                <input type="hidden" name="product" value="POS_RETAIL">
-                                <input type="hidden" name="type" value="SUBSCRIPTION">
-                                <button class="btn btn-success">Subscribe</button>
-                            </form>
+                        <form th:action="@{/buy}" method="get">
+                            <input type="hidden" name="product" value="POS_RETAIL">
+                            <input type="hidden" name="type" value="PERPETUAL">
+                            <button class="btn-brand-outline">Buy</button>
+                        </form>
+                    </div>
+                    <div class="price-row">
+                        <div>
+                            <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(retailSubscription, 1, 2)}">R0</div>
+                            <div class="text-muted small">per month</div>
                         </div>
+                        <form th:action="@{/buy}" method="get">
+                            <input type="hidden" name="product" value="POS_RETAIL">
+                            <input type="hidden" name="type" value="SUBSCRIPTION">
+                            <button class="btn-brand">Subscribe</button>
+                        </form>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+        <p class="text-center text-muted mt-4 mb-0" style="font-size:.88rem;">
+            Every licence includes free updates, the Android companion-scanner app, and offline activation
+            with a 14-day grace period. Not sure which edition fits? A perpetual licence covers one machine —
+            <a href="/#story">read more about how it works</a>.
+        </p>
+    </section>
 </main>
 </body>
 </html>

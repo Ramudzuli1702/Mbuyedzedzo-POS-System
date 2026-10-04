@@ -150,11 +150,11 @@ public class CommunicationsService {
             message.setContent(alternative);
 
             Transport.send(message);
-            System.out.println("✅ Receipt emailed to: " + toEmail);
+            System.out.println("Receipt emailed to: " + toEmail);
             return true;
 
         } catch (Exception e) {
-            System.err.println("❌ Failed to send receipt email: " + e.getMessage());
+            System.err.println("Failed to send receipt email: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -210,11 +210,11 @@ public class CommunicationsService {
             message.setContent(fullHtml, "text/html; charset=utf-8");
 
             Transport.send(message);
-            System.out.println("✅ Marketing email sent to: " + toEmail);
+            System.out.println("Marketing email sent to: " + toEmail);
             return true;
 
         } catch (Exception e) {
-            System.err.println("❌ Failed to send marketing email: " + e.getMessage());
+            System.err.println("Failed to send marketing email: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -249,7 +249,7 @@ public class CommunicationsService {
                 recipients.add(new String[]{ rs.getString("EmailAddress"), rs.getString("FullNames") });
             }
         } catch (SQLException e) {
-            System.err.println("❌ Marketing blast query error: " + e.getMessage());
+            System.err.println("Marketing blast query error: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -265,7 +265,7 @@ public class CommunicationsService {
             }
 
         } catch (Exception e) {
-            System.err.println("❌ Marketing blast error: " + e.getMessage());
+            System.err.println("Marketing blast error: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -289,7 +289,7 @@ public class CommunicationsService {
             pstmt.setInt(5, success);
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.err.println("❌ Failed to save campaign history: " + e.getMessage());
+            System.err.println("Failed to save campaign history: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -322,7 +322,7 @@ public class CommunicationsService {
             }
 
         } catch (SQLException e) {
-            System.err.println("❌ Failed to load campaign history: " + e.getMessage());
+            System.err.println("Failed to load campaign history: " + e.getMessage());
             e.printStackTrace();
         }
         return history;
@@ -334,7 +334,7 @@ public class CommunicationsService {
     public boolean sendSMS(String phoneNumber, String carrier, String message) {
         String gateway = getSmsGateway(carrier);
         if (gateway == null) {
-            System.err.println("⚠️ Unknown carrier for SMS gateway: " + carrier);
+            System.err.println("Unknown carrier for SMS gateway: " + carrier);
             return false;
         }
 
@@ -351,11 +351,11 @@ public class CommunicationsService {
             msg.setText(message);
 
             Transport.send(msg);
-            System.out.println("✅ SMS sent to " + phoneNumber + " via " + gateway);
+            System.out.println("SMS sent to " + phoneNumber + " via " + gateway);
             return true;
 
         } catch (Exception e) {
-            System.err.println("❌ SMS send failed: " + e.getMessage());
+            System.err.println("SMS send failed: " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -546,14 +546,14 @@ public class CommunicationsService {
                       <h1 style="color: white; margin: 0; font-size: 24px;">%s</h1>
                       <p style="color: #e0e6ff; margin: 6px 0 0; font-size: 13px;">Special offer just for you</p>
                     </div>
-                    <div style="padding: 28px; color: #2c3e50;">
+                    <div style="padding: 28px; color: #1e293b;">
                       <p style="font-size: 15px;">Hi <strong>%s</strong>,</p>
                       %s
                     </div>
                     <div style="background: #f5f7fa; padding: 16px; text-align: center;
-                                font-size: 11px; color: #7f8c8d; border-top: 1px solid #e0e0e0;">
+                                font-size: 11px; color: #64748b; border-top: 1px solid #e0e0e0;">
                       %s &nbsp;|&nbsp; %s<br>
-                      <a href="%s" style="color: #95a5a6;">Unsubscribe</a><br>
+                      <a href="%s" style="color: #94a3b8;">Unsubscribe</a><br>
                       <span style="color: #b0b8c0;">%s</span>
                     </div>
                   </div>
@@ -579,12 +579,12 @@ public class CommunicationsService {
                 customers.add(new String[] {
                         rs.getString("FullNames"),
                         rs.getString("EmailAddress"),
-                        rs.getBoolean("SMSNotifications") ? "✅" : "—",
+                        rs.getBoolean("SMSNotifications") ? "Yes" : "—",
                         String.valueOf(rs.getInt("AccountID"))   // index 3 — for the Unsubscribe action
                 });
             }
         } catch (SQLException e) {
-            System.err.println("❌ Failed to load subscribers: " + e.getMessage());
+            System.err.println("Failed to load subscribers: " + e.getMessage());
             e.printStackTrace();
         }
         return customers;

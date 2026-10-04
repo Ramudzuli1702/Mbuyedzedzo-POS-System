@@ -4,32 +4,48 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:replace="${pageTitle}">Mbuyedzedzo</title>
+    <meta name="description" content="Mbuyedzedzo — point-of-sale software for South African shops. Sales, inventory, staff and reporting, with a real offline-capable desktop app and a companion phone scanner.">
     <link rel="icon" href="/img/logo-mark.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="/css/app.css" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; background: #f8fafc; }
-        .shop-nav { background: #0f766e; }
-        .shop-nav a { color: #fff; text-decoration: none; }
-        .shop-nav .brand { font-weight: 700; display: flex; align-items: center; gap: 8px; }
-        .shop-nav .brand img { height: 28px; }
-        .shop-nav .nav-links a { color: #ccfbf1; margin-left: 20px; font-weight: 500; }
-        .shop-nav .nav-links a:hover { color: #fff; }
-        .shop-footer { color: #94a3b8; font-size: 13px; text-align: center; padding: 32px 0; }
-        .price-tag { font-size: 2rem; font-weight: 700; color: #0f766e; }
-    </style>
+    <link href="/css/shop.css" rel="stylesheet">
 </head>
 <body>
-<nav class="shop-nav d-flex align-items-center justify-content-between px-4 py-3">
-    <a class="brand" href="/"><img src="/img/logo-mark.png" alt="Mbuyedzedzo"> Mbuyedzedzo</a>
-    <div class="nav-links">
+<nav class="shop-nav d-flex align-items-center justify-content-between">
+    <a class="brand" href="/">
+        <span class="mark"><img src="/img/logo-mark.png" alt=""></span>
+        Mbuyedzedzo
+    </a>
+    <div class="nav-links d-flex align-items-center">
         <a href="/">Home</a>
         <a href="/pricing">Pricing</a>
+        <a href="/#story">About</a>
+        <a href="/pricing" class="cta">Get started</a>
     </div>
 </nav>
+
 <main th:replace="${content}">content</main>
-<div class="shop-footer">Mbuyedzedzo &middot; Point-of-sale software</div>
+
+<footer class="shop-footer">
+    <div class="cols">
+        <div class="brand-col">
+            <div class="brand"><span class="mark"><img src="/img/logo-mark.png" alt=""></span> Mbuyedzedzo</div>
+            <p>"Mbuyedzedzo" means <em>restoration</em> — software built to give a shop owner back the hours
+                a cash book and a notebook used to cost them.</p>
+        </div>
+        <div>
+            <h6>Product</h6>
+            <a href="/pricing">Pricing</a>
+            <a href="/#story">About</a>
+        </div>
+        <div>
+            <h6>Account</h6>
+            <a href="/account/login">Customer sign-in</a>
+            <a href="/admin">Staff / admin login</a>
+        </div>
+    </div>
+    <div class="legal">&copy; <span th:text="${T(java.time.LocalDate).now().getYear()}">2026</span> Mbuyedzedzo &middot; Point-of-sale software</div>
+</footer>
 </body>
 </html>

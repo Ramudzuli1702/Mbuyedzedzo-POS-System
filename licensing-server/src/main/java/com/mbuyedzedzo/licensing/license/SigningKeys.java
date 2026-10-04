@@ -39,6 +39,24 @@ public class SigningKeys {
 
     @PostConstruct
     void load() throws Exception {
+        // Env vars take priority — the only way to get a STABLE key on a host with an
+        // ephemeral filesystem (e.g. Azure App Service): the "generate if the file is
+        // missing" fallback below is fine for local dev, but on a host that doesn't
+        // persist the generated file across restarts, it silently mints a new random
+        // keypair every restart, which makes every previously-issued token (and every
+        // copy of the desktop app, which bundles a fixed public key) stop verifying.
+        String privPem = System.getenv("LICENSE_PRIVATE_KEY");
+        String pubPem  = System.getenv("LICENSE_PUBLIC_KEY");
+        if (privPem != null && !privPem.isBlank() && pubPem != null && !pubPem.isBlank()) {
+            this.privateKey = (RSAPrivateKey) KeyFactory.getInstance("RSA")
+                    .generatePrivate(new PKCS8EncodedKeySpec(der(privPem)));
+            this.publicKey = (RSAPublicKey) KeyFactory.getInstance("RSA")
+                    .generatePublic(new X509EncodedKeySpec(der(pubPem)));
+            log.info("License signing keys loaded from LICENSE_PRIVATE_KEY/LICENSE_PUBLIC_KEY (RSA {} bit)",
+                    privateKey.getModulus().bitLength());
+            return;
+        }
+
         Path priv = Path.of(props.token().privateKeyPath());
         Path pub  = Path.of(props.token().publicKeyPath());
 

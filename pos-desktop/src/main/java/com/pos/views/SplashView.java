@@ -49,7 +49,9 @@ public final class SplashView {
 
         root.getChildren().addAll(name, tagline);
 
-        Scene scene = new Scene(root, 1200, 700);
+        Scene scene = new Scene(root); // no explicit size — see LoginView
+        root.prefWidthProperty().bind(scene.widthProperty());
+        root.prefHeightProperty().bind(scene.heightProperty());
         stage.setScene(scene);
         stage.show();
 

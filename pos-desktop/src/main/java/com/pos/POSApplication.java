@@ -13,9 +13,12 @@ import com.pos.views.SplashView;
 import com.pos.views.TermsView;
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.collections.ListChangeListener;
+import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.ButtonType;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +73,47 @@ public class POSApplication extends Application {
         primaryStage.setMinWidth(900);
         primaryStage.setMinHeight(600);
         primaryStage.setMaximized(true);
+        com.pos.utils.BrandAssets.applyAppIcons(primaryStage);
+
+        // "Full screen" here means maximized — fills the screen but keeps the
+        // Windows taskbar and this window's own title bar (with its close X)
+        // visible. NOT Stage.setFullScreen(true), which hides both of those;
+        // that was tried and was wrong.
+        //
+        // Every screen (splash, terms, login, dashboard, ...) sets its own new
+        // Scene. Assigning a new Scene recomputes the window's size from that
+        // scene's (root's) preferred size — if the stage's maximized property
+        // already reads true, calling setMaximized(true) again is a no-op (the
+        // value didn't change, so nothing re-applies), which is why the window
+        // kept shrinking to a small content-sized footprint on every screen
+        // change despite this call being here. Toggling false→true forces
+        // JavaFX to actually re-apply the maximized bounds every time.
+        primaryStage.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                Platform.runLater(() -> {
+                    primaryStage.setMaximized(false);
+                    primaryStage.setMaximized(true);
+                });
+            }
+        });
+
+        // Every Dialog/Alert opens in its OWN window with its OWN Scene — it is
+        // NOT a child of primaryStage's scene, so attaching the stylesheet only
+        // to primaryStage's scenes (as an earlier version of this did) left
+        // every popup form (Add/Edit dialogs, "View" detail dialogs, Alerts)
+        // completely unstyled. Window.getWindows() is the one list that covers
+        // every window the whole app ever opens, so hooking it here — once —
+        // is what actually makes the stylesheet reach every dialog, not just
+        // the main screens.
+        String css = getClass().getResource("/css/app-theme.css").toExternalForm();
+        Window.getWindows().addListener((ListChangeListener<Window>) change -> {
+            while (change.next()) {
+                if (!change.wasAdded()) continue;
+                for (Window w : change.getAddedSubList()) {
+                    attachStylesheet(w, css);
+                }
+            }
+        });
 
         // Handle window close — log out and release the DB connection cleanly
         primaryStage.setOnCloseRequest(event -> {
@@ -110,7 +154,7 @@ public class POSApplication extends Application {
                     Platform.runLater(() -> continueToApp(primaryStage, setupView));
 
                 } catch (FirstRunSetup.SetupException e) {
-                    System.err.println("❌ First-run setup failed: " + e.getMessage());
+                    System.err.println("First-run setup failed: " + e.getMessage());
                     Platform.runLater(() -> setupView.showError(e.getMessage()));
                     // Leave the SetupView open so the user can read the error.
                     // They can re-launch after fixing the issue (e.g. running as admin).
@@ -175,6 +219,19 @@ public class POSApplication extends Application {
         }
     }
 
+    /** Adds the shared stylesheet to a window's scene — now, or as soon as it gets one. */
+    private static void attachStylesheet(Window w, String css) {
+        Scene existing = w.getScene();
+        if (existing != null && !existing.getStylesheets().contains(css)) {
+            existing.getStylesheets().add(css);
+        }
+        w.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null && !newScene.getStylesheets().contains(css)) {
+                newScene.getStylesheets().add(css);
+            }
+        });
+    }
+
     /**
      * Returns true if the Staff table has no rows — i.e. this is the very first
      * time the app has been fully set up.
@@ -189,7 +246,7 @@ public class POSApplication extends Application {
                 }
             }
         } catch (Exception e) {
-            System.err.println("⚠️  Could not check Staff table: " + e.getMessage());
+            System.err.println("  Could not check Staff table: " + e.getMessage());
         }
         return false;
     }

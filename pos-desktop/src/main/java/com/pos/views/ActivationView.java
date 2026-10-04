@@ -116,8 +116,13 @@ public class ActivationView {
         root.setStyle("-fx-background-color: #f1f5f9;");
         root.setPadding(new Insets(40));
 
-        stage.setScene(new Scene(root, 900, 620));
-        stage.centerOnScreen();
+        // No explicit size and no centerOnScreen() — this targets the same
+        // primary stage POSApplication keeps maximized at all times; a fixed
+        // size here fights that the same way it did on every other screen.
+        Scene scene = new Scene(root);
+        root.prefWidthProperty().bind(scene.widthProperty());
+        root.prefHeightProperty().bind(scene.heightProperty());
+        stage.setScene(scene);
         stage.show();
     }
 

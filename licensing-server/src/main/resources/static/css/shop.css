@@ -1,0 +1,181 @@
+/* Mbuyedzedzo public storefront — shares its palette with the desktop app's
+   own design system (brand teal + a slate neutral scale + soft shadows)
+   so the whole product family reads as one brand, not a generic Bootstrap
+   template bolted onto a Java app. */
+
+:root {
+    --brand: #0f766e;
+    --brand-dark: #0c5c57;
+    --brand-tint: #e6f4f2;
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --text-faint: #94a3b8;
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 22px;
+    --shadow-card: 0 18px 40px -16px rgba(15,23,42,.14), 0 2px 8px rgba(15,23,42,.06);
+    --shadow-raised: 0 28px 60px -20px rgba(15,23,42,.22);
+
+    --bs-primary: var(--brand);
+    --bs-primary-rgb: 15, 118, 110;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+a { text-decoration: none; }
+
+/* ── Nav ──────────────────────────────────────────────────────────── */
+.shop-nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+}
+.shop-nav .brand {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.shop-nav .brand .mark {
+    height: 28px;
+    width: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+/* Compensates the mark's measured visual-weight asymmetry (alpha centroid
+   ~19.3% of its rendered width left of the image's own bounding-box centre)
+   — the same correction BrandAssets.logoMark() applies in the desktop app,
+   scaled to this element's display height. See that class for the measurement. */
+.shop-nav .brand .mark img { position: relative; left: 9px; height: 100%; }
+.shop-nav .nav-links a {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: .92rem;
+    margin-left: 28px;
+    transition: color .15s;
+}
+.shop-nav .nav-links a:hover,
+.shop-nav .nav-links a.active { color: var(--brand); }
+.shop-nav .nav-links a.cta {
+    color: #fff;
+    background: var(--brand);
+    padding: 8px 18px;
+    border-radius: var(--radius-sm);
+}
+.shop-nav .nav-links a.cta:hover { background: var(--brand-dark); color: #fff; }
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.hero {
+    padding: 88px 24px 64px;
+    text-align: center;
+}
+.hero .mark-hero {
+    height: 90px;
+    display: inline-flex;
+    margin-bottom: 28px;
+}
+.hero .mark-hero img { position: relative; left: 13px; height: 100%; }
+.hero h1 {
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    max-width: 720px;
+    margin: 0 auto 18px;
+}
+.hero .lede {
+    color: var(--text-muted);
+    font-size: 1.15rem;
+    max-width: 620px;
+    margin: 0 auto 32px;
+}
+.hero .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+.btn-brand {
+    background: var(--brand); border-color: var(--brand); color: #fff;
+    font-weight: 700; padding: 12px 28px; border-radius: var(--radius-sm);
+    transition: background .15s;
+}
+.btn-brand:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
+.btn-brand-outline {
+    background: transparent; border: 1.5px solid var(--brand); color: var(--brand);
+    font-weight: 700; padding: 11px 26px; border-radius: var(--radius-sm);
+    transition: background .15s;
+}
+.btn-brand-outline:hover { background: var(--brand-tint); color: var(--brand-dark); border-color: var(--brand); }
+
+/* ── Sections / cards ─────────────────────────────────────────────── */
+.section { padding: 56px 24px; max-width: 1080px; margin: 0 auto; }
+.section-eyebrow {
+    text-transform: uppercase; letter-spacing: .1em; font-size: .75rem;
+    font-weight: 700; color: var(--brand); margin-bottom: 10px;
+}
+.section h2 { font-weight: 800; letter-spacing: -0.01em; margin-bottom: 16px; }
+
+.panel {
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border);
+}
+
+.feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; }
+.feature-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 26px; box-shadow: var(--shadow-card);
+}
+.feature-card .icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: var(--brand-tint); color: var(--brand);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.25rem; margin-bottom: 14px;
+}
+.feature-card h3 { font-size: 1.02rem; font-weight: 700; margin-bottom: 6px; }
+.feature-card p { color: var(--text-muted); font-size: .92rem; margin: 0; }
+
+/* ── Pricing cards ────────────────────────────────────────────────── */
+.price-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card); padding: 34px; height: 100%;
+    transition: transform .15s, box-shadow .15s;
+}
+.price-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-raised); }
+.price-card h3 { font-weight: 800; margin-bottom: 6px; }
+.price-card .tagline { color: var(--text-muted); font-size: .92rem; min-height: 42px; }
+.price-tag { font-size: 2.1rem; font-weight: 800; color: var(--text); }
+.price-tag small { font-size: .95rem; font-weight: 600; color: var(--text-muted); }
+.price-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 0; border-top: 1px solid var(--border);
+}
+.price-row:first-of-type { border-top: none; padding-top: 20px; }
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+.shop-footer {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 40px 24px 28px;
+    margin-top: 40px;
+}
+.shop-footer .cols { display: flex; gap: 48px; flex-wrap: wrap; max-width: 1080px; margin: 0 auto 24px; }
+.shop-footer .brand-col { max-width: 320px; }
+.shop-footer .brand-col .brand { font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.shop-footer .brand-col .mark { height: 22px; display: inline-flex; }
+.shop-footer .brand-col .mark img { position: relative; left: 7px; height: 100%; }
+.shop-footer .brand-col p { color: var(--text-muted); font-size: .88rem; }
+.shop-footer h6 { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); margin-bottom: 12px; }
+.shop-footer a { color: var(--text-muted); font-size: .9rem; display: block; margin-bottom: 8px; }
+.shop-footer a:hover { color: var(--brand); }
+.shop-footer .legal { text-align: center; color: var(--text-faint); font-size: .8rem; max-width: 1080px; margin: 0 auto; border-top: 1px solid var(--border); padding-top: 20px; }

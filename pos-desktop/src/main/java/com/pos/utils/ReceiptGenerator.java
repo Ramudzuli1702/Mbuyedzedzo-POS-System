@@ -36,9 +36,12 @@ public class ReceiptGenerator {
 
     private static final SettingsService settings = new SettingsService();
 
-    private static final int W = 40;                       // receipt column width
-    private static final String RULE   = "-".repeat(W) + "\n";
-    private static final String DRULE  = "=".repeat(W) + "\n";
+    // Receipt column width — configurable in Settings to match the shop's
+    // actual printer (58mm/80mm/112mm thermal rolls each fit a different
+    // character count), so re-read it per receipt rather than hardcoding one.
+    private static int W() { return settings.getReceiptColumns(); }
+    private static String RULE()  { return "-".repeat(W()) + "\n"; }
+    private static String DRULE() { return "=".repeat(W()) + "\n"; }
 
     private static final DateTimeFormatter FULL_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -69,10 +72,10 @@ public class ReceiptGenerator {
             meta(r, "Customer", customer.getFullNames());
             if (notBlank(customer.getEmailAddress())) meta(r, "Email", customer.getEmailAddress());
         }
-        r.append(RULE);
+        r.append(RULE());
 
         r.append(String.format("%-22s %6s %10s%n", "Item", "Qty", "Amount"));
-        r.append(RULE);
+        r.append(RULE());
 
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem item : items) {
@@ -81,16 +84,16 @@ public class ReceiptGenerator {
             subtotal = subtotal.add(item.getSubtotal());
         }
 
-        r.append(RULE);
+        r.append(RULE());
         BigDecimal discount = discountAmount != null ? discountAmount : BigDecimal.ZERO;
         moneyLine(r, "Subtotal", subtotal);
         if (discount.compareTo(BigDecimal.ZERO) > 0) {
             moneyLine(r, "Discount" + (notBlank(promoCode) ? " (" + promoCode + ")" : ""),
                       discount.negate());
         }
-        r.append(DRULE);
+        r.append(DRULE());
         moneyLine(r, "TOTAL", subtotal.subtract(discount));
-        r.append(DRULE);
+        r.append(DRULE());
 
         r.append('\n');
         meta(r, "Payment", paymentInfo.getPaymentMethod());
@@ -117,10 +120,10 @@ public class ReceiptGenerator {
         meta(r, "Cashier",  sale.getStaffName());
         meta(r, "Customer", customer.getFullNames());
         if (notBlank(customer.getEmailAddress())) meta(r, "Email", customer.getEmailAddress());
-        r.append(RULE);
+        r.append(RULE());
 
         r.append(String.format("%-22s %6s %10s%n", "Item", "Qty", "Amount"));
-        r.append(RULE);
+        r.append(RULE());
 
         BigDecimal netTotal = BigDecimal.ZERO;
         for (Purchase item : sale.getItems()) {
@@ -150,9 +153,9 @@ public class ReceiptGenerator {
             netTotal = netTotal.add(lineTotal);
         }
 
-        r.append(DRULE);
+        r.append(DRULE());
         moneyLine(r, "NET TOTAL", netTotal);
-        r.append(DRULE);
+        r.append(DRULE());
         footer(r);
         return r.toString();
     }
@@ -190,7 +193,7 @@ public class ReceiptGenerator {
      * Writes the receipt to a .txt file and returns it (or null on failure).
      *
      * A configured absolute path in Settings is honoured; otherwise receipts
-     * land in "Documents/&lt;App Name&gt;/Receipts" so they are always findable
+     * land in "Desktop/&lt;App Name&gt;/Receipts" so they are always findable
      * and writable, even when the app runs from Program Files.
      */
     public static File saveReceiptToFile(String receiptText, String fileName) {
@@ -216,7 +219,7 @@ public class ReceiptGenerator {
             Path p = Paths.get(configured.trim());
             if (p.isAbsolute()) return p;
         }
-        return Paths.get(System.getProperty("user.home"), "Documents",
+        return Paths.get(System.getProperty("user.home"), "Desktop",
                          com.pos.Branding.APP_NAME, "Receipts");
     }
 
@@ -232,14 +235,14 @@ public class ReceiptGenerator {
         String phone   = settings.getBusinessPhone();
         String vatNo   = settings.getBusinessVatNo();
 
-        r.append(DRULE);
+        r.append(DRULE());
         if (notBlank(name)) r.append(centre(name.toUpperCase())).append('\n');
         for (String l : wrapCentre(address)) r.append(l).append('\n');
         if (notBlank(phone)) r.append(centre("Tel: " + phone)).append('\n');
         if (notBlank(vatNo)) r.append(centre("VAT No: " + vatNo)).append('\n');
-        r.append(DRULE);
+        r.append(DRULE());
         r.append(centre(docType)).append('\n');
-        r.append(RULE);
+        r.append(RULE());
     }
 
     private static void footer(StringBuilder r) {
@@ -249,7 +252,7 @@ public class ReceiptGenerator {
         r.append('\n');
         r.append(centre("Powered by " + com.pos.Branding.APP_NAME)).append('\n');
         r.append(centre(com.pos.Branding.APP_TAGLINE)).append('\n');
-        r.append(DRULE);
+        r.append(DRULE());
     }
 
     private static void meta(StringBuilder r, String label, String value) {
@@ -259,7 +262,7 @@ public class ReceiptGenerator {
     /** Product name (wrapped) then a "qty x unit" / amount line. */
     private static void itemLines(StringBuilder r, String name, int qty,
                                   BigDecimal unit, BigDecimal amount) {
-        for (String l : wrap(name == null ? "" : name, W)) r.append(l).append('\n');
+        for (String l : wrap(name == null ? "" : name, W())) r.append(l).append('\n');
         String left = String.format("  %d x %.2f", qty, unit == null ? 0.0 : unit.doubleValue());
         r.append(pad(left, money(amount))).append('\n');
     }
@@ -276,7 +279,7 @@ public class ReceiptGenerator {
 
     /** Left text + right text on one W-wide line, right-justified. */
     private static String pad(String left, String right) {
-        int gap = W - left.length() - right.length();
+        int gap = W() - left.length() - right.length();
         if (gap < 1) return left + " " + right;
         return left + " ".repeat(gap) + right;
     }
@@ -288,14 +291,14 @@ public class ReceiptGenerator {
     private static String centre(String text) {
         if (text == null || text.isBlank()) return "";
         text = text.strip();
-        if (text.length() >= W) return text.substring(0, W);
-        int pad = (W - text.length()) / 2;
+        if (text.length() >= W()) return text.substring(0, W());
+        int pad = (W() - text.length()) / 2;
         return " ".repeat(pad) + text;
     }
 
     private static java.util.List<String> wrapCentre(String s) {
         java.util.List<String> out = new java.util.ArrayList<>();
-        for (String l : wrap(s, W)) out.add(centre(l));
+        for (String l : wrap(s, W())) out.add(centre(l));
         return out;
     }
 

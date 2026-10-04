@@ -9,6 +9,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.control.Label;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import com.pos.utils.Theme;
 
 /**
  * A row of equal-width summary/KPI cards used at the top of the management
@@ -33,24 +34,22 @@ public final class SummaryCards {
             card.setPadding(new Insets(16, 18, 16, 18));
             card.setMaxWidth(Double.MAX_VALUE);
             HBox.setHgrow(card, Priority.ALWAYS);
-            card.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 8, 0, 0, 2);");
+            card.setStyle(Theme.statCard(c.colourHex()));
 
             Label value = new Label(c.value());
             value.setFont(Font.font("System", FontWeight.BOLD, 24));
             value.setTextFill(Color.web(c.colourHex()));
 
             Label caption = new Label(c.caption());
-            caption.setFont(Font.font("System", 12));
-            caption.setTextFill(Color.web("#64748b"));
+            caption.setFont(Theme.body());
+            caption.setTextFill(Color.web(Theme.TEXT_MUTED));
 
             card.getChildren().addAll(value, caption);
 
             if (c.sub() != null && !c.sub().isBlank()) {
                 Label sub = new Label(c.sub());
-                sub.setFont(Font.font("System", 11));
-                sub.setTextFill(Color.web("#94a3b8"));
+                sub.setFont(Theme.meta());
+                sub.setTextFill(Color.web(Theme.TEXT_FAINT));
                 card.getChildren().add(sub);
             }
             row.getChildren().add(card);

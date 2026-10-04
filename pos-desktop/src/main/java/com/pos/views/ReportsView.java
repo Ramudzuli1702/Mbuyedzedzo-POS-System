@@ -88,10 +88,10 @@ public class ReportsView {
         Region sp = new Region();
         HBox.setHgrow(sp, Priority.ALWAYS);
 
-        Button exportBtn = pill("📊 Export Excel", C_GREEN);
+        Button exportBtn = pill("Export Excel", C_GREEN);
         exportBtn.setOnAction(e -> doExport());
 
-        Button refreshBtn = pill("🔄 Refresh", C_BLUE);
+        Button refreshBtn = pill("Refresh", C_BLUE);
         refreshBtn.setOnAction(e -> render());
 
         HBox actions = new HBox(10, exportBtn, refreshBtn);
@@ -215,18 +215,21 @@ public class ReportsView {
         Runnable toCustomers = hasCustomers ? goTo("Customer Insights") : toSales;
 
         GridPane kpi1 = kpiGrid(3);
-        kpi1.add(kpiCard("💰 Gross Revenue",    fmtR(rev),    svc.calculateGrowth(prevRev, rev),    C_GREEN,  "vs prior period", toSales), 0, 0);
-        kpi1.add(kpiCard("📈 Gross Profit",     fmtR(profit), svc.calculateGrowth(prevProfit, profit), C_BLUE, fmtPct(margin) + " margin", toSales), 1, 0);
-        kpi1.add(kpiCard("🛒 Total Sales",      String.valueOf(sales), svc.calculateGrowth(prevSales, sales), C_PURPLE, "transactions", toSales), 2, 0);
+        kpi1.add(kpiCard("Gross Revenue",    fmtR(rev),    svc.calculateGrowth(prevRev, rev),    C_GREEN,  "vs prior period", toSales), 0, 0);
+        kpi1.add(kpiCard("Gross Profit",     fmtR(profit), svc.calculateGrowth(prevProfit, profit), C_BLUE, fmtPct(margin) + " margin", toSales), 1, 0);
+        kpi1.add(kpiCard("Total Sales",      String.valueOf(sales), svc.calculateGrowth(prevSales, sales), C_PURPLE, "transactions", toSales), 2, 0);
         contentArea.getChildren().add(kpi1);
 
-        GridPane kpi2 = kpiGrid(3);
-        kpi2.add(kpiCard("💳 Avg Sale Value", fmtR(avgSale), svc.calculateGrowth(prevAvg, avgSale), C_TEAL, "per transaction", toSales), 0, 0);
+        // Retail edition has no customer metrics to show, so this row is only
+        // ever 2 cards wide there — give it a 2-column grid of its own instead
+        // of leaving a dangling empty third column in a 3-column grid.
+        GridPane kpi2 = kpiGrid(hasCustomers ? 3 : 2);
+        kpi2.add(kpiCard("Avg Sale Value", fmtR(avgSale), svc.calculateGrowth(prevAvg, avgSale), C_TEAL, "per transaction", toSales), 0, 0);
         if (hasCustomers) {
-            kpi2.add(kpiCard("🆕 New Customers", String.valueOf(newCust), svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered", toCustomers), 1, 0);
-            kpi2.add(kpiCard("🔁 Repeat Rate",   fmtPct(repRate),         0,                                      C_SLATE, "loyal customers", toCustomers), 2, 0);
+            kpi2.add(kpiCard("New Customers", String.valueOf(newCust), svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered", toCustomers), 1, 0);
+            kpi2.add(kpiCard("Repeat Rate",   fmtPct(repRate),         0,                                      C_SLATE, "loyal customers", toCustomers), 2, 0);
         } else {
-            kpi2.add(kpiCard("📈 Profit Margin", fmtPct(margin), 0, C_AMBER, "gross", toSales), 1, 0);
+            kpi2.add(kpiCard("Profit Margin", fmtPct(margin), 0, C_AMBER, "gross", toSales), 1, 0);
         }
         contentArea.getChildren().add(kpi2);
 
@@ -471,7 +474,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(day.format(fmt), val.doubleValue()))
         );
         chart.getData().add(series);
-        return chartCard("📈 Daily Revenue Trend", chart);
+        return chartCard("Daily Revenue Trend", chart);
     }
 
     private VBox buildCategoryRevenueChart(LocalDate s, LocalDate e) {
@@ -485,7 +488,7 @@ public class ReportsView {
                     rev.doubleValue()
                 ));
         });
-        return chartCard("🎯 Revenue by Category", chart);
+        return chartCard("Revenue by Category", chart);
     }
 
     private VBox buildPaymentMethodChart(LocalDate s, LocalDate e) {
@@ -499,7 +502,7 @@ public class ReportsView {
         svc.getRevenueByPaymentMethod(s, e)
             .forEach((method, val) -> series.getData().add(new XYChart.Data<>(method, val.doubleValue())));
         chart.getData().add(series);
-        return chartCard("💳 Revenue by Payment Method", chart);
+        return chartCard("Revenue by Payment Method", chart);
     }
 
     private VBox buildMonthlyRevenueTrend() {
@@ -518,7 +521,7 @@ public class ReportsView {
             ))
         );
         chart.getData().add(series);
-        return chartCard("📅 Monthly Revenue (" + LocalDate.now().getYear() + ")", chart);
+        return chartCard("Monthly Revenue (" + LocalDate.now().getYear() + ")", chart);
     }
 
     private VBox buildHourlySalesChart(LocalDate s, LocalDate e) {
@@ -534,7 +537,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(String.format("%02d:00", hr), val.doubleValue()))
         );
         chart.getData().add(series);
-        return chartCard("⏰ Revenue by Hour of Day", chart);
+        return chartCard("Revenue by Hour of Day", chart);
     }
 
     private VBox buildDayOfWeekChart(LocalDate s, LocalDate e) {
@@ -549,7 +552,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(day.substring(0, 3), val.doubleValue()))
         );
         chart.getData().add(series);
-        return chartCard("📅 Revenue by Day of Week", chart);
+        return chartCard("Revenue by Day of Week", chart);
     }
 
     private VBox buildSaleValueDistChart(LocalDate s, LocalDate e) {
@@ -564,7 +567,7 @@ public class ReportsView {
         svc.getSaleValueDistribution(s, e)
             .forEach((range, cnt) -> series.getData().add(new XYChart.Data<>(range, cnt)));
         chart.getData().add(series);
-        return chartCard("📊 Sale Value Distribution", chart);
+        return chartCard("Sale Value Distribution", chart);
     }
 
     private VBox buildStaffPerformanceChart(LocalDate s, LocalDate e) {
@@ -583,7 +586,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(label, rev.doubleValue()));
         }
         chart.getData().add(series);
-        return chartCard("👤 Revenue by Staff Member", chart);
+        return chartCard("Revenue by Staff Member", chart);
     }
 
     private VBox buildCustomerSegmentationChart(LocalDate s, LocalDate e) {
@@ -592,7 +595,7 @@ public class ReportsView {
         svc.getCustomerSegmentation(s, e).forEach((seg, cnt) -> {
             if (cnt > 0) chart.getData().add(new PieChart.Data(seg + " (" + cnt + ")", cnt));
         });
-        return chartCard("👥 Customer Segments", chart);
+        return chartCard("Customer Segments", chart);
     }
 
     private VBox buildCustomerAgeGroupChart() {
@@ -607,7 +610,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(age, cnt))
         );
         chart.getData().add(series);
-        return chartCard("🎂 Customer Age Groups", chart);
+        return chartCard("Customer Age Groups", chart);
     }
 
     private VBox buildMonthlyNewCustomersChart() {
@@ -622,7 +625,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(ym.getMonth().toString().substring(0, 3), cnt))
         );
         chart.getData().add(series);
-        return chartCard("📈 Monthly New Customers (" + LocalDate.now().getYear() + ")", chart);
+        return chartCard("Monthly New Customers (" + LocalDate.now().getYear() + ")", chart);
     }
 
     private VBox buildReturnsStatusChart(Map<String, Integer> data) {
@@ -634,7 +637,7 @@ public class ReportsView {
     private VBox buildExchangeStatusChart(Map<String, Integer> data) {
         PieChart chart = new PieChart();
         data.forEach((k, v) -> { if (v > 0) chart.getData().add(new PieChart.Data(k + " (" + v + ")", v)); });
-        return chartCard("🔄 Exchanges by Status", chart);
+        return chartCard("Exchanges by Status", chart);
     }
 
     private VBox buildReasonsChart(String title, Map<String, Integer> data) {
@@ -669,7 +672,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(lbl, rev.doubleValue()));
         });
         chart.getData().add(series);
-        return chartCard("📣 Promo Revenue Breakdown", chart);
+        return chartCard("Promo Revenue Breakdown", chart);
     }
 
     private VBox buildTopProductsTable(LocalDate s, LocalDate e, int limit) {
@@ -932,17 +935,25 @@ public class ReportsView {
     }
 
     private VBox kpiCard(String title, String value, double growth, String color, String sub, Runnable drill) {
-        VBox card = new VBox(10);
-        card.setPadding(new Insets(20));
-        String base =
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 10, 0, 0, 3);";
+        // Padding/spacing/value-font matched to com.pos.components.SummaryCards —
+        // the same "stat card" used on Inventory/Customers/Users — so a KPI card
+        // here and a summary card there read as the same component, not two
+        // different ones that happen to share a background colour.
+        VBox card = new VBox(6);
+        card.setPadding(new Insets(16, 18, 16, 18));
+        // Same statCard() recipe as com.pos.components.SummaryCards — a
+        // permanent colour-coded top accent, not just the growth badge below,
+        // so each card has a visible identity even with zero/flat data
+        // (growth == 0 hides the only other coloured element entirely, which
+        // is what made an empty/fresh database's cards look undesigned: just
+        // a grey label, a black number, a grey caption, no colour anywhere).
+        String base = com.pos.utils.Theme.statCard(color);
         card.setStyle(base);
 
         if (drill != null) {
             card.setStyle(base + "-fx-cursor: hand;");
             card.setOnMouseEntered(e -> card.setStyle(base +
-                "-fx-cursor: hand; -fx-border-color: " + color + "; -fx-border-radius: 10; -fx-border-width: 1.5;"));
+                "-fx-cursor: hand; -fx-border-color: " + color + "; -fx-border-radius: 14; -fx-border-width: 1.5;"));
             card.setOnMouseExited(e -> card.setStyle(base + "-fx-cursor: hand;"));
             card.setOnMouseClicked(e -> drill.run());
         }
@@ -952,7 +963,7 @@ public class ReportsView {
         t.setTextFill(Color.web("#64748b"));
 
         Label v = new Label(value);
-        v.setFont(Font.font("System", FontWeight.BOLD, 28));
+        v.setFont(Font.font("System", FontWeight.BOLD, 24));
         v.setTextFill(Color.web(color));
         v.setWrapText(true);
 
@@ -1006,8 +1017,8 @@ public class ReportsView {
         VBox c = new VBox(12);
         c.setPadding(new Insets(20));
         c.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 10, 0, 0, 3);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
         Label lbl = new Label(title);
         lbl.setFont(Font.font("System", FontWeight.BOLD, 14));
@@ -1077,8 +1088,7 @@ public class ReportsView {
         b.setAlignment(Pos.CENTER);
         b.setMinHeight(120);
         b.setPadding(new Insets(28));
-        Label icon = new Label("📭");
-        icon.setFont(Font.font(26));
+        javafx.scene.Node icon = com.pos.utils.Icons.tinted(com.pos.utils.Icons.reports(26), "#94a3b8");
         Label m = new Label(msg);
         m.setTextFill(Color.web("#94a3b8"));
         m.setFont(Font.font("System", 13));
@@ -1092,8 +1102,8 @@ public class ReportsView {
         c.setPadding(new Insets(20));
         c.setMinHeight(minHeight);
         c.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 10, 0, 0, 3);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
         VBox.setVgrow(content, Priority.ALWAYS);
         c.getChildren().add(content);
@@ -1162,12 +1172,11 @@ public class ReportsView {
         String name = reportCombo.getValue().replaceAll("\\s+", "_").toLowerCase()
                       + "_" + s + "_to_" + e;
         boolean ok = svc.exportToExcel(s, e, name);
-        Alert a = new Alert(ok ? Alert.AlertType.INFORMATION : Alert.AlertType.ERROR);
-        a.setHeaderText(null);
-        a.setContentText(ok
-            ? "Exported to reports/" + name + ".xlsx"
-            : "Export failed — check console for details."
-        );
-        a.showAndWait();
+        if (ok) {
+            String savedTo = new com.pos.services.SettingsService().getReportsSavePath();
+            com.pos.components.Toast.success(reportCombo, "Exported to " + savedTo + name + ".xlsx");
+        } else {
+            com.pos.components.Toast.error(reportCombo, "Export failed — check console for details.");
+        }
     }
 }

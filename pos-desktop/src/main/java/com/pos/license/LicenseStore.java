@@ -20,7 +20,7 @@ public final class LicenseStore {
     private static final Logger log = LoggerFactory.getLogger(LicenseStore.class);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-    public String serverUrl = "http://localhost:8080";
+    public String serverUrl = com.pos.Branding.LICENSE_SERVER_URL;
     public String licenseKey;
     public String token;
     public long lastValidatedEpoch;   // 0 = never
@@ -37,7 +37,14 @@ public final class LicenseStore {
             try {
                 LicenseStore s = GSON.fromJson(Files.readString(f.toPath(), StandardCharsets.UTF_8), LicenseStore.class);
                 if (s != null) {
-                    if (s.serverUrl == null || s.serverUrl.isBlank()) s.serverUrl = "http://localhost:8080";
+                    // Migrate a never-activated local config still pointed at the old
+                    // "http://localhost:8080" factory default onto the live server. A
+                    // config that already has a real activation (licenseKey set) is left
+                    // alone — that's a deliberate dev/local setup, not a stale default.
+                    boolean neverActivated = s.licenseKey == null || s.licenseKey.isBlank();
+                    boolean staleDefault = s.serverUrl == null || s.serverUrl.isBlank()
+                            || (neverActivated && "http://localhost:8080".equals(s.serverUrl));
+                    if (staleDefault) s.serverUrl = com.pos.Branding.LICENSE_SERVER_URL;
                     return s;
                 }
             } catch (Exception e) {

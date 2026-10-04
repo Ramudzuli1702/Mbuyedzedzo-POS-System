@@ -2,6 +2,7 @@ package com.pos.views;
 
 import com.pos.models.User;
 import com.pos.models.StaffPerformance;
+import com.pos.services.SessionService;
 import com.pos.services.UserService;
 import com.pos.utils.PasswordUtil;
 import javafx.collections.FXCollections;
@@ -24,6 +25,7 @@ import java.util.Optional;
 public class UserManagementView {
     private User currentUser;
     private UserService userService;
+    private final SessionService sessionService = new SessionService();
     private TableView<User> userTable;
     private TextField searchField;
     private BorderPane mainLayout;
@@ -77,9 +79,9 @@ public class UserManagementView {
         HBox topBar = new HBox(20);
         topBar.setPadding(new Insets(20));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("👥 User Management");
+        Label title = new Label("User Management");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -87,7 +89,7 @@ public class UserManagementView {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         searchField = new TextField();
-        searchField.setPromptText("🔍 Search users...");
+        searchField.setPromptText("Search users...");
         searchField.setPrefWidth(300);
         searchField.setStyle("-fx-font-size: 13; -fx-padding: 10;");
         searchField.textProperty().addListener((obs, oldVal, newVal) -> searchUsers(newVal));
@@ -96,8 +98,8 @@ public class UserManagementView {
         addBtn.setStyle("-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
         addBtn.setOnAction(e -> showAddUserDialog());
 
-        Button performanceBtn = new Button("📊 Performance Report");
-        performanceBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
+        Button performanceBtn = new Button("Performance Report");
+        performanceBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
         performanceBtn.setVisible(isAdmin());
         performanceBtn.setOnAction(e -> showPerformanceView());
 
@@ -137,7 +139,7 @@ public class UserManagementView {
         selectorBox.setAlignment(Pos.CENTER);
 
         Button backBtn = new Button("← Back to Users");
-        backBtn.setStyle("-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
+        backBtn.setStyle("-fx-background-color: #94a3b8; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
         backBtn.setOnAction(e -> showUserView());
         HBox topWithBack = new HBox(20, backBtn, selectorBox);
         topWithBack.setAlignment(Pos.CENTER_LEFT);
@@ -165,7 +167,7 @@ public class UserManagementView {
         chartsBox.getChildren().addAll(salesChart, hoursChart);
 
         VBox tableBox = new VBox(15);
-        tableBox.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+        tableBox.setStyle("-fx-background-color: white; -fx-background-radius: 14; -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         tableBox.setPadding(new Insets(20));
 
         Label tableTitle = new Label("Staff Performance Ranking");
@@ -270,7 +272,7 @@ public class UserManagementView {
 
     private VBox createUserTable() {
         VBox tableBox = new VBox(15);
-        tableBox.setStyle("-fx-background-color: white; -fx-background-radius: 10; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+        tableBox.setStyle("-fx-background-color: white; -fx-background-radius: 14; -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         tableBox.setPadding(new Insets(20));
 
         Label tableTitle = new Label("Staff Members");
@@ -341,27 +343,15 @@ public class UserManagementView {
             }
         });
 
-        TableColumn<User, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(250);
+        TableColumn<User, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button editBtn = com.pos.components.Ui.actionButton("Edit", "#f39c12", "Edit name, email or role");
-            private final Button resetPwdBtn = com.pos.components.Ui.actionButton("Reset PW", "#3498db", "Set a new password for this user");
-            private final Button toggleBtn = com.pos.components.Ui.actionButton("Deactivate", "#e74c3c", "Activate / deactivate this account");
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
 
             {
-                editBtn.setOnAction(e -> {
+                viewBtn.setOnAction(e -> {
                     User user = getTableView().getItems().get(getIndex());
-                    showEditUserDialog(user);
-                });
-
-                resetPwdBtn.setOnAction(e -> {
-                    User user = getTableView().getItems().get(getIndex());
-                    resetPassword(user);
-                });
-
-                toggleBtn.setOnAction(e -> {
-                    User user = getTableView().getItems().get(getIndex());
-                    toggleUserStatus(user);
+                    showUserDetailsDialog(user);
                 });
             }
 
@@ -372,18 +362,7 @@ public class UserManagementView {
                     setGraphic(null);
                 } else {
                     User user = getTableView().getItems().get(getIndex());
-                    if (user.getStaffID() == currentUser.getStaffID()) {
-                        setGraphic(new Label("(You)"));
-                    } else {
-                        boolean active = "Active".equalsIgnoreCase(user.getStatus());
-                        toggleBtn.setText(active ? "Deactivate" : "Activate");
-                        toggleBtn.setStyle("-fx-background-color: " + (active ? "#e74c3c" : "#16a34a")
-                            + "; -fx-text-fill: white; -fx-font-size: 11; -fx-font-weight: bold;"
-                            + "-fx-padding: 5 12; -fx-background-radius: 5; -fx-cursor: hand;");
-                        HBox buttons = new HBox(6, editBtn, resetPwdBtn, toggleBtn);
-                        buttons.setAlignment(Pos.CENTER_LEFT);
-                        setGraphic(buttons);
-                    }
+                    setGraphic(user.getStaffID() == currentUser.getStaffID() ? new Label("(You)") : viewBtn);
                 }
             }
         });
@@ -542,6 +521,42 @@ public class UserManagementView {
         });
     }
 
+    private void showUserDetailsDialog(User user) {
+        VBox summary = new VBox(10);
+        summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Email:", user.getEmailAddress()),
+            com.pos.components.Ui.detailRow("Role:", user.getUserType()),
+            com.pos.components.Ui.detailRow("Status:", user.getStatus())
+        );
+
+        boolean active = "Active".equalsIgnoreCase(user.getStatus());
+
+        Button editBtn     = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit name, email or role");
+        Button resetPwdBtn = com.pos.components.Ui.actionButton("Reset Password", "#2563eb", "Set a new password for this user");
+        Button authKeyBtn  = com.pos.components.Ui.actionButton("Authorisation Key", "#7c3aed",
+            "Issue (or view) this staff member's supervisor auth code, used to countersign sessions and approve exchanges/returns");
+        Button toggleBtn   = com.pos.components.Ui.actionButton(active ? "Deactivate" : "Activate",
+            active ? "#dc2626" : "#16a34a", "Activate / deactivate this account");
+
+        editBtn.setOnAction(e -> showEditUserDialog(user));
+        resetPwdBtn.setOnAction(e -> resetPassword(user));
+        authKeyBtn.setOnAction(e -> showAuthKeyDialog(user));
+        toggleBtn.setOnAction(e -> toggleUserStatus(user));
+
+        com.pos.components.Ui.showDetailDialog("Staff Member", user.getFullNames(), summary,
+            editBtn, resetPwdBtn, authKeyBtn, toggleBtn);
+    }
+
+    private void showAuthKeyDialog(User user) {
+        String code = sessionService.getOrCreateAuthKey(user.getStaffID());
+        showAlert("Authorisation Key",
+            user.getFullNames() + "'s supervisor authorisation code:\n\n" + code
+                + "\n\nGive this to them directly — it's what they'll enter to countersign a "
+                + "session or approve an exchange/return. Generating it again later returns the same "
+                + "active code; it doesn't issue a new one.",
+            Alert.AlertType.INFORMATION);
+    }
+
     private void resetPassword(User user) {
         String newPassword = PasswordUtil.generateRandomPassword();
 
@@ -572,10 +587,6 @@ public class UserManagementView {
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
+        com.pos.components.Ui.showAlert(userTable, title, content, type);
     }
 }

@@ -47,8 +47,8 @@ public class SubscriptionView {
         HBox bar = new HBox();
         bar.setPadding(new Insets(20));
         bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
-        Label title = new Label("🔑  Subscription");
+        bar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
+        Label title = new Label("Subscription");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
         bar.getChildren().add(title);
@@ -168,7 +168,7 @@ public class SubscriptionView {
 
     private VBox renewalCard(LicenseToken tok) {
         VBox card = card();
-        card.setStyle(card.getStyle() + "-fx-border-color: #0f766e; -fx-border-width: 1; -fx-border-radius: 10;");
+        card.setStyle(card.getStyle() + "-fx-border-color: #0f766e; -fx-border-width: 1; -fx-border-radius: 14;");
         card.getChildren().add(heading("Renew your subscription"));
 
         Label info = new Label("Subscriptions are billed monthly on the website — buying another month "
@@ -197,12 +197,12 @@ public class SubscriptionView {
         statusMsg.setWrapText(true);
 
         Button manageOnline = new Button("Manage my account online");
-        manageOnline.setStyle("-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-weight: bold;"
+        manageOnline.setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #1e293b; -fx-font-weight: bold;"
                 + "-fx-padding: 10 16; -fx-background-radius: 6; -fx-cursor: hand;");
         manageOnline.setOnAction(e -> openInBrowser(manager.serverUrl() + "/account/login"));
 
         Button recheck = new Button("Re-check now");
-        recheck.setStyle("-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-weight: bold;"
+        recheck.setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #1e293b; -fx-font-weight: bold;"
                 + "-fx-padding: 10 16; -fx-background-radius: 6; -fx-cursor: hand;");
         recheck.setOnAction(e -> {
             manager.revalidateInBackground();
@@ -211,7 +211,7 @@ public class SubscriptionView {
         });
 
         Button deactivate = new Button("Deactivate this machine");
-        deactivate.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;"
+        deactivate.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; -fx-font-weight: bold;"
                 + "-fx-padding: 10 16; -fx-background-radius: 6; -fx-cursor: hand;");
         deactivate.setDisable(!currentUser.hasFullAccess() || tok == null);
         deactivate.setOnAction(e -> {
@@ -263,25 +263,25 @@ public class SubscriptionView {
     private VBox card() {
         VBox card = new VBox(12);
         card.setPadding(new Insets(20));
-        card.setStyle("-fx-background-color: white; -fx-background-radius: 10;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.06), 8, 0, 0, 2);");
+        card.setStyle("-fx-background-color: white; -fx-background-radius: 14;"
+                + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         return card;
     }
 
     private Label heading(String text) {
         Label h = new Label(text);
         h.setFont(Font.font("System", FontWeight.BOLD, 16));
-        h.setTextFill(Color.web("#2c3e50"));
+        h.setTextFill(Color.web("#1e293b"));
         return h;
     }
 
     private void row(GridPane grid, int r, String label, String value) {
         Label l = new Label(label);
         l.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        l.setTextFill(Color.web("#7f8c8d"));
+        l.setTextFill(Color.web("#64748b"));
         Label v = new Label(value);
         v.setFont(Font.font("System", 13));
-        v.setTextFill(Color.web("#2c3e50"));
+        v.setTextFill(Color.web("#1e293b"));
         v.setWrapText(true);
         grid.add(l, 0, r);
         grid.add(v, 1, r);

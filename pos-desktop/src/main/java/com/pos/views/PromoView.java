@@ -45,8 +45,8 @@ public class PromoView {
         // the "Product List" card on the Products tab.
         VBox card = new VBox(15);
         card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         card.setPadding(new Insets(20));
         card.getChildren().addAll(buildTopBar(), buildTable());
 
@@ -78,7 +78,7 @@ public class PromoView {
         addBtn.setDisable(!currentUser.hasFullAccess());
 
         Button refreshBtn = new Button("Refresh");
-        refreshBtn.setStyle("-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-weight: bold; -fx-padding: 9 16; -fx-background-radius: 6; -fx-cursor: hand;");
+        refreshBtn.setStyle("-fx-background-color: #f1f5f9; -fx-text-fill: #1e293b; -fx-font-weight: bold; -fx-padding: 9 16; -fx-background-radius: 6; -fx-cursor: hand;");
         refreshBtn.setOnAction(e -> loadTable());
 
         bar.getChildren().addAll(title, spacer, refreshBtn, addBtn);
@@ -165,63 +165,23 @@ public class PromoView {
                     case "Active"    -> "-fx-text-fill: #155724; -fx-font-weight: bold;";
                     case "Expired"   -> "-fx-text-fill: #721c24; -fx-font-weight: bold;";
                     case "Scheduled" -> "-fx-text-fill: #856404; -fx-font-weight: bold;";
-                    default          -> "-fx-text-fill: #7f8c8d;";
+                    default          -> "-fx-text-fill: #64748b;";
                 });
             }
         });
 
-        TableColumn<Promo, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(170);
+        TableColumn<Promo, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(col -> new TableCell<>() {
-            private final Button editBtn   = new Button("Edit");
-            private final Button toggleBtn = new Button();
-            private final Button deleteBtn = new Button("Delete");
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
             {
-                editBtn.setStyle(btnStyle("#f39c12"));
-                deleteBtn.setStyle(btnStyle("#e74c3c"));
-                editBtn.setTooltip(new Tooltip("Edit this promo"));
-                deleteBtn.setTooltip(new Tooltip("Delete this promo"));
-
-                editBtn.setOnAction(e ->
-                    showPromoDialog(getTableView().getItems().get(getIndex())));
-
-                toggleBtn.setOnAction(e -> {
-                    Promo p = getTableView().getItems().get(getIndex());
-                    promoService.toggleActive(p.getPromoID(), !p.isActive());
-                    loadTable();
-                });
-
-                deleteBtn.setOnAction(e -> {
-                    Promo p = getTableView().getItems().get(getIndex());
-                    Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                        "Delete promo \"" + p.getPromoCode() + "\"?", ButtonType.YES, ButtonType.NO);
-                    confirm.showAndWait().ifPresent(r -> {
-                        if (r == ButtonType.YES) {
-                            promoService.deletePromo(p.getPromoID());
-                            loadTable();
-                        }
-                    });
-                });
+                viewBtn.setOnAction(e ->
+                    showPromoDetailsDialog(getTableView().getItems().get(getIndex())));
             }
 
             @Override protected void updateItem(Void v, boolean empty) {
                 super.updateItem(v, empty);
-                if (empty) { setGraphic(null); return; }
-                Promo p = getTableView().getItems().get(getIndex());
-                toggleBtn.setText(p.isActive() ? "Pause" : "Enable");
-                toggleBtn.setStyle(btnStyle(p.isActive() ? "#7f8c8d" : "#27ae60"));
-                boolean canEdit = currentUser.hasFullAccess();
-                editBtn.setDisable(!canEdit);
-                toggleBtn.setDisable(!canEdit);
-                deleteBtn.setDisable(!canEdit);
-                HBox row = new HBox(5, editBtn, toggleBtn, deleteBtn);
-                row.setAlignment(Pos.CENTER);
-                setGraphic(row);
-            }
-
-            private String btnStyle(String color) {
-                return "-fx-background-color: " + color + "; -fx-text-fill: white;" +
-                       "-fx-font-size: 10; -fx-padding: 5 8; -fx-background-radius: 4; -fx-cursor: hand;";
+                setGraphic(empty ? null : viewBtn);
             }
         });
 
@@ -230,6 +190,51 @@ public class PromoView {
 
         box.getChildren().add(table);
         return box;
+    }
+
+    private void showPromoDetailsDialog(Promo p) {
+        String limit = p.getUsageLimit() != null ? String.valueOf(p.getUsageLimit()) : "∞";
+        BigDecimal min = p.getMinimumPurchase();
+
+        VBox summary = new VBox(10);
+        summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Discount:", p.getDiscountDisplay()),
+            com.pos.components.Ui.detailRow("Minimum purchase:",
+                min == null || min.compareTo(BigDecimal.ZERO) == 0 ? "None" : "R" + String.format("%.2f", min)),
+            com.pos.components.Ui.detailRow("Usage:", p.getUsageCount() + " / " + limit),
+            com.pos.components.Ui.detailRow("Valid until:",
+                p.getValidTill() != null ? p.getValidTill().toLocalDate().toString() : "No expiry"),
+            com.pos.components.Ui.detailRow("Status:", p.getStatusDisplay())
+        );
+
+        if (!currentUser.hasFullAccess()) {
+            com.pos.components.Ui.showDetailDialog("Promo Code", p.getPromoCode() + " — " + p.getPromoName(), summary);
+            return;
+        }
+
+        Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit this promo");
+        Button toggleBtn = com.pos.components.Ui.actionButton(p.isActive() ? "Pause" : "Enable",
+            p.isActive() ? "#64748b" : "#16a34a", "Pause / enable this promo");
+        Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#dc2626", "Delete this promo");
+
+        editBtn.setOnAction(e -> showPromoDialog(p));
+        toggleBtn.setOnAction(e -> {
+            promoService.toggleActive(p.getPromoID(), !p.isActive());
+            loadTable();
+        });
+        deleteBtn.setOnAction(e -> {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Delete promo \"" + p.getPromoCode() + "\"?", ButtonType.YES, ButtonType.NO);
+            confirm.showAndWait().ifPresent(r -> {
+                if (r == ButtonType.YES) {
+                    promoService.deletePromo(p.getPromoID());
+                    loadTable();
+                }
+            });
+        });
+
+        com.pos.components.Ui.showDetailDialog("Promo Code", p.getPromoCode() + " — " + p.getPromoName(), summary,
+            editBtn, toggleBtn, deleteBtn);
     }
 
     private void loadTable() {
@@ -348,7 +353,7 @@ public class PromoView {
     private void addRow(GridPane grid, int row, String label, javafx.scene.Node field) {
         Label lbl = new Label(label + ":");
         lbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
-        lbl.setTextFill(Color.web("#34495e"));
+        lbl.setTextFill(Color.web("#1e293b"));
         lbl.setMinWidth(130);
         grid.add(lbl, 0, row);
         grid.add(field, 1, row);

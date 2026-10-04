@@ -3,6 +3,7 @@ package com.pos.utils;
 import com.pos.Branding;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,6 +61,28 @@ public final class BrandAssets {
             iv.setTranslateX(renderedWidth * 0.193);
         }
         return iv;
+    }
+
+    private static final int[] ICON_SIZES = {16, 24, 32, 48, 64, 128, 256};
+
+    /**
+     * Sets the window/taskbar icon (title bar, Alt+Tab, taskbar) at every size
+     * Windows asks for, so it's never upscaled/blurry in one context and
+     * missing in another. These PNGs are pre-centered for the mark's known
+     * visual-weight asymmetry (see {@link #logoMark}) — unlike that method,
+     * a Stage icon can't be nudged via a paint-only translateX, so the
+     * correction has to be baked into the pixels themselves.
+     */
+    public static void applyAppIcons(Stage stage) {
+        for (int size : ICON_SIZES) {
+            String path = "/brand/icons/icon-" + size + ".png";
+            var in = BrandAssets.class.getResourceAsStream(path);
+            if (in == null) {
+                log.warn("App icon asset missing from the build: {}", path);
+                continue;
+            }
+            stage.getIcons().add(new Image(in));
+        }
     }
 
     private static ImageView view(Image img, double height) {

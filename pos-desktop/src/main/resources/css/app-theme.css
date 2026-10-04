@@ -1,0 +1,226 @@
+/*
+ * Global design-system stylesheet — the shared baseline every control falls
+ * back to when it hasn't already been given an explicit inline style via
+ * com.pos.utils.Theme. Inline styles (setStyle(...)) always win over this, so
+ * nothing already styled by Theme changes — this just gives tables, dropdowns,
+ * date pickers, tabs and plain form fields a consistent look instead of each
+ * one showing the raw default JavaFX/Windows control style.
+ *
+ * Hex values here are duplicated from com.pos.utils.Theme (CSS can't
+ * reference Java constants) — keep the two in sync if the palette changes.
+ */
+
+.root {
+    -fx-font-family: "Segoe UI", sans-serif;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────── */
+
+.table-view {
+    -fx-background-color: transparent;
+    -fx-table-cell-border-color: transparent;
+}
+.table-view .column-header-background {
+    -fx-background-color: #f1f5f9;
+    -fx-background-radius: 10 10 0 0;
+}
+.table-view .column-header,
+.table-view .filler {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #e2e8f0 transparent;
+    -fx-border-width: 0 0 1.5 0;
+    -fx-size: 38px;
+}
+.table-view .column-header .label {
+    -fx-text-fill: #475569;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+.table-row-cell {
+    -fx-background-color: white;
+    -fx-table-cell-border-color: transparent;
+    -fx-border-color: transparent transparent #f1f5f9 transparent;
+    -fx-border-width: 0 0 1 0;
+}
+.table-row-cell:odd {
+    -fx-background-color: #fafbfc;
+}
+.table-row-cell:filled:selected,
+.table-row-cell:filled:selected:focused {
+    -fx-background-color: #e6f4f2;
+}
+.table-row-cell:filled:selected .text {
+    -fx-fill: #0c5c57;
+}
+.table-view .placeholder .label {
+    -fx-text-fill: #94a3b8;
+}
+
+/* ── ComboBox / dropdowns ─────────────────────────────────────────────── */
+
+.combo-box,
+.combo-box-base {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1.5px;
+}
+.combo-box:focused,
+.combo-box-base:focused {
+    -fx-border-color: #0f766e;
+}
+.combo-box .list-cell {
+    -fx-text-fill: #1e293b;
+    -fx-padding: 6 10;
+}
+.combo-box-popup .list-view {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8px;
+    -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.18), 16, 0, 0, 6);
+}
+.combo-box-popup .list-view .list-cell:hover,
+.combo-box-popup .list-view .list-cell:filled:selected {
+    -fx-background-color: #e6f4f2;
+    -fx-text-fill: #0c5c57;
+}
+
+/* ── DatePicker ───────────────────────────────────────────────────────── */
+
+.date-picker {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1.5px;
+}
+.date-picker:focused {
+    -fx-border-color: #0f766e;
+}
+.date-picker .arrow-button {
+    -fx-background-color: transparent;
+}
+.date-picker-popup .month-year-pane {
+    -fx-background-color: #0f766e;
+}
+.date-picker-popup .spinner .label,
+.date-picker-popup .spinner .button .label {
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+.date-picker-popup .day-cell:selected {
+    -fx-background-color: #0f766e;
+    -fx-text-fill: white;
+    -fx-background-radius: 6px;
+}
+.date-picker-popup .day-cell:hover {
+    -fx-background-color: #e6f4f2;
+    -fx-background-radius: 6px;
+}
+.date-picker-popup .today {
+    -fx-border-color: #0f766e;
+    -fx-border-radius: 6px;
+}
+
+/* ── TabPane ──────────────────────────────────────────────────────────── */
+
+.tab-pane .tab-header-area {
+    -fx-padding: 6 0 0 12;
+}
+.tab-pane .tab-header-background {
+    -fx-background-color: transparent;
+}
+.tab-pane .tab {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8px 8px 0 0;
+    -fx-padding: 10px 22px;
+}
+.tab-pane .tab:selected {
+    -fx-background-color: white;
+}
+.tab-pane .tab .tab-label {
+    -fx-text-fill: #64748b;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+}
+.tab-pane .tab:selected .tab-label {
+    -fx-text-fill: #0f766e;
+}
+.tab-pane .tab-content-area {
+    -fx-background-color: white;
+}
+
+/* ── Plain form fields not already given Theme.input() ───────────────── */
+
+.text-field,
+.text-area .content {
+    -fx-background-color: white;
+    -fx-background-radius: 8px;
+    -fx-border-color: #e2e8f0;
+    -fx-border-radius: 8px;
+    -fx-border-width: 1.5px;
+}
+.text-field:focused,
+.text-area:focused .content {
+    -fx-border-color: #0f766e;
+}
+
+/* ── CheckBox / RadioButton ───────────────────────────────────────────── */
+
+.check-box > .box,
+.radio-button > .radio {
+    -fx-background-color: white;
+    -fx-border-color: #cbd5e1;
+    -fx-border-width: 1.5px;
+}
+.check-box > .box {
+    -fx-background-radius: 4px;
+    -fx-border-radius: 4px;
+}
+.check-box:selected > .box {
+    -fx-background-color: #0f766e;
+    -fx-border-color: #0f766e;
+}
+.check-box:selected > .box > .mark {
+    -fx-background-color: white;
+}
+.radio-button:selected > .radio > .dot {
+    -fx-background-color: #0f766e;
+}
+
+/* ── Buttons not already given an inline Theme.*Button() style ────────── */
+
+/*
+ * Deliberately NOT setting -fx-padding or -fx-font-* here: those are
+ * StyleableProperties, and a stylesheet declaration for them overrides a
+ * value set via a plain Java setter (setPadding()/setFont()) elsewhere in
+ * the app — which is exactly what happened the first time this rule set
+ * them: it silently shrank every button sized via setPadding()/setFont()
+ * instead of an inline style string, the sidebar nav included. Only touch
+ * the purely cosmetic properties here; sizing stays whatever each button
+ * already set for itself.
+ */
+.button {
+    -fx-background-color: #f1f5f9;
+    -fx-text-fill: #1e293b;
+    -fx-background-radius: 8px;
+    -fx-cursor: hand;
+}
+.button:hover {
+    -fx-background-color: #e2e8f0;
+}
+
+/* ── Dialog panes (Add/Edit forms, confirmations) ─────────────────────── */
+
+.dialog-pane {
+    -fx-background-color: white;
+}
+.dialog-pane .header-panel {
+    -fx-background-color: #f8fafc;
+}
+.dialog-pane .header-panel .label {
+    -fx-text-fill: #1e293b;
+    -fx-font-weight: bold;
+}

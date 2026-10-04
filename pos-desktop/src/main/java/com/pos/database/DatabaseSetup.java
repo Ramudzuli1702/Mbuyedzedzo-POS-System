@@ -382,7 +382,7 @@ public class DatabaseSetup {
             insertDefaultSetting(conn, "reports.savePath", "reports/");
             insertDefaultSetting(conn, "backup.savePath",  "backups/");
 
-            System.out.println("✅ All tables verified/created.");
+            System.out.println("All tables verified/created.");
         }
     }
 
@@ -425,7 +425,7 @@ public class DatabaseSetup {
                 "INT DEFAULT 0 AFTER UsageLimit");
             addColumnIfMissing(conn, "CustomerCommunications", "UnsubToken",
                 "VARCHAR(64) DEFAULT NULL AFTER TermsAccepted");
-            System.out.println("✅ Migrations complete.");
+            System.out.println("Migrations complete.");
         }
     }
 

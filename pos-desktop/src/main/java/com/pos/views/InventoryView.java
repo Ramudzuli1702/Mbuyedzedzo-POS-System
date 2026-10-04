@@ -7,11 +7,14 @@ import com.pos.services.CategoryService;
 import com.pos.services.ProductService;
 import com.pos.services.ReportService;
 import com.pos.services.WiFiHandler;
+import com.pos.utils.Icons;
 import com.pos.utils.QRCodeUtil;
+import com.pos.utils.Theme;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.image.ImageView;
@@ -66,7 +69,7 @@ public class InventoryView {
             boolean started;
             if (wifiHandler.isServerRunning()) {
                 started = true;
-                System.out.println("✅ WiFi already running - product callback registered on existing server");
+                System.out.println("WiFi already running - product callback registered on existing server");
             } else {
                 started = wifiHandler.startListening(
                         null,
@@ -96,7 +99,7 @@ public class InventoryView {
         if (result.isPresent() && result.get() == ButtonType.OK) {
             addProductToDatabase(product);
         } else {
-            System.out.println("❌ Product addition cancelled by user");
+            System.out.println("Product addition cancelled by user");
             wifiHandler.sendData("{\"type\":\"product_rejected\",\"message\":\"Product addition cancelled by staff\"}");
         }
     }
@@ -119,16 +122,16 @@ public class InventoryView {
 
                 if (categoryCreated) {
                     categoryId = categoryService.getCategoryId(product.getCategoryName());
-                    System.out.println("✅ Category created with ID: " + categoryId);
+                    System.out.println("Category created with ID: " + categoryId);
                 } else {
-                    System.err.println("❌ Failed to create category");
+                    System.err.println("Failed to create category");
                     showAlert("Error", "Failed to create category: " + product.getCategoryName(),
                             Alert.AlertType.ERROR);
                     wifiHandler.sendData("{\"type\":\"error\",\"message\":\"Failed to create category\"}");
                     return;
                 }
             } else {
-                System.out.println("❌ Category creation cancelled");
+                System.out.println("Category creation cancelled");
                 wifiHandler.sendData("{\"type\":\"product_rejected\",\"message\":\"Category creation cancelled\"}");
                 return;
             }
@@ -140,7 +143,7 @@ public class InventoryView {
         boolean success = productService.addProduct(product);
 
         if (success) {
-            System.out.println("✅ Product added to database: " + product.getProductName());
+            System.out.println("Product added to database: " + product.getProductName());
             System.out.println("   Product ID: " + product.getProductID());
             System.out.println("   QR Code: " + product.getQrCode());
 
@@ -164,7 +167,7 @@ public class InventoryView {
             loadProducts();
 
         } else {
-            System.err.println("❌ Failed to add product to database");
+            System.err.println("Failed to add product to database");
             showAlert("Error", "Failed to add product to database", Alert.AlertType.ERROR);
             wifiHandler.sendData("{\"type\":\"error\",\"message\":\"Database error - failed to add product\"}");
         }
@@ -174,11 +177,11 @@ public class InventoryView {
         if (wifiStatusLabel != null) {
             Platform.runLater(() -> {
                 if (started) {
-                    wifiStatusLabel.setText("📱 WiFi Ready - Listening for product additions from Android");
-                    wifiStatusLabel.setTextFill(Color.web("#27ae60"));
+                    wifiStatusLabel.setText("WiFi Ready — Listening for product additions from Android");
+                    wifiStatusLabel.setTextFill(Color.web(Theme.SUCCESS));
                 } else {
-                    wifiStatusLabel.setText("⚠️ WiFi Error - Cannot receive products from Android");
-                    wifiStatusLabel.setTextFill(Color.web("#e74c3c"));
+                    wifiStatusLabel.setText("WiFi Error — Cannot receive products from Android");
+                    wifiStatusLabel.setTextFill(Color.web(Theme.DANGER));
                 }
             });
         }
@@ -186,23 +189,23 @@ public class InventoryView {
 
     public BorderPane getView() {
         BorderPane layout = new BorderPane();
-        layout.setStyle("-fx-background-color: #f5f7fa;");
+        layout.setStyle(Theme.page());
         layout.setTop(createTopBar());
 
         // ── Products tab ────────────────────────────────────────────────
         VBox productsContent = new VBox(20);
-        productsContent.setPadding(new Insets(20));
+        productsContent.setPadding(new Insets(24));
         productsContent.getChildren().addAll(
             createSummaryCards(), createWiFiStatusBox(), createLowStockAlert(), createProductTable());
 
         ScrollPane productsScroll = new ScrollPane(productsContent);
         productsScroll.setFitToWidth(true);
-        productsScroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
+        productsScroll.setStyle("-fx-background: " + Theme.BG + "; -fx-background-color: " + Theme.BG + ";");
 
         // ── Promo Codes tab ────────────────────────────────────────────
         ScrollPane promoScroll = new ScrollPane(new PromoView(currentUser).getView());
         promoScroll.setFitToWidth(true);
-        promoScroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
+        promoScroll.setStyle("-fx-background: " + Theme.BG + "; -fx-background-color: " + Theme.BG + ";");
 
         TabPane tabs = new TabPane();
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
@@ -219,19 +222,18 @@ public class InventoryView {
         statusBox.setPadding(new Insets(12));
         statusBox.setAlignment(Pos.CENTER_LEFT);
         statusBox.setStyle(
-                "-fx-background-color: #d4edda; -fx-background-radius: 8;" +
-                "-fx-border-color: #c3e6cb; -fx-border-width: 1; -fx-border-radius: 8;");
+                "-fx-background-color: " + Theme.SUCCESS_TINT + "; -fx-background-radius: " + Theme.RADIUS_SM + "px;" +
+                "-fx-border-color: " + Theme.SUCCESS + "; -fx-border-width: 1; -fx-border-radius: " + Theme.RADIUS_SM + "px;");
 
-        Label icon = new Label("📡");
-        icon.setFont(Font.font(18));
+        Node icon = Icons.tinted(Icons.wifi(18), Theme.SUCCESS);
 
         wifiStatusLabel = new Label("WiFi: Checking...");
         wifiStatusLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        wifiStatusLabel.setTextFill(Color.web("#155724"));
+        wifiStatusLabel.setTextFill(Color.web(Theme.SUCCESS));
 
         Label info = new Label("Android app can now add products directly to inventory");
         info.setFont(Font.font("System", 11));
-        info.setTextFill(Color.web("#155724"));
+        info.setTextFill(Color.web(Theme.SUCCESS));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -242,33 +244,27 @@ public class InventoryView {
 
     private HBox createTopBar() {
         HBox topBar = new HBox(20);
-        topBar.setPadding(new Insets(20));
+        topBar.setPadding(new Insets(18, 24, 18, 24));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        topBar.setStyle(Theme.topBar());
 
-        Label title = new Label("📦 Inventory Management");
-        title.setFont(Font.font("System", FontWeight.BOLD, 24));
-        title.setTextFill(Color.web("#0f766e"));
+        Label title = Theme.pageTitleLabel("Inventory Management");
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         searchField = new TextField();
-        searchField.setPromptText("🔍 Search products...");
+        searchField.setPromptText("Search products...");
         searchField.setPrefWidth(300);
-        searchField.setStyle("-fx-font-size: 13; -fx-padding: 10;");
+        searchField.setStyle(Theme.input());
         searchField.textProperty().addListener((obs, oldVal, newVal) -> searchProducts(newVal));
 
         Button addBtn = new Button("+ Add Product");
-        addBtn.setStyle(
-                "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;" +
-                "-fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
+        Theme.hover(addBtn, Theme.primaryButton(), Theme.primaryHover());
         addBtn.setOnAction(e -> showAddProductDialog());
 
-        Button categoriesBtn = new Button("📁 Categories");
-        categoriesBtn.setStyle(
-                "-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;" +
-                "-fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
+        Button categoriesBtn = new Button("Categories");
+        Theme.hover(categoriesBtn, Theme.secondaryButton(), Theme.secondaryHover());
         categoriesBtn.setOnAction(e -> showCategoriesDialog());
 
         topBar.getChildren().addAll(title, spacer, searchField, categoriesBtn, addBtn);
@@ -280,25 +276,24 @@ public class InventoryView {
         alertBox.setPadding(new Insets(15));
         alertBox.setAlignment(Pos.CENTER_LEFT);
         alertBox.setStyle(
-                "-fx-background-color: #fff3cd; -fx-background-radius: 8;" +
-                "-fx-border-color: #ffc107; -fx-border-width: 1; -fx-border-radius: 8;");
+                "-fx-background-color: " + Theme.WARNING_TINT + "; -fx-background-radius: " + Theme.RADIUS_SM + "px;" +
+                "-fx-border-color: " + Theme.WARNING + "; -fx-border-width: 1; -fx-border-radius: " + Theme.RADIUS_SM + "px;");
 
-        Label icon = new Label("⚠️");
-        icon.setFont(Font.font(20));
+        Node icon = Icons.tinted(Icons.warning(20), Theme.WARNING);
 
         ObservableList<Product> lowStock = productService.getLowStockProducts();
 
         Label message = new Label("Low Stock Alert: " + lowStock.size() + " product(s) need restocking");
         message.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
-        message.setTextFill(Color.web("#856404"));
+        message.setTextFill(Color.web(Theme.WARNING));
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         Button viewBtn = new Button("View Low Stock");
         viewBtn.setStyle(
-                "-fx-background-color: #ffc107; -fx-text-fill: #856404; -fx-font-weight: bold;" +
-                "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
+                "-fx-background-color: " + Theme.WARNING + "; -fx-text-fill: white; -fx-font-weight: bold;" +
+                "-fx-padding: 8 16; -fx-background-radius: " + Theme.RADIUS_SM + "px; -fx-cursor: hand;");
         viewBtn.setOnAction(e -> showLowStockProducts());
 
         alertBox.getChildren().addAll(icon, message, spacer, viewBtn);
@@ -313,13 +308,10 @@ public class InventoryView {
 
     private VBox createProductTable() {
         VBox tableBox = new VBox(15);
-        tableBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
-        tableBox.setPadding(new Insets(20));
+        tableBox.setStyle(Theme.card());
+        tableBox.setPadding(new Insets(24));
 
-        Label tableTitle = new Label("Product List");
-        tableTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
+        Label tableTitle = Theme.sectionTitleLabel("Product List");
 
         productTable = new TableView<>();
         productTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -354,7 +346,7 @@ public class InventoryView {
                 } else {
                     setText(item.toString());
                     if (item < 10) {
-                        setStyle("-fx-background-color: #ffebee; -fx-text-fill: #c62828;");
+                        setStyle("-fx-background-color: " + Theme.DANGER_TINT + "; -fx-text-fill: " + Theme.DANGER + ";");
                     } else {
                         setStyle("");
                     }
@@ -381,43 +373,22 @@ public class InventoryView {
             }
         });
 
-        TableColumn<Product, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(260);
+        TableColumn<Product, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button viewQRBtn  = com.pos.components.Ui.actionButton("QR", "#3498db", "Show / print the product QR code");
-            private final Button editBtn    = com.pos.components.Ui.actionButton("Edit", "#f39c12", "Edit product details");
-            private final Button restockBtn = com.pos.components.Ui.actionButton("Restock", "#16a34a", "Add stock for this product");
-            private final Button deleteBtn  = com.pos.components.Ui.actionButton("Delete", "#e74c3c", "Delete this product");
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
 
             {
-                viewQRBtn.setOnAction(e -> {
+                viewBtn.setOnAction(e -> {
                     Product product = getTableView().getItems().get(getIndex());
-                    showQRCode(product);
-                });
-                editBtn.setOnAction(e -> {
-                    Product product = getTableView().getItems().get(getIndex());
-                    showEditProductDialog(product);
-                });
-                restockBtn.setOnAction(e -> {
-                    Product product = getTableView().getItems().get(getIndex());
-                    showRestockDialog(product);
-                });
-                deleteBtn.setOnAction(e -> {
-                    Product product = getTableView().getItems().get(getIndex());
-                    deleteProduct(product);
+                    showProductDetailsDialog(product);
                 });
             }
 
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) {
-                    setGraphic(null);
-                } else {
-                    HBox buttons = new HBox(5, viewQRBtn, editBtn, restockBtn, deleteBtn);
-                    buttons.setAlignment(Pos.CENTER);
-                    setGraphic(buttons);
-                }
+                setGraphic(empty ? null : viewBtn);
             }
         });
 
@@ -449,6 +420,31 @@ public class InventoryView {
     private void showLowStockProducts() {
         ObservableList<Product> lowStock = productService.getLowStockProducts();
         productTable.setItems(lowStock);
+    }
+
+    private void showProductDetailsDialog(Product product) {
+        VBox summary = new VBox(10);
+        summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Category:", product.getCategoryName()),
+            com.pos.components.Ui.detailRow("Barcode:", product.getBarCode()),
+            com.pos.components.Ui.detailRow("Quantity in stock:", String.valueOf(product.getQuantity())
+                + (product.getQuantity() < 10 ? "  (low stock)" : "")),
+            com.pos.components.Ui.detailRow("Units sold:", String.valueOf(product.getNoSold())),
+            com.pos.components.Ui.detailRow("Price:", "R " + String.format("%.2f", product.getPrice()))
+        );
+
+        Button viewQRBtn  = com.pos.components.Ui.actionButton("Show QR", Theme.INFO, "Show / print the product QR code");
+        Button editBtn    = com.pos.components.Ui.actionButton("Edit", Theme.WARNING, "Edit product details");
+        Button restockBtn = com.pos.components.Ui.actionButton("Restock", Theme.SUCCESS, "Add stock for this product");
+        Button deleteBtn  = com.pos.components.Ui.actionButton("Delete", Theme.DANGER, "Delete this product");
+
+        viewQRBtn.setOnAction(e -> showQRCode(product));
+        editBtn.setOnAction(e -> showEditProductDialog(product));
+        restockBtn.setOnAction(e -> showRestockDialog(product));
+        deleteBtn.setOnAction(e -> deleteProduct(product));
+
+        com.pos.components.Ui.showDetailDialog("Product Details", product.getProductName(), summary,
+            viewQRBtn, editBtn, restockBtn, deleteBtn);
     }
 
     private void showQRCode(Product product) {
@@ -652,9 +648,7 @@ public class InventoryView {
         VBox content = new VBox(15);
         content.setPadding(new Insets(20));
 
-        Label title = new Label("📁 Manage Categories");
-        title.setFont(Font.font("System", FontWeight.BOLD, 18));
-        title.setTextFill(Color.web("#0f766e"));
+        Label title = Theme.sectionTitleLabel("Manage Categories");
 
         HBox addRow = new HBox(10);
         addRow.setAlignment(Pos.CENTER_LEFT);
@@ -662,27 +656,25 @@ public class InventoryView {
         TextField newCategoryField = new TextField();
         newCategoryField.setPromptText("New category name...");
         newCategoryField.setPrefWidth(280);
-        newCategoryField.setStyle("-fx-padding: 8; -fx-font-size: 13;");
+        newCategoryField.setStyle(Theme.input());
         HBox.setHgrow(newCategoryField, Priority.ALWAYS);
 
         Button addCategoryBtn = new Button("+ Add");
-        addCategoryBtn.setStyle(
-                "-fx-background-color: #27ae60; -fx-text-fill: white;" +
-                "-fx-font-weight: bold; -fx-padding: 8 18; -fx-background-radius: 6; -fx-cursor: hand;");
+        Theme.hover(addCategoryBtn, Theme.primaryButton(), Theme.primaryHover());
 
         addRow.getChildren().addAll(newCategoryField, addCategoryBtn);
 
         ListView<javafx.util.Pair<Integer, String>> categoryListView = new ListView<>();
         categoryListView.setPrefHeight(300);
-        categoryListView.setStyle("-fx-background-radius: 6; -fx-border-color: #e0e0e0; -fx-border-radius: 6;");
+        categoryListView.setStyle("-fx-background-radius: " + Theme.RADIUS_SM + "px; -fx-border-color: " + Theme.BORDER + "; -fx-border-radius: " + Theme.RADIUS_SM + "px;");
 
         Runnable refreshList = () -> categoryListView.setItems(categoryService.getAllCategoriesWithId());
         refreshList.run();
 
         categoryListView.setCellFactory(lv -> new ListCell<>() {
             private final Label nameLabel = new Label();
-            private final Button editBtn   = new Button("✏️ Edit");
-            private final Button deleteBtn = new Button("🗑️ Delete");
+            private final Button editBtn   = new Button("Edit");
+            private final Button deleteBtn = new Button("Delete");
             private final HBox row = new HBox(10, nameLabel, new Region(), editBtn, deleteBtn);
 
             {
@@ -691,10 +683,10 @@ public class InventoryView {
                 row.setPadding(new Insets(4, 8, 4, 8));
 
                 editBtn.setStyle(
-                        "-fx-background-color: #f39c12; -fx-text-fill: white;" +
+                        "-fx-background-color: " + Theme.WARNING + "; -fx-text-fill: white;" +
                         "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
                 deleteBtn.setStyle(
-                        "-fx-background-color: #e74c3c; -fx-text-fill: white;" +
+                        "-fx-background-color: " + Theme.DANGER + "; -fx-text-fill: white;" +
                         "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
                 nameLabel.setFont(Font.font("System", 13));
 
@@ -758,7 +750,7 @@ public class InventoryView {
                 if (empty || item == null) {
                     setGraphic(null);
                 } else {
-                    nameLabel.setText("📁  " + item.getValue());
+                    nameLabel.setText(item.getValue());
                     setGraphic(row);
                 }
             }
@@ -783,7 +775,7 @@ public class InventoryView {
 
         Label countLabel = new Label();
         countLabel.setFont(Font.font("System", 11));
-        countLabel.setTextFill(Color.web("#7f8c8d"));
+        countLabel.setTextFill(Color.web("#64748b"));
 
         categoryListView.itemsProperty().addListener((obs, o, n) -> {
             int count = n == null ? 0 : n.size();
@@ -803,10 +795,6 @@ public class InventoryView {
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
+        com.pos.components.Ui.showAlert(productTable, title, content, type);
     }
 }

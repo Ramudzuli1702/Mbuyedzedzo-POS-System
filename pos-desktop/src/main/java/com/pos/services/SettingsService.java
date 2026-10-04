@@ -94,8 +94,33 @@ public class SettingsService {
      *  Off by default — with a "Print to PDF" default printer this pops a
      *  save-as dialog on every sale. The Sale Complete dialog has a Print button. */
     public boolean getReceiptAutoPrint() { return Boolean.parseBoolean(getBusinessSetting("receipt.autoPrint", "false")); }
-    public String getReportsSavePath() { return getBusinessSetting("reports.savePath", "reports/"); }
-    public String getBackupSavePath()  { return getBusinessSetting("backup.savePath",  "backups/"); }
+    /**
+     * Receipt column width in characters, matched to the shop's actual
+     * printer roll: 58mm thermal prints about 32 columns, 80mm about 40,
+     * 112mm about 56. Defaults to 40 (80mm) — the width this receipt format
+     * was originally built for.
+     */
+    public int getReceiptColumns() {
+        try {
+            int cols = Integer.parseInt(getBusinessSetting("receipt.columns", "40"));
+            return cols > 0 ? cols : 40;
+        } catch (NumberFormatException e) {
+            return 40;
+        }
+    }
+    /**
+     * Default save locations are an absolute folder on the Desktop, auto-created
+     * on first use — never a relative path, which an installed build resolves
+     * against its own install directory (e.g. Program Files), often not even
+     * writable by a standard user. A path saved in Settings always wins if set.
+     */
+    public String getReportsSavePath() { return getBusinessSetting("reports.savePath", defaultDesktopFolder("Reports")); }
+    public String getBackupSavePath()  { return getBusinessSetting("backup.savePath",  defaultDesktopFolder("Backups")); }
+
+    private static String defaultDesktopFolder(String subfolder) {
+        return System.getProperty("user.home") + File.separator + "Desktop" + File.separator
+                + com.pos.Branding.APP_NAME + File.separator + subfolder + File.separator;
+    }
 
     // ── Local Encrypted Config (Email credentials, paths) ─────────────────────
 
@@ -109,7 +134,7 @@ public class SettingsService {
             String decrypted = decrypt(encrypted);
             props.load(new StringReader(decrypted));
         } catch (Exception e) {
-            System.err.println("⚠️ Could not load local config: " + e.getMessage());
+            System.err.println("Could not load local config: " + e.getMessage());
         }
         return props;
     }
@@ -123,7 +148,7 @@ public class SettingsService {
             Files.writeString(Paths.get(CONFIG_FILE), encrypted);
             return true;
         } catch (Exception e) {
-            System.err.println("❌ Could not save local config: " + e.getMessage());
+            System.err.println("Could not save local config: " + e.getMessage());
             return false;
         }
     }
@@ -160,7 +185,13 @@ public class SettingsService {
      * Creates a full MySQL database backup as a SQL dump file.
      * Saved to the configured backup path with a timestamp filename.
      *
-     * Requires mysqldump to be in the system PATH (installed with MySQL).
+     * mysqldump is NOT reliably on the system PATH after the bundled silent
+     * MySQL install — the official installer's "add to PATH" step frequently
+     * doesn't take effect for a silent/unattended (/qn) install, and even when
+     * it does, already-running processes don't see the updated PATH. So this
+     * looks for mysqldump.exe at its actual install location first, via
+     * {@link #locateMysqlExecutable}, and only falls back to bare PATH
+     * resolution if that search comes up empty.
      */
     public BackupResult createBackup() {
         String backupPath = getBackupSavePath();
@@ -175,7 +206,7 @@ public class SettingsService {
         String filename = backupPath + "pos_backup_" + timestamp + ".sql";
 
         String[] command = {
-            "mysqldump",
+            locateMysqlExecutable("mysqldump"),
             "--host=" + DatabaseConnection.HOST,
             "--port=" + DatabaseConnection.PORT,
             "--user=" + DatabaseConnection.USERNAME,
@@ -204,12 +235,72 @@ public class SettingsService {
             } else {
                 return new BackupResult(false, "mysqldump exited with code " + exitCode, null);
             }
+        } catch (IOException e) {
+            return new BackupResult(false,
+                    "Could not find or run mysqldump (" + e.getMessage() + "). "
+                    + "MySQL may not have added itself to the system PATH — check that "
+                    + "MySQL Server is installed and try again after restarting this PC.", null);
         } catch (Exception e) {
             return new BackupResult(false, "Backup failed: " + e.getMessage(), null);
         }
     }
 
     public record BackupResult(boolean success, String message, String filePath) {}
+
+    /**
+     * Finds a MySQL CLI tool (mysqldump, mysql, ...) at its actual install
+     * location rather than trusting the system PATH, which the silent MySQL
+     * install frequently fails to update (or updates too late for an
+     * already-running process to see). Falls back to the bare command name
+     * — i.e. "trust PATH after all" — if no install location is found, so
+     * this still works for anyone who installed MySQL some other way.
+     */
+    static String locateMysqlExecutable(String exeName) {
+        String programFiles = System.getenv("ProgramFiles");
+        String programFilesX86 = System.getenv("ProgramFiles(x86)");
+
+        java.util.List<String> candidates = new java.util.ArrayList<>();
+        String regLocation = queryMysqlRegistryLocation();
+        if (regLocation != null) candidates.add(regLocation);
+        for (String base : new String[]{programFiles, programFilesX86}) {
+            if (base == null) continue;
+            for (String version : new String[]{"MySQL Server 8.4", "MySQL Server 8.0", "MySQL Server 8.3"}) {
+                candidates.add(base + File.separator + "MySQL" + File.separator + version);
+            }
+        }
+
+        for (String dir : candidates) {
+            File exe = new File(dir, "bin" + File.separator + exeName + ".exe");
+            if (exe.isFile()) return exe.getAbsolutePath();
+        }
+        return exeName; // last resort: rely on PATH
+    }
+
+    /** Reads the install directory MySQL's own installer records in the registry, if present. */
+    private static String queryMysqlRegistryLocation() {
+        for (String version : new String[]{"MySQL Server 8.4", "MySQL Server 8.0", "MySQL Server 8.3"}) {
+        for (String key : new String[]{
+                "HKLM\\SOFTWARE\\MySQL AB\\" + version,
+                "HKLM\\SOFTWARE\\WOW6432Node\\MySQL AB\\" + version}) {
+            try {
+                Process p = new ProcessBuilder("reg", "query", key, "/v", "Location")
+                        .redirectErrorStream(true).start();
+                String output = new String(p.getInputStream().readAllBytes());
+                p.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
+                for (String line : output.split("\\R")) {
+                    int idx = line.indexOf("REG_SZ");
+                    if (idx >= 0) {
+                        String path = line.substring(idx + "REG_SZ".length()).trim();
+                        if (!path.isBlank()) return path;
+                    }
+                }
+            } catch (Exception ignored) {
+                // Tried our best — the candidate-directory search below still runs.
+            }
+        }
+        }
+        return null;
+    }
 
     // ── AES-256 Encryption ─────────────────────────────────────────────────────
 

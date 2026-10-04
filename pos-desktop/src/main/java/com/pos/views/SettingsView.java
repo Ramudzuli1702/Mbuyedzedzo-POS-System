@@ -80,16 +80,16 @@ public class SettingsView {
         HBox bar = new HBox();
         bar.setPadding(new Insets(20));
         bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        bar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("⚙️ Settings");
+        Label title = new Label("Settings");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
         if (!currentUser.hasFullAccess()) {
             Label note = new Label("  View only — contact a manager to change settings");
             note.setFont(Font.font("System", 12));
-            note.setTextFill(Color.web("#e67e22"));
+            note.setTextFill(Color.web("#d97706"));
             bar.getChildren().addAll(title, note);
         } else {
             bar.getChildren().add(title);
@@ -102,10 +102,10 @@ public class SettingsView {
     private VBox buildBusinessProfileCard() {
         VBox card = card();
 
-        Label heading = cardHeading("🏢  Business Profile");
+        Label heading = cardHeading("Business Profile");
         Label sub = new Label("Appears on all receipts and reports.");
         sub.setFont(Font.font("System", 12));
-        sub.setTextFill(Color.web("#7f8c8d"));
+        sub.setTextFill(Color.web("#64748b"));
 
         GridPane grid = new GridPane();
         grid.setHgap(16);
@@ -119,6 +119,21 @@ public class SettingsView {
         TextField websiteField = field(settings.getBusinessWebsite());
         TextArea  footerField  = textArea(settings.getReceiptFooter(), 2);
 
+        ComboBox<String> receiptSizeCombo = new ComboBox<>();
+        receiptSizeCombo.getItems().addAll(
+            "58mm thermal (32 columns)",
+            "80mm thermal (40 columns)",
+            "112mm thermal (56 columns)"
+        );
+        receiptSizeCombo.setStyle(fieldStyle());
+        receiptSizeCombo.setMaxWidth(Double.MAX_VALUE);
+        int currentCols = settings.getReceiptColumns();
+        receiptSizeCombo.setValue(switch (currentCols) {
+            case 32 -> "58mm thermal (32 columns)";
+            case 56 -> "112mm thermal (56 columns)";
+            default -> "80mm thermal (40 columns)";
+        });
+
         addRow(grid, 0, "Business Name *", nameField);
         addRow(grid, 1, "Address",         addrField);
         addRow(grid, 2, "Phone",           phoneField);
@@ -126,6 +141,7 @@ public class SettingsView {
         addRow(grid, 4, "VAT Number",      vatField);
         addRow(grid, 5, "Website",         websiteField);
         addRow(grid, 6, "Receipt Footer",  footerField);
+        addRow(grid, 7, "Receipt Printer Size", receiptSizeCombo);
 
         Label status = statusLabel();
 
@@ -143,6 +159,12 @@ public class SettingsView {
             settings.saveBusinessSetting("business.vatNo",   vatField.getText().trim());
             settings.saveBusinessSetting("business.website", websiteField.getText().trim());
             settings.saveBusinessSetting("receipt.footer",   footerField.getText().trim());
+            int cols = switch (receiptSizeCombo.getValue()) {
+                case "58mm thermal (32 columns)"  -> 32;
+                case "112mm thermal (56 columns)" -> 56;
+                default -> 40;
+            };
+            settings.saveBusinessSetting("receipt.columns", String.valueOf(cols));
             status("Business profile saved.", status, true);
         });
 
@@ -160,10 +182,10 @@ public class SettingsView {
     private VBox buildFilePathsCard() {
         VBox card = card();
 
-        Label heading = cardHeading("📁  File Save Locations");
+        Label heading = cardHeading("File Save Locations");
         Label sub = new Label("Where receipts, reports, and backups are saved on this machine.");
         sub.setFont(Font.font("System", 12));
-        sub.setTextFill(Color.web("#7f8c8d"));
+        sub.setTextFill(Color.web("#64748b"));
         sub.setWrapText(true);
 
         GridPane grid = new GridPane();
@@ -198,14 +220,14 @@ public class SettingsView {
     private VBox buildEmailCard() {
         VBox card = card();
 
-        Label heading = cardHeading("✉️  Email (SMTP) Configuration");
+        Label heading = cardHeading("Email (SMTP) Configuration");
         Label sub = new Label(
             "Credentials are stored encrypted on this machine only.\n" +
             "Gmail recommended — use an App Password, not your account password.\n" +
             "Get one at: myaccount.google.com → Security → App passwords"
         );
         sub.setFont(Font.font("System", 12));
-        sub.setTextFill(Color.web("#7f8c8d"));
+        sub.setTextFill(Color.web("#64748b"));
         sub.setWrapText(true);
 
         GridPane grid = new GridPane();
@@ -227,7 +249,7 @@ public class SettingsView {
             "ℹ️  App Password: 16 chars, no spaces (e.g. abcdefghijklmnop)"
         );
         hint.setFont(Font.font("System", 11));
-        hint.setTextFill(Color.web("#2980b9"));
+        hint.setTextFill(Color.web("#1d4ed8"));
         hint.setWrapText(true);
 
         Label status = statusLabel();
@@ -243,10 +265,10 @@ public class SettingsView {
             status("Email settings saved (encrypted).", status, true);
         });
 
-        Button testBtn = new Button("📤  Send Test Email");
+        Button testBtn = new Button("Send Test Email");
         testBtn.setMaxWidth(Double.MAX_VALUE);
         testBtn.setStyle(
-            "-fx-background-color: #3498db; -fx-text-fill: white;" +
+            "-fx-background-color: #2563eb; -fx-text-fill: white;" +
             "-fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;"
         );
         testBtn.setOnAction(e -> {
@@ -277,13 +299,13 @@ public class SettingsView {
     private VBox buildBackupCard() {
         VBox card = card();
 
-        Label heading = cardHeading("💾  Database Backup");
+        Label heading = cardHeading("Database Backup");
 
         VBox infoBox = new VBox(8,
-            infoLine("📦", "Creates a full SQL dump of all data"),
-            infoLine("📂", "Saved to: " + settings.getBackupSavePath()),
-            infoLine("🔒", "Includes all transactions, customers, products, and settings"),
-            infoLine("⚠️",  "Requires mysqldump installed (comes with MySQL)")
+            infoLine("Creates a full SQL dump of all data"),
+            infoLine("Saved to: " + settings.getBackupSavePath()),
+            infoLine("Includes all transactions, customers, products, and settings"),
+            infoLine("Requires mysqldump installed (comes with MySQL)")
         );
 
         Label status = statusLabel();
@@ -292,7 +314,7 @@ public class SettingsView {
         spinner.setMaxSize(26, 26);
         spinner.setVisible(false);
 
-        Button backupBtn = new Button("💾  Create Backup Now");
+        Button backupBtn = new Button("Create Backup Now");
         backupBtn.setMaxWidth(Double.MAX_VALUE);
         backupBtn.setStyle(
             "-fx-background-color: #0f766e; -fx-text-fill: white;" +
@@ -319,9 +341,9 @@ public class SettingsView {
                     backupBtn.setDisable(false);
                     spinner.setVisible(false);
                     if (result.success()) {
-                        status("✅ " + result.message(), status, true);
+                        status("" + result.message(), status, true);
                     } else {
-                        status("❌ " + result.message(), status, false);
+                        status("" + result.message(), status, false);
                     }
                 });
             }, "DB-Backup").start();
@@ -330,16 +352,16 @@ public class SettingsView {
         // Recent backups list
         Label historyHeading = new Label("Recent Backups");
         historyHeading.setFont(Font.font("System", FontWeight.BOLD, 13));
-        historyHeading.setTextFill(Color.web("#34495e"));
+        historyHeading.setTextFill(Color.web("#1e293b"));
 
         ListView<String> historyList = new ListView<>();
         historyList.setPrefHeight(180);
         historyList.setStyle("-fx-background-radius: 6; -fx-border-color: #e0e0e0; -fx-border-radius: 6;");
         refreshBackupHistory(historyList);
 
-        Button refreshBtn = new Button("🔄  Refresh");
+        Button refreshBtn = new Button("Refresh");
         refreshBtn.setStyle(
-            "-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50;" +
+            "-fx-background-color: #f1f5f9; -fx-text-fill: #1e293b;" +
             "-fx-padding: 7 14; -fx-background-radius: 6; -fx-cursor: hand;"
         );
         refreshBtn.setOnAction(e -> refreshBackupHistory(historyList));
@@ -364,8 +386,8 @@ public class SettingsView {
         Label heading = cardHeading("Diagnostics");
 
         VBox infoBox = new VBox(8,
-            infoLine("📄", "Errors and activity are written to a rolling log file"),
-            infoLine("📂", "Folder: " + com.pos.utils.LogSetup.logDir())
+            infoLine("Errors and activity are written to a rolling log file"),
+            infoLine("Folder: " + com.pos.utils.LogSetup.logDir())
         );
 
         Button openLogs = new Button("Open Logs Folder");
@@ -407,8 +429,8 @@ public class SettingsView {
         VBox card = new VBox(14);
         card.setPadding(new Insets(20));
         card.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 10, 0, 0, 2);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
         return card;
     }
@@ -444,7 +466,7 @@ public class SettingsView {
     private void addRow(GridPane grid, int row, String label, javafx.scene.Node field) {
         Label lbl = new Label(label + ":");
         lbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
-        lbl.setTextFill(Color.web("#34495e"));
+        lbl.setTextFill(Color.web("#1e293b"));
         lbl.setMinWidth(120);
         GridPane.setHgrow(field, Priority.ALWAYS);
         grid.add(lbl, 0, row);
@@ -454,11 +476,11 @@ public class SettingsView {
     private void addRowWithBrowse(GridPane grid, int row, String label, TextField field) {
         Label lbl = new Label(label + ":");
         lbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
-        lbl.setTextFill(Color.web("#34495e"));
+        lbl.setTextFill(Color.web("#1e293b"));
         lbl.setMinWidth(120);
 
         Button browse = new Button("Browse…");
-        browse.setStyle("-fx-background-color: #ecf0f1; -fx-padding: 8 12; -fx-cursor: hand;");
+        browse.setStyle("-fx-background-color: #f1f5f9; -fx-padding: 8 12; -fx-cursor: hand;");
         browse.setOnAction(e -> {
             DirectoryChooser chooser = new DirectoryChooser();
             chooser.setTitle("Select " + label);
@@ -476,13 +498,14 @@ public class SettingsView {
         grid.add(row1, 1, row);
     }
 
-    private HBox infoLine(String icon, String text) {
-        Label i = new Label(icon);
-        i.setFont(Font.font(13));
+    private HBox infoLine(String text) {
+        javafx.scene.Node bullet = com.pos.utils.Icons.tinted(com.pos.utils.Icons.dot(6), "#94a3b8");
         Label t = new Label(text);
         t.setFont(Font.font("System", 12));
-        t.setTextFill(Color.web("#34495e"));
-        return new HBox(10, i, t);
+        t.setTextFill(Color.web("#1e293b"));
+        HBox row = new HBox(10, bullet, t);
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
     }
 
     private Label statusLabel() {
@@ -494,11 +517,11 @@ public class SettingsView {
 
     private void status(String msg, Label lbl, boolean success) {
         lbl.setText(msg);
-        lbl.setTextFill(Color.web(success ? "#27ae60" : "#e74c3c"));
+        lbl.setTextFill(Color.web(success ? "#16a34a" : "#dc2626"));
     }
 
     private Button saveButton() {
-        Button btn = new Button("💾  Save Changes");
+        Button btn = new Button("Save Changes");
         btn.setStyle(
             "-fx-background-color: #0f766e; -fx-text-fill: white;" +
             "-fx-font-weight: bold; -fx-padding: 10 24;" +

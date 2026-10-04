@@ -67,7 +67,7 @@ public class WiFiHandler {
                 serverSocket = new ServerSocket(tryPort);
                 actualPort = tryPort;
 
-                System.out.println("✅ WiFi Server started on " + localIP + ":" + tryPort);
+                System.out.println("WiFi Server started on " + localIP + ":" + tryPort);
                 System.out.println("📱 Enter this IP in the Android app to connect: " + localIP + ":" + tryPort);
                 System.out.println("🔍 Use 'netstat -an | grep " + tryPort + "' to verify listening");
 
@@ -83,10 +83,10 @@ public class WiFiHandler {
 
             } catch (IOException e) {
                 if (e.getMessage().contains("Address already in use")) {
-                    System.err.println("⚠️ Port " + tryPort + " in use, trying next...");
+                    System.err.println("Port " + tryPort + " in use, trying next...");
                     continue;
                 } else {
-                    System.err.println("❌ Failed to start WiFi server: " + e.getMessage());
+                    System.err.println("Failed to start WiFi server: " + e.getMessage());
                     e.printStackTrace();
                     return false;
                 }
@@ -94,7 +94,7 @@ public class WiFiHandler {
         }
 
         if (!started) {
-            System.err.println("❌ Failed to find available port after " + MAX_PORT_TRIES + " tries");
+            System.err.println("Failed to find available port after " + MAX_PORT_TRIES + " tries");
             System.err.println("💡 Try closing other applications using ports " + BASE_PORT + " to "
                     + (BASE_PORT + MAX_PORT_TRIES - 1));
             return false;
@@ -123,7 +123,7 @@ public class WiFiHandler {
                 clientSocket = serverSocket.accept();
                 String clientIP = clientSocket.getInetAddress().getHostAddress();
 
-                System.out.println("✅ Android device connected: " + clientIP + " on port " + actualPort);
+                System.out.println("Android device connected: " + clientIP + " on port " + actualPort);
                 System.out.println("🔌 Setting up streams...");
 
                 // Setup streams
@@ -147,7 +147,7 @@ public class WiFiHandler {
 
             } catch (IOException e) {
                 if (isRunning.get()) {
-                    System.err.println("❌ Connection error on port " + actualPort + ": " + e.getMessage());
+                    System.err.println("Connection error on port " + actualPort + ": " + e.getMessage());
                     e.printStackTrace();
                 }
             }
@@ -187,7 +187,7 @@ public class WiFiHandler {
 
             System.out.println("📂 Sent " + categories.size() + " categories to Android app");
         } catch (Exception e) {
-            System.err.println("❌ Failed to send categories: " + e.getMessage());
+            System.err.println("Failed to send categories: " + e.getMessage());
             // Send error response
             JsonObject errorJson = new JsonObject();
             errorJson.addProperty("type", "error");
@@ -257,12 +257,12 @@ public class WiFiHandler {
                             JsonObject innerJson = jsonArray.get(0).getAsJsonObject();
                             jsonToProcess = gson.toJson(innerJson);
                             isComplete = true;
-                            System.out.println("✅ Extracted inner JSON: " + jsonToProcess);
+                            System.out.println("Extracted inner JSON: " + jsonToProcess);
                         } else {
-                            System.err.println("⚠️ Empty JSON array");
+                            System.err.println("Empty JSON array");
                         }
                     } catch (Exception arrayEx) {
-                        System.err.println("❌ Failed to parse array: " + arrayEx.getMessage());
+                        System.err.println("Failed to parse array: " + arrayEx.getMessage());
                     }
                 }
 
@@ -272,19 +272,19 @@ public class WiFiHandler {
                         JsonObject json = gson.fromJson(jsonToProcess, JsonObject.class);
 
                         if (json == null) {
-                            System.err.println("❌ JSON parsing returned NULL");
+                            System.err.println("JSON parsing returned NULL");
                         } else if (!json.has("type")) {
-                            System.err.println("❌ JSON has no 'type' field");
+                            System.err.println("JSON has no 'type' field");
                             System.err.println("JSON keys: " + json.keySet().toString());
                         } else {
                             String type = json.get("type").getAsString();
-                            System.out.println("✅ JSON PARSED SUCCESSFULLY");
+                            System.out.println("JSON PARSED SUCCESSFULLY");
                             System.out.println("Type: [" + type + "]");
 
                             processReceivedData(json);
                         }
                     } catch (Exception jsonEx) {
-                        System.err.println("❌ JSON PARSE EXCEPTION: " + jsonEx.getClass().getName());
+                        System.err.println("JSON PARSE EXCEPTION: " + jsonEx.getClass().getName());
                         System.err.println("Exception message: " + jsonEx.getMessage());
                         System.err.println("JSON to process: " + jsonToProcess);
                         jsonEx.printStackTrace();
@@ -293,7 +293,7 @@ public class WiFiHandler {
                     messageBuilder.setLength(0);
                 } else {
                     System.out.println(
-                            "⚠️ NOT COMPLETE JSON - Accumulating in buffer (size: " + trimmedBuffer.length() + ")");
+                            "NOT COMPLETE JSON - Accumulating in buffer (size: " + trimmedBuffer.length() + ")");
                     System.out.println(
                             "Buffer preview: " + trimmedBuffer.substring(0, Math.min(200, trimmedBuffer.length())));
                 }
@@ -302,11 +302,11 @@ public class WiFiHandler {
                 System.out.println("");
             }
 
-            System.out.println("❌ Read loop ended (connection closed or null line)");
+            System.out.println("Read loop ended (connection closed or null line)");
 
         } catch (IOException e) {
             if (isConnected.get()) {
-                System.err.println("❌ IOException in handleClient: " + e.getMessage());
+                System.err.println("IOException in handleClient: " + e.getMessage());
                 e.printStackTrace();
             }
         } finally {
@@ -323,7 +323,7 @@ public class WiFiHandler {
     private void processReceivedData(JsonObject json) {
         try {
             if (json == null || !json.has("type")) {
-                System.err.println("⚠️ Invalid JSON received");
+                System.err.println("Invalid JSON received");
                 return;
             }
 
@@ -346,12 +346,12 @@ public class WiFiHandler {
                     break;
 
                 default:
-                    System.out.println("⚠️ Unknown message type: " + type);
+                    System.out.println("Unknown message type: " + type);
                     System.out.println("Full JSON: " + gson.toJson(json));
             }
 
         } catch (Exception e) {
-            System.err.println("❌ Error processing data: " + e.getMessage());
+            System.err.println("Error processing data: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -361,7 +361,7 @@ public class WiFiHandler {
      */
     private void handleScan(JsonObject json) {
         if (!json.has("data")) {
-            System.err.println("⚠️ Scan data missing");
+            System.err.println("Scan data missing");
             return;
         }
 
@@ -381,7 +381,7 @@ public class WiFiHandler {
      */
     private void handleAddProduct(JsonObject json) {
         if (!json.has("data")) {
-            System.err.println("⚠️ Product data missing");
+            System.err.println("Product data missing");
             sendData("{\"type\":\"error\",\"message\":\"Product data missing\"}");
             return;
         }
@@ -432,12 +432,12 @@ public class WiFiHandler {
                 // Send success response
                 sendData("{\"type\":\"product_ack\",\"message\":\"Product received and added to inventory\"}");
             } else {
-                System.err.println("⚠️ No product handler registered");
+                System.err.println("No product handler registered");
                 sendData("{\"type\":\"error\",\"message\":\"No product handler available\"}");
             }
 
         } catch (Exception e) {
-            System.err.println("❌ Error processing product: " + e.getMessage());
+            System.err.println("Error processing product: " + e.getMessage());
             e.printStackTrace();
             sendData("{\"type\":\"error\",\"message\":\"Failed to process product: " + e.getMessage() + "\"}");
         }
@@ -455,7 +455,7 @@ public class WiFiHandler {
      */
     public void sendData(String data) {
         if (!isConnected.get() || output == null) {
-            System.err.println("❌ Not connected - cannot send data");
+            System.err.println("Not connected - cannot send data");
             return;
         }
 
@@ -465,7 +465,7 @@ public class WiFiHandler {
             System.out.println("📤 Sent to Android (" + data.length() + " bytes): "
                     + data.substring(0, Math.min(100, data.length())) + (data.length() > 100 ? "..." : ""));
         } catch (Exception e) {
-            System.err.println("❌ Failed to send data: " + e.getMessage());
+            System.err.println("Failed to send data: " + e.getMessage());
             e.printStackTrace();
             closeConnection();
         }
@@ -544,7 +544,7 @@ public class WiFiHandler {
                 serverSocket.close();
             }
         } catch (IOException e) {
-            System.err.println("⚠️ Failed to close server socket: " + e.getMessage());
+            System.err.println("Failed to close server socket: " + e.getMessage());
         }
 
         // Reset state
@@ -590,7 +590,7 @@ public class WiFiHandler {
      */
     public void setProductCallback(Consumer<Product> onProductReceived) {
         this.onProductReceived = onProductReceived;
-        System.out.println("✅ Product callback registered: " + (onProductReceived != null ? "SET" : "CLEARED"));
+        System.out.println("Product callback registered: " + (onProductReceived != null ? "SET" : "CLEARED"));
     }
 
     /**
@@ -598,7 +598,7 @@ public class WiFiHandler {
      */
     public void setScanCallback(Consumer<String> onScanReceived) {
         this.onScanReceived = onScanReceived;
-        System.out.println("✅ Scan callback registered: " + (onScanReceived != null ? "SET" : "CLEARED"));
+        System.out.println("Scan callback registered: " + (onScanReceived != null ? "SET" : "CLEARED"));
     }
 
     /**

@@ -1038,9 +1038,10 @@ public class ReportService {
             buildExcelPromoSheet        (wb.createSheet("Promotions"),         start, end);
             buildExcelMarketingSheet    (wb.createSheet("Marketing"),          start, end);
 
-            File dir = new File("reports");
+            String reportsPath = new com.pos.services.SettingsService().getReportsSavePath();
+            File dir = new File(reportsPath);
             if (!dir.exists()) dir.mkdirs();
-            try (FileOutputStream fos = new FileOutputStream("reports/" + fileName + ".xlsx")) {
+            try (FileOutputStream fos = new FileOutputStream(new File(dir, fileName + ".xlsx"))) {
                 wb.write(fos);
                 return true;
             }

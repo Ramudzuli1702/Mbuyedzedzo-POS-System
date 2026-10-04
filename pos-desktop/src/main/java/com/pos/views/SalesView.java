@@ -14,7 +14,9 @@ import com.pos.services.CommunicationsService.CommPreferences;
 import com.pos.services.TransactionService.PaymentInfo;
 import com.pos.services.UserService;
 import com.pos.dialogs.CommunicationsDialog;
+import com.pos.utils.BarcodeScannerSupport;
 import com.pos.utils.ReceiptGenerator;
+import com.pos.utils.Theme;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -142,23 +144,25 @@ public class SalesView {
             if (searchField != null) {
                 searchField.clear();
                 handleProductSearch();
+                searchField.requestFocus();
             }
         } else {
             showAlert("Product not found", "No product with barcode: " + cleanQuery, Alert.AlertType.WARNING);
             if (searchField != null) {
                 searchField.clear();
                 handleProductSearch();
+                searchField.requestFocus();
             }
         }
     }
 
     public BorderPane getView() {
         BorderPane layout = new BorderPane();
-        layout.setStyle("-fx-background-color: #f5f7fa;");
+        layout.setStyle(Theme.page());
         layout.setTop(createTopBar());
 
-        HBox mainContent = new HBox(20);
-        mainContent.setPadding(new Insets(20));
+        HBox mainContent = new HBox(24);
+        mainContent.setPadding(new Insets(24));
 
         VBox leftPanel = createLeftPanel();
         VBox rightPanel = createRightPanel();
@@ -170,6 +174,20 @@ public class SalesView {
         layout.setCenter(mainContent);
 
         applyZoom(); // all controls exist now — apply the remembered zoom level
+
+        // Hardware USB barcode scanners act as keyboard-wedge devices: once the
+        // scene exists, a scan is recognised anywhere, not just while searchField
+        // happens to have focus. Reuses the same lookup/add-to-cart path as the
+        // mobile WiFi scanner bridge.
+        layout.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene != null) {
+                BarcodeScannerSupport.attach(newScene, this::addProductToCart);
+            }
+        });
+        if (searchField != null) {
+            Platform.runLater(() -> searchField.requestFocus());
+        }
+
         return layout;
     }
 
@@ -182,13 +200,11 @@ public class SalesView {
 
     private HBox createTopBar() {
         HBox topBar = new HBox(20);
-        topBar.setPadding(new Insets(20));
+        topBar.setPadding(new Insets(18, 24, 18, 24));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        topBar.setStyle(Theme.topBar());
 
-        Label title = new Label("Sales Terminal");
-        title.setFont(Font.font("System", FontWeight.BOLD, 24));
-        title.setTextFill(Color.web("#0f766e"));
+        Label title = Theme.pageTitleLabel("Sales Terminal");
 
         sessionStatusLabel = new Label();
         updateSessionStatus();
@@ -197,15 +213,11 @@ public class SalesView {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         activeCashierLabel = new Label("Cashier: " + activeCashier.getFullNames());
-        activeCashierLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        activeCashierLabel.setTextFill(Color.web("#0f766e"));
-        activeCashierLabel.setStyle(
-                "-fx-background-color: #e6f4f2; -fx-padding: 6 12; -fx-background-radius: 20;");
+        activeCashierLabel.setFont(Theme.label());
+        activeCashierLabel.setStyle(Theme.chip(Theme.BRAND_TINT, Theme.BRAND_DARK));
 
         Button switchCashierBtn = new Button("Switch Cashier");
-        switchCashierBtn.setStyle(
-                "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;"
-                + "-fx-padding: 8 14; -fx-background-radius: 6; -fx-cursor: hand;");
+        Theme.hover(switchCashierBtn, Theme.secondaryButton(), Theme.secondaryHover());
         switchCashierBtn.setOnAction(e -> showCashierSelectDialog());
 
         topBar.getChildren().addAll(
@@ -300,9 +312,7 @@ public class SalesView {
         });
 
         Button newCustomerBtn = new Button("+ New Customer");
-        newCustomerBtn.setStyle(
-                "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;"
-                + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
+        Theme.hover(newCustomerBtn, Theme.primaryButton(), Theme.primaryHover());
         newCustomerBtn.setOnAction(e -> showNewCustomerDialog());
 
         topBar.getChildren().addAll(customerLabel, customerCombo, newCustomerBtn);
@@ -376,7 +386,7 @@ public class SalesView {
 
                     if (user.getStaffID() == activeCashier.getStaffID()) {
                         Label badge = new Label("● Active");
-                        badge.setStyle("-fx-text-fill: #27ae60; -fx-font-size: 11; -fx-font-weight: bold;");
+                        badge.setStyle("-fx-text-fill: #16a34a; -fx-font-size: 11; -fx-font-weight: bold;");
                         Region spacer = new Region();
                         HBox.setHgrow(spacer, Priority.ALWAYS);
                         row.getChildren().addAll(spacer, badge);
@@ -445,11 +455,11 @@ public class SalesView {
     private void updateSessionStatus() {
         SessionService.BusinessSession session = sessionService.getActiveSession();
         if (session != null) {
-            sessionStatusLabel.setText("🟢 Session Active");
-            sessionStatusLabel.setStyle("-fx-text-fill: #27ae60; -fx-font-weight: bold; -fx-font-size: 14;");
+            sessionStatusLabel.setText("Session Active");
+            sessionStatusLabel.setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold; -fx-font-size: 14;");
         } else {
-            sessionStatusLabel.setText("🔴 No Active Session");
-            sessionStatusLabel.setStyle("-fx-text-fill: #e74c3c; -fx-font-weight: bold; -fx-font-size: 14;");
+            sessionStatusLabel.setText("No Active Session");
+            sessionStatusLabel.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold; -fx-font-size: 14;");
         }
     }
 
@@ -516,16 +526,15 @@ public class SalesView {
     }
 
     private VBox createLeftPanel() {
-        VBox panel = new VBox(10);
-        panel.setPadding(new Insets(20));
-        panel.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+        VBox panel = new VBox(14);
+        panel.setPadding(new Insets(24));
+        panel.setStyle(Theme.card());
 
         searchLabel = new Label("Search Product");
 
         searchField = new TextField();
-        searchField.setPromptText("Enter barcode or product name");
+        searchField.setPromptText("Scan a barcode, or type a product name");
+        searchField.setStyle(Theme.input());
         searchField.textProperty().addListener((obs, oldText, newText) -> handleProductSearch());
 
         quickAddLabel = new Label("Quick Add Products");
@@ -557,15 +566,14 @@ public class SalesView {
         Button minus = new Button("A−");
         Button plus  = new Button("A+");
         zoomLabel = new Label();
-        String s = "-fx-background-color: #e6f4f2; -fx-text-fill: #0f766e; -fx-font-weight: bold;"
-                 + "-fx-padding: 6 12; -fx-background-radius: 6; -fx-cursor: hand;";
+        String s = Theme.chip(Theme.BRAND_TINT, Theme.BRAND_DARK) + "-fx-cursor: hand;";
         minus.setStyle(s); plus.setStyle(s);
         minus.setTooltip(new Tooltip("Smaller text"));
         plus.setTooltip(new Tooltip("Larger text"));
         minus.setOnAction(e -> setZoom(zoom - ZOOM_STEP));
         plus.setOnAction(e -> setZoom(zoom + ZOOM_STEP));
-        zoomLabel.setTextFill(Color.web("#0f766e"));
-        zoomLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+        zoomLabel.setTextFill(Color.web(Theme.BRAND_DARK));
+        zoomLabel.setFont(Theme.label());
 
         HBox box = new HBox(6, minus, zoomLabel, plus);
         box.setAlignment(Pos.CENTER);
@@ -582,7 +590,8 @@ public class SalesView {
         if (zoomLabel != null) zoomLabel.setText(Math.round(zoom * 100) + "%");
         if (searchLabel != null)   searchLabel.setFont(Font.font("System", FontWeight.BOLD, 18 * zoom));
         if (quickAddLabel != null) quickAddLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14 * zoom));
-        if (searchField != null)   searchField.setStyle("-fx-font-size: " + (14 * zoom) + "px; -fx-padding: " + (12 * zoom) + "px;");
+        if (searchField != null)   searchField.setStyle(Theme.input()
+                + "-fx-font-size: " + (14 * zoom) + "px; -fx-padding: " + (12 * zoom) + "px;");
         if (cartTable != null)     cartTable.setStyle("-fx-font-size: " + (13 * zoom) + "px;");
         if (totalLabel != null)    totalLabel.setFont(Font.font("System", FontWeight.BOLD, 24 * zoom));
     }
@@ -613,9 +622,12 @@ public class SalesView {
             if (!product.isOutOfStock()) {
                 Button productBtn = new Button(product.getProductName() + "\nR" + product.getPrice());
                 productBtn.setWrapText(true);
-                productBtn.setStyle(
-                        "-fx-background-color: #ecf0f1; -fx-padding: " + (14 * zoom) + "px;"
-                        + "-fx-background-radius: 8; -fx-cursor: hand; -fx-font-size: " + (13 * zoom) + "px;");
+                String base = "-fx-background-color: " + Theme.SURFACE + "; -fx-text-fill: " + Theme.TEXT + ";"
+                        + "-fx-border-color: " + Theme.BORDER + "; -fx-border-width: 1.5px;"
+                        + "-fx-border-radius: " + Theme.RADIUS_SM + "px; -fx-background-radius: " + Theme.RADIUS_SM + "px;"
+                        + "-fx-padding: " + (14 * zoom) + "px; -fx-cursor: hand; -fx-font-size: " + (13 * zoom) + "px;";
+                String hovered = base.replace(Theme.SURFACE, Theme.BRAND_TINT).replace(Theme.BORDER, Theme.BRAND);
+                Theme.hover(productBtn, base, hovered);
                 productBtn.setPrefWidth(120 * zoom);
                 productBtn.setPrefHeight(80 * zoom);
                 productBtn.setOnAction(e -> {
@@ -653,13 +665,10 @@ public class SalesView {
 
     private VBox createRightPanel() {
         VBox panel = new VBox(15);
-        panel.setPadding(new Insets(20));
-        panel.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;"
-                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+        panel.setPadding(new Insets(24));
+        panel.setStyle(Theme.card());
 
-        Label cartLabel = new Label("Shopping Cart");
-        cartLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
+        Label cartLabel = Theme.sectionTitleLabel("Shopping Cart");
 
         cartTable = new TableView<>();
         cartTable.setItems(cartItems);
@@ -720,8 +729,9 @@ public class SalesView {
 
             {
                 removeBtn.setStyle(
-                        "-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;"
-                        + "-fx-font-size: 11; -fx-padding: 4 10; -fx-background-radius: 5; -fx-cursor: hand;");
+                        "-fx-background-color: " + Theme.DANGER_TINT + "; -fx-text-fill: " + Theme.DANGER + ";"
+                        + "-fx-font-weight: bold; -fx-font-size: 11; -fx-padding: 4 10;"
+                        + "-fx-background-radius: 5; -fx-cursor: hand;");
                 removeBtn.setOnAction(e -> removeFromCart(getTableView().getItems().get(getIndex())));
             }
 
@@ -737,28 +747,30 @@ public class SalesView {
 
         Label totalText = new Label("TOTAL:");
         totalText.setFont(Font.font("System", FontWeight.BOLD, 20));
+        totalText.setTextFill(Color.web(Theme.TEXT));
 
         totalLabel = new Label("R 0.00");
         totalLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
-        totalLabel.setTextFill(Color.web("#27ae60"));
+        totalLabel.setTextFill(Color.web(Theme.SUCCESS));
 
         HBox totalBox = new HBox(totalText, new Region(), totalLabel);
         HBox.setHgrow(totalBox.getChildren().get(1), Priority.ALWAYS);
 
         HBox actionBox = new HBox(10);
 
+        String clearBase = Theme.ghostButton() + "-fx-border-color: " + Theme.BORDER_STRONG + "; -fx-border-width: 1.5px;"
+                + "-fx-border-radius: " + Theme.RADIUS_SM + "px; -fx-padding: 11 16;";
+        String clearHover = Theme.ghostHover() + "-fx-border-color: " + Theme.BORDER_STRONG + "; -fx-border-width: 1.5px;"
+                + "-fx-border-radius: " + Theme.RADIUS_SM + "px; -fx-padding: 11 16;";
         Button clearBtn = new Button("Clear Cart");
         clearBtn.setMaxWidth(Double.MAX_VALUE);
-        clearBtn.setStyle(
-                "-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 12; -fx-cursor: hand;");
+        Theme.hover(clearBtn, clearBase, clearHover);
         clearBtn.setOnAction(e -> clearCart());
         HBox.setHgrow(clearBtn, Priority.ALWAYS);
 
         Button checkoutBtn = new Button("Checkout");
         checkoutBtn.setMaxWidth(Double.MAX_VALUE);
-        checkoutBtn.setStyle(
-                "-fx-background-color: #0f766e; -fx-text-fill: white;"
-                + "-fx-font-weight: bold; -fx-padding: 12; -fx-cursor: hand;");
+        Theme.hover(checkoutBtn, Theme.primaryButton() + "-fx-padding: 12 20;", Theme.primaryHover() + "-fx-padding: 12 20;");
         checkoutBtn.setOnAction(e -> processCheckout());
         HBox.setHgrow(checkoutBtn, Priority.ALWAYS);
 
@@ -985,7 +997,7 @@ public class SalesView {
         if (wifiHandler != null && wifiHandler.isConnected())
             savedMsg += "\nAlso sent to the connected scanner device.";
         Label saved = new Label(savedMsg);
-        saved.setTextFill(Color.web(savedFile != null ? "#475569" : "#e74c3c"));
+        saved.setTextFill(Color.web(savedFile != null ? "#475569" : "#dc2626"));
         saved.setWrapText(true);
 
         TextArea receiptArea = new TextArea(receipt);
@@ -1027,7 +1039,7 @@ public class SalesView {
         // ── Running total display (updates when promo applied) ────────────
         Label totalDisplay = new Label("Total Amount: R " + String.format("%.2f", cartTotal));
         totalDisplay.setFont(Font.font("System", FontWeight.BOLD, 18));
-        totalDisplay.setTextFill(Color.web("#27ae60"));
+        totalDisplay.setTextFill(Color.web("#16a34a"));
 
         content.getChildren().add(totalDisplay);
         content.getChildren().add(new Separator());
@@ -1047,12 +1059,12 @@ public class SalesView {
 
         Button applyPromoBtn = new Button("Apply");
         applyPromoBtn.setStyle(
-                "-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-weight: bold;"
+                "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold;"
                 + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
 
         Button clearPromoBtn = new Button("Clear");
         clearPromoBtn.setStyle(
-                "-fx-background-color: #95a5a6; -fx-text-fill: white; -fx-font-weight: bold;"
+                "-fx-background-color: #94a3b8; -fx-text-fill: white; -fx-font-weight: bold;"
                 + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
         clearPromoBtn.setVisible(false);
 
@@ -1064,7 +1076,7 @@ public class SalesView {
 
         Label discountLabel = new Label();
         discountLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
-        discountLabel.setTextFill(Color.web("#27ae60"));
+        discountLabel.setTextFill(Color.web("#16a34a"));
         discountLabel.setVisible(false);
 
         // Local mutable reference for the effective total within this dialog
@@ -1073,8 +1085,8 @@ public class SalesView {
         applyPromoBtn.setOnAction(e -> {
             String code = promoCodeField.getText().trim();
             if (code.isEmpty()) {
-                promoStatusLabel.setText("⚠️ Please enter a promo code.");
-                promoStatusLabel.setTextFill(Color.web("#e67e22"));
+                promoStatusLabel.setText("Please enter a promo code.");
+                promoStatusLabel.setTextFill(Color.web("#d97706"));
                 promoStatusLabel.setVisible(true);
                 return;
             }
@@ -1085,8 +1097,8 @@ public class SalesView {
                 activeDiscount = result.discountAmount();
                 effectiveTotal[0] = cartTotal.subtract(activeDiscount);
 
-                promoStatusLabel.setText("✅ Promo applied: " + code);
-                promoStatusLabel.setTextFill(Color.web("#27ae60"));
+                promoStatusLabel.setText("Promo applied: " + code);
+                promoStatusLabel.setTextFill(Color.web("#16a34a"));
                 promoStatusLabel.setVisible(true);
 
                 discountLabel.setText("Discount: -R" + String.format("%.2f", activeDiscount));
@@ -1102,8 +1114,8 @@ public class SalesView {
                 activeDiscount = BigDecimal.ZERO;
                 effectiveTotal[0] = cartTotal;
 
-                promoStatusLabel.setText("❌ " + result.errorMessage());
-                promoStatusLabel.setTextFill(Color.web("#e74c3c"));
+                promoStatusLabel.setText("" + result.errorMessage());
+                promoStatusLabel.setTextFill(Color.web("#dc2626"));
                 promoStatusLabel.setVisible(true);
 
                 discountLabel.setVisible(false);
@@ -1133,12 +1145,12 @@ public class SalesView {
         methodLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
 
         ToggleGroup paymentGroup = new ToggleGroup();
-        RadioButton cashRadio = new RadioButton("💵 Cash");
+        RadioButton cashRadio = new RadioButton("Cash");
         cashRadio.setToggleGroup(paymentGroup);
         cashRadio.setSelected(true);
         cashRadio.setFont(Font.font("System", 13));
 
-        RadioButton cardRadio = new RadioButton("💳 Card");
+        RadioButton cardRadio = new RadioButton("Card");
         cardRadio.setToggleGroup(paymentGroup);
         cardRadio.setFont(Font.font("System", 13));
 
@@ -1153,7 +1165,7 @@ public class SalesView {
 
         Label changeLabel = new Label("Change: R 0.00");
         changeLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        changeLabel.setTextFill(Color.web("#3498db"));
+        changeLabel.setTextFill(Color.web("#2563eb"));
 
         cashFields.getChildren().addAll(amountLabel, amountField, changeLabel);
         content.getChildren().add(cashFields);
@@ -1164,14 +1176,14 @@ public class SalesView {
                 double change = amount - effectiveTotal[0].doubleValue();
                 if (change >= 0) {
                     changeLabel.setText("Change: R " + String.format("%.2f", change));
-                    changeLabel.setTextFill(Color.web("#27ae60"));
+                    changeLabel.setTextFill(Color.web("#16a34a"));
                 } else {
                     changeLabel.setText("Insufficient: R " + String.format("%.2f", Math.abs(change)));
-                    changeLabel.setTextFill(Color.web("#e74c3c"));
+                    changeLabel.setTextFill(Color.web("#dc2626"));
                 }
             } catch (NumberFormatException e) {
                 changeLabel.setText("Change: R 0.00");
-                changeLabel.setTextFill(Color.web("#3498db"));
+                changeLabel.setTextFill(Color.web("#2563eb"));
             }
         });
 
@@ -1215,11 +1227,7 @@ public class SalesView {
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
+        com.pos.components.Ui.showAlert(cartTable, title, content, type);
     }
 
     public void cleanup() {

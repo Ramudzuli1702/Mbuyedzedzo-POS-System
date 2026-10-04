@@ -115,7 +115,9 @@ public class SetupView {
             promptPanel, errorLabel
         );
 
-        Scene scene = new Scene(root, 1200, 700);
+        Scene scene = new Scene(root); // no explicit size — see LoginView
+        root.prefWidthProperty().bind(scene.widthProperty());
+        root.prefHeightProperty().bind(scene.heightProperty());
         stage.setScene(scene);
         stage.show();
     }
@@ -146,7 +148,7 @@ public class SetupView {
         sub.setAlignment(Pos.CENTER);
 
         // Wrong-password hint (hidden initially)
-        wrongPasswordHint = new Label("⚠  Incorrect password — please try again.");
+        wrongPasswordHint = new Label("  Incorrect password — please try again.");
         wrongPasswordHint.setFont(Font.font("System", 13));
         wrongPasswordHint.setTextFill(Color.web("#fca5a5"));
         wrongPasswordHint.setVisible(false);

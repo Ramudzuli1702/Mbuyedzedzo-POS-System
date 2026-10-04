@@ -84,9 +84,9 @@ public class CustomerView {
         HBox topBar = new HBox(20);
         topBar.setPadding(new Insets(20));
         topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e0e0e0; -fx-border-width: 0 0 1 0;");
+        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
-        Label title = new Label("🛍️ Customer Management");
+        Label title = new Label("Customer Management");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -94,7 +94,7 @@ public class CustomerView {
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         searchField = new TextField();
-        searchField.setPromptText("🔍 Search customers...");
+        searchField.setPromptText("Search customers...");
         searchField.setPrefWidth(300);
         searchField.setStyle("-fx-font-size: 13; -fx-padding: 10;");
         searchField.textProperty().addListener((obs, oldVal, newVal) -> searchCustomers(newVal));
@@ -114,8 +114,8 @@ public class CustomerView {
     private VBox createCustomerTable() {
         VBox tableBox = new VBox(15);
         tableBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+                "-fx-background-color: white; -fx-background-radius: 14;" +
+                "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         tableBox.setPadding(new Insets(20));
 
         Label tableTitle = new Label("Customer List");
@@ -156,24 +156,20 @@ public class CustomerView {
             }
         });
 
-        TableColumn<Customer, Void> actionCol = new TableColumn<>("Actions");
-        actionCol.setPrefWidth(210);
+        TableColumn<Customer, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(90);
         actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button viewBtn   = com.pos.components.Ui.actionButton("Open", "#3498db", "View details & purchase history");
-            private final Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#f39c12", "Edit this customer");
-            private final Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#e74c3c", "Deactivate this customer");
+            private final Button viewBtn = com.pos.components.Ui.viewButton();
             {
-                editBtn.setOnAction(e -> showEditCustomerDialog(getTableView().getItems().get(getIndex())));
-                viewBtn.setOnAction(e -> { showCustomerDetails(getTableView().getItems().get(getIndex())); loadCustomers(); });
-                deleteBtn.setOnAction(e -> deleteCustomer(getTableView().getItems().get(getIndex())));
+                viewBtn.setOnAction(e -> {
+                    showCustomerDetails(getTableView().getItems().get(getIndex()));
+                    loadCustomers();
+                });
             }
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                if (empty) { setGraphic(null); return; }
-                HBox buttons = new HBox(6, viewBtn, editBtn, deleteBtn);
-                buttons.setAlignment(Pos.CENTER_LEFT);
-                setGraphic(buttons);
+                setGraphic(empty ? null : viewBtn);
             }
         });
 
@@ -213,9 +209,23 @@ public class CustomerView {
         VBox infoBox = new VBox(10);
         infoBox.setPadding(new Insets(20));
         infoBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 10;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 10, 0, 0, 2);");
+                "-fx-background-color: white; -fx-background-radius: 14;" +
+                "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
         String signupStaff = customerService.getStaffName(customer.getStaffID());
+
+        Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit this customer");
+        Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#dc2626", "Deactivate this customer");
+        editBtn.setOnAction(e -> {
+            stage.close();
+            showEditCustomerDialog(customer);
+            loadCustomers();
+        });
+        deleteBtn.setOnAction(e -> {
+            stage.close();
+            deleteCustomer(customer);
+        });
+        HBox actionBar = new HBox(10, editBtn, deleteBtn);
+
         infoBox.getChildren().addAll(
                 createLabeledField("Customer ID",      String.valueOf(customer.getAccountID())),
                 createLabeledField("Full Name",        customer.getFullNames()),
@@ -226,7 +236,8 @@ public class CustomerView {
                 createLabeledField("Member Since",     customer.getTimeStamp().toLocalDate().toString()),
                 createLabeledField("Total Net Purchases",
                         customerService.getCustomerNetPurchaseQuantity(customer.getAccountID()) + " items"),
-                createMarketingToggleRow(customer));
+                createMarketingToggleRow(customer),
+                actionBar);
         root.setTop(infoBox);
 
         // Purchases table
@@ -276,10 +287,10 @@ public class CustomerView {
         TableColumn<CustomerService.Sale, Void> actionsCol = new TableColumn<>("Actions");
         actionsCol.setPrefWidth(120);
         actionsCol.setCellFactory(param -> new TableCell<>() {
-            private final Button detailsBtn = new Button("📋 Details");
+            private final Button detailsBtn = new Button("Details");
             {
                 detailsBtn.setStyle(
-                        "-fx-background-color: #3498db; -fx-text-fill: white;" +
+                        "-fx-background-color: #2563eb; -fx-text-fill: white;" +
                         "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
                 detailsBtn.setOnAction(e -> {
                     CustomerService.Sale sale = getTableView().getItems().get(getIndex());
@@ -384,9 +395,9 @@ public class CustomerView {
                 box.setAlignment(Pos.CENTER_LEFT);
 
                 if (status.hasExchange()) {
-                    Button exBtn = new Button("🔄 Exchanged");
+                    Button exBtn = new Button("Exchanged");
                     exBtn.setStyle(
-                            "-fx-background-color: #3498db; -fx-text-fill: white;" +
+                            "-fx-background-color: #2563eb; -fx-text-fill: white;" +
                             "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
                     exBtn.setOnAction(e -> showExchangeInfo(status.exchange));
                     box.getChildren().add(exBtn);
@@ -395,7 +406,7 @@ public class CustomerView {
                 if (status.hasReturn()) {
                     Button retBtn = new Button("↩️ Returned");
                     retBtn.setStyle(
-                            "-fx-background-color: #e67e22; -fx-text-fill: white;" +
+                            "-fx-background-color: #d97706; -fx-text-fill: white;" +
                             "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
                     retBtn.setOnAction(e -> showReturnInfo(status.ret));
                     box.getChildren().add(retBtn);
@@ -406,13 +417,13 @@ public class CustomerView {
                 if (!status.hasExchange() && !status.hasReturn()) {
                     Button returnBtn = new Button("↩️ Return");
                     returnBtn.setStyle(
-                            "-fx-background-color: #e67e22; -fx-text-fill: white;" +
+                            "-fx-background-color: #d97706; -fx-text-fill: white;" +
                             "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
                     returnBtn.setDisable(remaining <= 0);
 
-                    Button exchangeBtn = new Button("🔄 Exchange");
+                    Button exchangeBtn = new Button("Exchange");
                     exchangeBtn.setStyle(
-                            "-fx-background-color: #3498db; -fx-text-fill: white;" +
+                            "-fx-background-color: #2563eb; -fx-text-fill: white;" +
                             "-fx-font-size: 10; -fx-padding: 5 10; -fx-cursor: hand;");
                     exchangeBtn.setDisable(remaining <= 0);
 
@@ -437,7 +448,7 @@ public class CustomerView {
         subRoot.getChildren().add(itemsTable);
 
         // ── Print Receipt button ─────────────────────────────────────────
-        Button printBtn = new Button("🖨️ Print Receipt");
+        Button printBtn = new Button("Print Receipt");
         printBtn.setStyle(
                 "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;" +
                 "-fx-padding: 10 24; -fx-background-radius: 6; -fx-cursor: hand; -fx-font-size: 13;");
@@ -678,7 +689,7 @@ public class CustomerView {
         grid.add(reasonArea, 1, 1);
 
         Label noteLabel = new Label("Note: This return requires supervisor approval");
-        noteLabel.setStyle("-fx-text-fill: #f39c12; -fx-font-weight: bold;");
+        noteLabel.setStyle("-fx-text-fill: #d97706; -fx-font-weight: bold;");
         grid.add(noteLabel, 0, 2, 2, 1);
         dialog.getDialogPane().setContent(grid);
 
@@ -753,7 +764,7 @@ public class CustomerView {
         content.setPadding(new Insets(20));
 
         TextField productSearch = new TextField();
-        productSearch.setPromptText("🔍 Search products...");
+        productSearch.setPromptText("Search products...");
         productSearch.setStyle("-fx-font-size: 13; -fx-padding: 8;");
 
         ComboBox<Product> productCombo = new ComboBox<>(eligibleProducts);
@@ -785,15 +796,15 @@ public class CustomerView {
 
         Label topUpLabel = new Label("Top-up Required: R 0.00");
         topUpLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
-        topUpLabel.setTextFill(Color.web("#27ae60"));
+        topUpLabel.setTextFill(Color.web("#16a34a"));
 
         VBox paymentBox = new VBox(10);
         paymentBox.setVisible(false); paymentBox.setManaged(false);
 
         ToggleGroup paymentGroup = new ToggleGroup();
-        RadioButton cashRadio = new RadioButton("💵 Cash");
+        RadioButton cashRadio = new RadioButton("Cash");
         cashRadio.setToggleGroup(paymentGroup); cashRadio.setSelected(true);
-        RadioButton cardRadio = new RadioButton("💳 Card");
+        RadioButton cardRadio = new RadioButton("Card");
         cardRadio.setToggleGroup(paymentGroup);
 
         VBox cashFields = new VBox(10);
@@ -812,23 +823,23 @@ public class CustomerView {
             BigDecimal topUp = newProduct.getPrice().subtract(originalPrice);
             if (topUp.compareTo(BigDecimal.ZERO) > 0) {
                 topUpLabel.setText("Top-up Required: R" + String.format("%.2f", topUp));
-                topUpLabel.setTextFill(Color.web("#e67e22"));
+                topUpLabel.setTextFill(Color.web("#d97706"));
                 paymentBox.setVisible(true); paymentBox.setManaged(true);
                 amountField.textProperty().addListener((o, oldAmt, newAmt) -> {
                     try {
                         double change = Double.parseDouble(newAmt) - topUp.doubleValue();
                         if (change >= 0) {
                             changeLabel.setText("Change: R" + String.format("%.2f", change));
-                            changeLabel.setTextFill(Color.web("#27ae60"));
+                            changeLabel.setTextFill(Color.web("#16a34a"));
                         } else {
                             changeLabel.setText("Insufficient: R" + String.format("%.2f", Math.abs(change)));
-                            changeLabel.setTextFill(Color.web("#e74c3c"));
+                            changeLabel.setTextFill(Color.web("#dc2626"));
                         }
                     } catch (NumberFormatException e) { changeLabel.setText("Change: R 0.00"); }
                 });
             } else {
                 topUpLabel.setText("Top-up Required: R 0.00 (Same Price)");
-                topUpLabel.setTextFill(Color.web("#27ae60"));
+                topUpLabel.setTextFill(Color.web("#16a34a"));
                 paymentBox.setVisible(false); paymentBox.setManaged(false);
             }
         });
@@ -838,7 +849,7 @@ public class CustomerView {
         reasonArea.setPrefRowCount(3);
 
         Label noteLabel = new Label("Note: Exchange requires supervisor approval");
-        noteLabel.setStyle("-fx-text-fill: #f39c12; -fx-font-weight: bold;");
+        noteLabel.setStyle("-fx-text-fill: #d97706; -fx-font-weight: bold;");
 
         content.getChildren().addAll(
                 new Label("Select New Product:"), productSearch, productCombo,
@@ -944,7 +955,7 @@ public class CustomerView {
 
         Label note = new Label();
         note.setFont(Font.font("System", 10));
-        note.setTextFill(Color.web("#7f8c8d"));
+        note.setTextFill(Color.web("#64748b"));
 
         optIn.setOnAction(e -> {
             boolean ok = commService.setMarketingOptIn(
@@ -958,7 +969,7 @@ public class CustomerView {
                 note.setText(optIn.isSelected() ? "Opted in — saved." : "Opted out — saved.");
             } else {
                 optIn.setSelected(!optIn.isSelected());
-                note.setTextFill(Color.web("#e74c3c"));
+                note.setTextFill(Color.web("#dc2626"));
                 note.setText("Could not save the change.");
             }
         });
@@ -972,11 +983,7 @@ public class CustomerView {
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
-        Alert alert = new Alert(type);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(content);
-        alert.showAndWait();
+        com.pos.components.Ui.showAlert(customerTable, title, content, type);
     }
 
     // ── Inner types ───────────────────────────────────────────────────────────

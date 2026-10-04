@@ -44,7 +44,9 @@ public class RegisterView {
         VBox card = buildCard();
         root.setCenter(card);
 
-        Scene scene = new Scene(root, 1200, 700);
+        Scene scene = new Scene(root); // no explicit size — see LoginView
+        root.prefWidthProperty().bind(scene.widthProperty());
+        root.prefHeightProperty().bind(scene.heightProperty());
         stage.setScene(scene);
         stage.show();
     }
@@ -175,7 +177,7 @@ public class RegisterView {
                 ps.executeUpdate();
             }
 
-            System.out.println("✅ Admin account created for: " + email);
+            System.out.println("Admin account created for: " + email);
 
             // ── Go to login ──
             LoginView loginView = new LoginView(stage);

@@ -42,11 +42,11 @@ public class CustomerDetailAdditions {
         VBox box = new VBox(10);
         box.setPadding(new Insets(16));
         box.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 8, 0, 0, 2);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
 
-        Label title = new Label("🔄 Exchange History");
+        Label title = new Label("Exchange History");
         title.setFont(Font.font("System", FontWeight.BOLD, 15));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -69,10 +69,10 @@ public class CustomerDetailAdditions {
                 String sign = diff.compareTo(BigDecimal.ZERO) >= 0 ? "+" : "";
                 setText(sign + "R" + String.format("%.2f", diff));
                 setStyle(diff.compareTo(BigDecimal.ZERO) > 0
-                    ? "-fx-text-fill: #e74c3c; -fx-font-weight: bold;"
+                    ? "-fx-text-fill: #dc2626; -fx-font-weight: bold;"
                     : diff.compareTo(BigDecimal.ZERO) < 0
-                        ? "-fx-text-fill: #27ae60; -fx-font-weight: bold;"
-                        : "-fx-text-fill: #7f8c8d;");
+                        ? "-fx-text-fill: #16a34a; -fx-font-weight: bold;"
+                        : "-fx-text-fill: #64748b;");
             }
         });
 
@@ -142,8 +142,8 @@ public class CustomerDetailAdditions {
         VBox box = new VBox(10);
         box.setPadding(new Insets(16));
         box.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 10;" +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 8, 0, 0, 2);"
+            "-fx-background-color: white; -fx-background-radius: 14;" +
+            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
         );
 
         Label title = new Label("↩️ Return History");

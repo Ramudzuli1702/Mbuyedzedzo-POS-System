@@ -27,5 +27,13 @@ public final class Branding {
     /** Classpath location of the mark-only logo (transparent background). */
     public static final String LOGO_MARK_PATH = "/brand/logo-mark.png";
 
+    /**
+     * The live licensing server every shop's desktop app activates against by
+     * default. {@link com.pos.license.LicenseStore} falls back to this if no
+     * server URL is saved yet; {@code ActivationView} still lets it be
+     * overridden (e.g. to point at a local dev instance) via its Server field.
+     */
+    public static final String LICENSE_SERVER_URL = "https://mbuyedzedzo-licensing.azurewebsites.net";
+
     private Branding() {}
 }
