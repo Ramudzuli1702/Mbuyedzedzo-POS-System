@@ -38,28 +38,16 @@ a { text-decoration: none; }
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     padding: 14px 32px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 .shop-nav .brand {
-    font-weight: 700;
-    font-size: 1.05rem;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    font-weight: 800;
+    font-size: 1.15rem;
+    color: var(--brand);
+    letter-spacing: -0.01em;
 }
-.shop-nav .brand .mark {
-    height: 28px;
-    width: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    overflow: visible;
-}
-/* Compensates the mark's measured visual-weight asymmetry (alpha centroid
-   ~19.3% of its rendered width left of the image's own bounding-box centre)
-   — the same correction BrandAssets.logoMark() applies in the desktop app,
-   scaled to this element's display height. See that class for the measurement. */
-.shop-nav .brand .mark img { position: relative; left: 9px; height: 100%; }
 .shop-nav .nav-links a {
     color: var(--text-muted);
     font-weight: 600;
@@ -171,9 +159,7 @@ a { text-decoration: none; }
 }
 .shop-footer .cols { display: flex; gap: 48px; flex-wrap: wrap; max-width: 1080px; margin: 0 auto 24px; }
 .shop-footer .brand-col { max-width: 320px; }
-.shop-footer .brand-col .brand { font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.shop-footer .brand-col .mark { height: 22px; display: inline-flex; }
-.shop-footer .brand-col .mark img { position: relative; left: 7px; height: 100%; }
+.shop-footer .brand-col .brand { font-weight: 800; color: var(--brand); font-size: 1.05rem; margin-bottom: 10px; }
 .shop-footer .brand-col p { color: var(--text-muted); font-size: .88rem; }
 .shop-footer h6 { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); margin-bottom: 12px; }
 .shop-footer a { color: var(--text-muted); font-size: .9rem; display: block; margin-bottom: 8px; }

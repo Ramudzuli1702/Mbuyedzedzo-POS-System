@@ -12,39 +12,58 @@
         <table class="table align-middle">
             <thead>
             <tr>
-                <th>Requested</th><th>Business</th><th>Contact</th><th>Product</th><th>Type</th><th>Notes</th><th></th>
+                <th>Requested</th><th>Business</th><th>Contact</th><th>Product</th><th>Type</th><th></th>
             </tr>
             </thead>
             <tbody>
             <tr th:each="r : ${items}">
                 <td class="text-muted small" th:text="${#temporals.format(r.requestedAt, 'dd MMM HH:mm')}">date</td>
                 <td th:text="${r.businessName}">Business</td>
-                <td>
-                    <div th:text="${r.contactName}">Name</div>
-                    <div class="text-muted small" th:text="${r.email}">email</div>
-                    <div class="text-muted small" th:if="${r.phone}" th:text="${r.phone}">phone</div>
-                </td>
+                <td th:text="${r.contactName}">Name</td>
                 <td th:text="${r.product}">POS_STANDARD</td>
                 <td th:text="${r.licenseType}">PERPETUAL</td>
-                <td class="text-muted small" th:text="${r.notes} ?: '—'" style="max-width:220px;">notes</td>
-                <td class="text-end" style="min-width:260px;">
-                    <form th:action="@{'/admin/requests/' + ${r.id} + '/approve'}" method="post" class="d-inline-flex align-items-center gap-1">
-                        <input type="number" name="maxMachines" value="1" min="1" max="10" class="form-control form-control-sm" style="width:60px;" title="Machine limit">
-                        <button class="btn btn-sm btn-success">Approve</button>
-                    </form>
-                    <button class="btn btn-sm btn-outline-danger ms-1" type="button"
-                            data-bs-toggle="collapse" th:data-bs-target="'#reject-' + ${r.id}">Reject</button>
-                    <div class="collapse mt-2" th:id="'reject-' + ${r.id}">
-                        <form th:action="@{'/admin/requests/' + ${r.id} + '/reject'}" method="post" class="d-flex gap-1">
-                            <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason (optional)">
-                            <button class="btn btn-sm btn-outline-danger">Confirm</button>
-                        </form>
-                    </div>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-primary" type="button"
+                            data-bs-toggle="modal" th:data-bs-target="'#review-' + ${r.id}">Review</button>
                 </td>
             </tr>
-            <tr th:if="${items.isEmpty()}"><td colspan="7" class="text-muted">No pending license requests.</td></tr>
+            <tr th:if="${items.isEmpty()}"><td colspan="6" class="text-muted">No pending license requests.</td></tr>
             </tbody>
         </table>
+    </div>
+
+    <!-- One modal per request — the full detail + both actions live here instead of crowding the row. -->
+    <div class="modal fade" th:each="r : ${items}" th:id="'review-' + ${r.id}" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" th:text="${r.businessName}">Business</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Contact</dt><dd class="col-sm-8" th:text="${r.contactName}">Name</dd>
+                        <dt class="col-sm-4">Email</dt><dd class="col-sm-8" th:text="${r.email}">email</dd>
+                        <dt class="col-sm-4">Phone</dt><dd class="col-sm-8" th:text="${r.phone} ?: '—'">phone</dd>
+                        <dt class="col-sm-4">Product</dt><dd class="col-sm-8" th:text="${r.product}">POS_STANDARD</dd>
+                        <dt class="col-sm-4">Licence type</dt><dd class="col-sm-8" th:text="${r.licenseType}">PERPETUAL</dd>
+                        <dt class="col-sm-4">Notes</dt><dd class="col-sm-8" th:text="${r.notes} ?: '—'">notes</dd>
+                    </dl>
+                    <hr>
+                    <form th:action="@{'/admin/requests/' + ${r.id} + '/approve'}" method="post" class="d-flex align-items-end gap-2 mb-3">
+                        <div>
+                            <label class="form-label small mb-1">Machine limit</label>
+                            <input type="number" name="maxMachines" value="1" min="1" max="10" class="form-control form-control-sm" style="width:80px;">
+                        </div>
+                        <button class="btn btn-success">Approve &amp; email licence</button>
+                    </form>
+                    <form th:action="@{'/admin/requests/' + ${r.id} + '/reject'}" method="post" class="d-flex gap-2">
+                        <input type="text" name="reason" class="form-control form-control-sm" placeholder="Rejection reason (optional)">
+                        <button class="btn btn-outline-danger text-nowrap">Reject</button>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 </body>
