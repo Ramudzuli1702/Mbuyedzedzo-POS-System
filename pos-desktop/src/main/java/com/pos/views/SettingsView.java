@@ -52,7 +52,6 @@ public class SettingsView {
         leftCol.setMinWidth(420);
         leftCol.getChildren().addAll(
             buildBusinessProfileCard(),
-            buildLicenseCard(),
             buildFilePathsCard()
         );
 
@@ -151,66 +150,10 @@ public class SettingsView {
         return card;
     }
 
-    // ── Licence card ─────────────────────────────────────────────────────────
-
-    private VBox buildLicenseCard() {
-        VBox card = card();
-        Label heading = cardHeading("Licence");
-
-        com.pos.license.LicenseManager mgr = new com.pos.license.LicenseManager();
-        com.pos.license.LicenseManager.Status st = mgr.check();
-        var tok = st.token();
-
-        String stateText = switch (st.state()) {
-            case ACTIVE -> "Active";
-            case GRACE  -> "Active (needs to re-check with the server soon)";
-            case NEEDS_ACTIVATION -> "Not activated";
-        };
-
-        GridPane grid = new GridPane();
-        grid.setHgap(16); grid.setVgap(8);
-        addRow(grid, 0, "Product",  new Label(com.pos.Edition.current().isRetail() ? "Retail POS" : "Standard POS"));
-        addRow(grid, 1, "Status",   new Label(stateText));
-        addRow(grid, 2, "Key",      new Label(tok != null && tok.key != null ? tok.key : "—"));
-        addRow(grid, 3, "Type",     new Label(tok != null && tok.licenseType != null ? tok.licenseType : "—"));
-        addRow(grid, 4, "Expires",  new Label(tok != null && tok.licenseExpiry != null
-                ? tok.licenseExpiry.toString().substring(0, 10) : "never"));
-        addRow(grid, 5, "Server",   new Label(mgr.serverUrl()));
-
-        Label status = statusLabel();
-
-        Button recheck = new Button("Re-check now");
-        recheck.setStyle("-fx-background-color: #ecf0f1; -fx-text-fill: #2c3e50; -fx-font-weight: bold;"
-                + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
-        recheck.setOnAction(e -> {
-            mgr.revalidateInBackground();
-            status("Re-checking with the licensing server in the background…", status, true);
-        });
-
-        Button deactivate = new Button("Deactivate this machine");
-        deactivate.setStyle("-fx-background-color: #e74c3c; -fx-text-fill: white; -fx-font-weight: bold;"
-                + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
-        deactivate.setDisable(!currentUser.hasFullAccess() || tok == null);
-        deactivate.setOnAction(e -> {
-            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                    "Release this licence from this computer? It frees a machine slot, "
-                    + "and this copy will need to be activated again on next launch.",
-                    ButtonType.YES, ButtonType.NO);
-            confirm.showAndWait().ifPresent(r -> {
-                if (r != ButtonType.YES) return;
-                new Thread(() -> {
-                    mgr.deactivateThisMachine();
-                    javafx.application.Platform.runLater(() ->
-                        status("Deactivated. Close and re-open the app to activate again.", status, true));
-                }, "License-Deactivate").start();
-            });
-        });
-
-        HBox actions = new HBox(10, recheck, deactivate);
-
-        card.getChildren().addAll(heading, new Separator(), grid, actions, status);
-        return card;
-    }
+    // Licence/subscription management moved to its own "Subscription" nav
+    // item (SubscriptionView) — a shop owner looks for that under its own
+    // tab, not buried in Settings, and it has room for renewal/plan details
+    // this card didn't.
 
     // ── 2. File Paths card ────────────────────────────────────────────────────
 

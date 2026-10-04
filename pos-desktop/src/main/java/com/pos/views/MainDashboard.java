@@ -35,6 +35,7 @@ public class MainDashboard {
     private Button sessionsBtn;
     private Button approvalsBtn;
     private Button marketingBtn;
+    private Button subscriptionBtn;
     private Button settingsBtn;
     private VBox menuBox;
 
@@ -135,6 +136,12 @@ public class MainDashboard {
             case "marketing" -> {
                 marketingBtn.setStyle(getActiveButtonStyle());
                 MarketingView view = new MarketingView(currentUser);
+                mainLayout.setCenter(view.getView());
+                currentView = view;
+            }
+            case "subscription" -> {
+                subscriptionBtn.setStyle(getActiveButtonStyle());
+                SubscriptionView view = new SubscriptionView(currentUser);
                 mainLayout.setCenter(view.getView());
                 currentView = view;
             }
@@ -244,6 +251,7 @@ public class MainDashboard {
         sessionsBtn  = createMenuButton("🕐  Sessions",        true);
         approvalsBtn = createMenuButton("✅  Approvals",       full);
         marketingBtn = createMenuButton("📣  Marketing",       full);
+        subscriptionBtn = createMenuButton("🔑  Subscription", true);
         settingsBtn  = createMenuButton("⚙️  Settings",        full);
 
         salesBtn.setOnAction(e     -> navigateTo("sales"));
@@ -254,6 +262,7 @@ public class MainDashboard {
         sessionsBtn.setOnAction(e  -> navigateTo("sessions"));
         approvalsBtn.setOnAction(e -> navigateTo("approvals"));
         marketingBtn.setOnAction(e -> navigateTo("marketing"));
+        subscriptionBtn.setOnAction(e -> navigateTo("subscription"));
         settingsBtn.setOnAction(e  -> navigateTo("settings"));
 
         menuBox.getChildren().add(salesBtn);
@@ -264,6 +273,7 @@ public class MainDashboard {
         menuBox.getChildren().add(sessionsBtn);
         menuBox.getChildren().add(approvalsBtn);
         if (com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(marketingBtn);
+        menuBox.getChildren().add(subscriptionBtn);
         menuBox.getChildren().add(settingsBtn);
 
         return menuBox;
@@ -322,7 +332,7 @@ public class MainDashboard {
     private void resetButtonStyles() {
         Button[] buttons = {
             salesBtn, inventoryBtn, userMgmtBtn, customerBtn,
-            reportsBtn, sessionsBtn, approvalsBtn, marketingBtn, settingsBtn
+            reportsBtn, sessionsBtn, approvalsBtn, marketingBtn, subscriptionBtn, settingsBtn
         };
         for (Button b : buttons) {
             if (b != null) b.setStyle(getDefaultButtonStyle());
