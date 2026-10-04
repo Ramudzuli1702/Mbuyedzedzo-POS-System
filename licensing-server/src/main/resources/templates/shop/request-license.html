@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/shop-layout :: page(~{::title}, ~{::main})}">
+<head><title>Request a Licence &middot; Mbuyedzedzo</title></head>
+<body>
+<main>
+    <section class="section" style="max-width: 560px;">
+        <div class="section-eyebrow">Request a licence</div>
+        <h2 th:text="${productName} + (${type.name() == 'SUBSCRIPTION'} ? ' — monthly subscription' : ' — perpetual licence')">Product</h2>
+        <p class="lede mb-4">Tell us about your shop and we'll email your licence key and a login within
+            one business day.</p>
+
+        <div class="panel p-4 p-md-5">
+            <div class="alert alert-danger" th:if="${error}" th:text="${error}"></div>
+
+            <form th:action="@{/request-license}" method="post">
+                <input type="hidden" name="product" th:value="${product}">
+                <input type="hidden" name="type" th:value="${type}">
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Business name</label>
+                    <input type="text" class="form-control" name="businessName" th:value="${businessName}" required maxlength="150">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Your name</label>
+                    <input type="text" class="form-control" name="contactName" th:value="${contactName}" required maxlength="150">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Email address</label>
+                    <input type="email" class="form-control" name="email" th:value="${email}" required maxlength="190">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Phone <span class="text-muted fw-normal">(optional)</span></label>
+                    <input type="tel" class="form-control" name="phone" th:value="${phone}" maxlength="40">
+                </div>
+                <div class="mb-4">
+                    <label class="form-label fw-semibold">Anything we should know? <span class="text-muted fw-normal">(optional)</span></label>
+                    <textarea class="form-control" name="notes" rows="3" maxlength="500" th:text="${notes}"></textarea>
+                </div>
+
+                <button type="submit" class="btn-brand w-100">Send request</button>
+            </form>
+        </div>
+    </section>
+</main>
+</body>
+</html>

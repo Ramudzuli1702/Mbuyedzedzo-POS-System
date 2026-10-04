@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>License requests &middot; Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div><h1>License requests</h1><div class="sub">Pending self-service requests from the storefront</div></div>
+    </div>
+
+    <div class="card">
+        <table class="table align-middle">
+            <thead>
+            <tr>
+                <th>Requested</th><th>Business</th><th>Contact</th><th>Product</th><th>Type</th><th>Notes</th><th></th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="r : ${items}">
+                <td class="text-muted small" th:text="${#temporals.format(r.requestedAt, 'dd MMM HH:mm')}">date</td>
+                <td th:text="${r.businessName}">Business</td>
+                <td>
+                    <div th:text="${r.contactName}">Name</div>
+                    <div class="text-muted small" th:text="${r.email}">email</div>
+                    <div class="text-muted small" th:if="${r.phone}" th:text="${r.phone}">phone</div>
+                </td>
+                <td th:text="${r.product}">POS_STANDARD</td>
+                <td th:text="${r.licenseType}">PERPETUAL</td>
+                <td class="text-muted small" th:text="${r.notes} ?: '—'" style="max-width:220px;">notes</td>
+                <td class="text-end" style="min-width:260px;">
+                    <form th:action="@{'/admin/requests/' + ${r.id} + '/approve'}" method="post" class="d-inline-flex align-items-center gap-1">
+                        <input type="number" name="maxMachines" value="1" min="1" max="10" class="form-control form-control-sm" style="width:60px;" title="Machine limit">
+                        <button class="btn btn-sm btn-success">Approve</button>
+                    </form>
+                    <button class="btn btn-sm btn-outline-danger ms-1" type="button"
+                            data-bs-toggle="collapse" th:data-bs-target="'#reject-' + ${r.id}">Reject</button>
+                    <div class="collapse mt-2" th:id="'reject-' + ${r.id}">
+                        <form th:action="@{'/admin/requests/' + ${r.id} + '/reject'}" method="post" class="d-flex gap-1">
+                            <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason (optional)">
+                            <button class="btn btn-sm btn-outline-danger">Confirm</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            <tr th:if="${items.isEmpty()}"><td colspan="7" class="text-muted">No pending license requests.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</body>
+</html>

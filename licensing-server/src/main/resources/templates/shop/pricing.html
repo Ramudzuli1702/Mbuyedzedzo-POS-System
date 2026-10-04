@@ -22,10 +22,10 @@
                             <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(standardPerpetual, 1, 2)}">R0</div>
                             <div class="text-muted small">once-off, perpetual</div>
                         </div>
-                        <form th:action="@{/buy}" method="get">
+                        <form th:action="@{/request-license}" method="get">
                             <input type="hidden" name="product" value="POS_STANDARD">
                             <input type="hidden" name="type" value="PERPETUAL">
-                            <button class="btn-brand-outline">Buy</button>
+                            <button class="btn-brand-outline">Request Licence</button>
                         </form>
                     </div>
                     <div class="price-row">
@@ -33,10 +33,10 @@
                             <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(standardSubscription, 1, 2)}">R0</div>
                             <div class="text-muted small">per month</div>
                         </div>
-                        <form th:action="@{/buy}" method="get">
+                        <form th:action="@{/request-license}" method="get">
                             <input type="hidden" name="product" value="POS_STANDARD">
                             <input type="hidden" name="type" value="SUBSCRIPTION">
-                            <button class="btn-brand">Subscribe</button>
+                            <button class="btn-brand">Request Subscription</button>
                         </form>
                     </div>
                 </div>
@@ -50,10 +50,10 @@
                             <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(retailPerpetual, 1, 2)}">R0</div>
                             <div class="text-muted small">once-off, perpetual</div>
                         </div>
-                        <form th:action="@{/buy}" method="get">
+                        <form th:action="@{/request-license}" method="get">
                             <input type="hidden" name="product" value="POS_RETAIL">
                             <input type="hidden" name="type" value="PERPETUAL">
-                            <button class="btn-brand-outline">Buy</button>
+                            <button class="btn-brand-outline">Request Licence</button>
                         </form>
                     </div>
                     <div class="price-row">
@@ -61,10 +61,10 @@
                             <div class="price-tag" th:text="'R' + ${#numbers.formatDecimal(retailSubscription, 1, 2)}">R0</div>
                             <div class="text-muted small">per month</div>
                         </div>
-                        <form th:action="@{/buy}" method="get">
+                        <form th:action="@{/request-license}" method="get">
                             <input type="hidden" name="product" value="POS_RETAIL">
                             <input type="hidden" name="type" value="SUBSCRIPTION">
-                            <button class="btn-brand">Subscribe</button>
+                            <button class="btn-brand">Request Subscription</button>
                         </form>
                     </div>
                 </div>
@@ -74,6 +74,10 @@
             Every licence includes free updates, the Android companion-scanner app, and offline activation
             with a 14-day grace period. Not sure which edition fits? A perpetual licence covers one machine —
             <a href="/#story">read more about how it works</a>.
+        </p>
+        <p class="text-center text-muted mt-2 mb-0" style="font-size:.82rem;">
+            Online card payment is being finished — for now, "Request" sends your details to our team and
+            we'll email your licence key and login within one business day.
         </p>
     </section>
 </main>

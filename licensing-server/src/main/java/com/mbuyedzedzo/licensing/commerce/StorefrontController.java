@@ -1,7 +1,9 @@
 package com.mbuyedzedzo.licensing.commerce;
 
+import com.mbuyedzedzo.licensing.domain.LicenseRequest;
 import com.mbuyedzedzo.licensing.domain.LicenseType;
 import com.mbuyedzedzo.licensing.domain.Product;
+import com.mbuyedzedzo.licensing.repo.LicenseRequestRepo;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -13,11 +15,14 @@ public class StorefrontController {
     private final CheckoutService checkout;
     private final PricingService pricing;
     private final AccountService accountService;
+    private final LicenseRequestRepo licenseRequests;
 
-    public StorefrontController(CheckoutService checkout, PricingService pricing, AccountService accountService) {
+    public StorefrontController(CheckoutService checkout, PricingService pricing, AccountService accountService,
+                                 LicenseRequestRepo licenseRequests) {
         this.checkout = checkout;
         this.pricing = pricing;
         this.accountService = accountService;
+        this.licenseRequests = licenseRequests;
     }
 
     @GetMapping("/")
@@ -64,6 +69,65 @@ public class StorefrontController {
             model.addAttribute("error", e.getMessage());
             return "shop/checkout";
         }
+    }
+
+    // ── License request — stands in for the PayFast checkout while that's ──
+    // ── still in testing: a visitor requests a license, an admin reviews   ──
+    // ── it in the portal and approves it (issuing a real key + login) or  ──
+    // ── rejects it. See LicenseRequestAdminService for the approval side. ──
+
+    @GetMapping("/request-license")
+    public String requestLicenseForm(@RequestParam Product product, @RequestParam LicenseType type, Model model) {
+        model.addAttribute("product", product);
+        model.addAttribute("type", type);
+        model.addAttribute("productName", pricing.displayName(product));
+        return "shop/request-license";
+    }
+
+    @PostMapping("/request-license")
+    public String submitLicenseRequest(@RequestParam Product product, @RequestParam LicenseType type,
+                                        @RequestParam String businessName, @RequestParam String contactName,
+                                        @RequestParam String email, @RequestParam(required = false) String phone,
+                                        @RequestParam(required = false) String notes, Model model) {
+        String error = validateRequest(businessName, contactName, email);
+        if (error != null) {
+            model.addAttribute("product", product);
+            model.addAttribute("type", type);
+            model.addAttribute("productName", pricing.displayName(product));
+            model.addAttribute("error", error);
+            model.addAttribute("businessName", businessName);
+            model.addAttribute("contactName", contactName);
+            model.addAttribute("email", email);
+            model.addAttribute("phone", phone);
+            model.addAttribute("notes", notes);
+            return "shop/request-license";
+        }
+
+        LicenseRequest req = new LicenseRequest();
+        req.setBusinessName(businessName.trim());
+        req.setContactName(contactName.trim());
+        req.setEmail(email.trim());
+        req.setPhone(phone == null ? null : phone.trim());
+        req.setNotes(notes == null ? null : notes.trim());
+        req.setProduct(product);
+        req.setLicenseType(type);
+        licenseRequests.save(req);
+
+        return "shop/request-received";
+    }
+
+    private String validateRequest(String businessName, String contactName, String email) {
+        if (businessName == null || businessName.isBlank() || businessName.length() > 150) {
+            return "Please enter your business name (max 150 characters).";
+        }
+        if (contactName == null || contactName.isBlank() || contactName.length() > 150) {
+            return "Please enter your name (max 150 characters).";
+        }
+        if (email == null || email.isBlank() || email.length() > 190
+                || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return "Please enter a valid email address.";
+        }
+        return null;
     }
 
     @GetMapping("/buy/success")
