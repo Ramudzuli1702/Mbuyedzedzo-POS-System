@@ -25,6 +25,11 @@ public class StorefrontController {
         return "shop/home";
     }
 
+    @GetMapping("/download")
+    public String download() {
+        return "shop/download";
+    }
+
     @GetMapping("/pricing")
     public String pricing(Model model) {
         model.addAttribute("standardPerpetual", pricing.priceFor(Product.POS_STANDARD, LicenseType.PERPETUAL));

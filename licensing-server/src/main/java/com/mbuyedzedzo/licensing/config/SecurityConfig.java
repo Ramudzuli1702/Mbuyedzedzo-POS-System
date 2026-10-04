@@ -78,7 +78,7 @@ public class SecurityConfig {
         http.authorizeHttpRequests(a -> a
                 .requestMatchers("/login", "/error", "/css/**", "/js/**", "/img/**",
                         "/favicon.ico", "/actuator/health",
-                        "/", "/pricing", "/buy/**").permitAll()
+                        "/", "/pricing", "/download", "/buy/**").permitAll()
                 .requestMatchers("/admin/agents/**").hasRole("SUPER_ADMIN")
                 .anyRequest().authenticated())
             .authenticationProvider(daoProvider(uds, encoder))
