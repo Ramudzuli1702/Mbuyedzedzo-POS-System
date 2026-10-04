@@ -55,19 +55,47 @@ public class FirstRunSetup {
 
     // ── Paths ──────────────────────────────────────────────────────────────────
 
+    /**
+     * Two bugs were stacked here before: the {@code -Djpackage.app-path=$APPDIR/...}
+     * system property jpackage was supposed to forward never actually resolved at
+     * runtime, so this always fell through to the codeSource fallback — which
+     * itself called {@code URL.getPath()} directly instead of decoding it via
+     * {@code toURI()}, so any space in the install path (e.g. "Program Files")
+     * came through as the literal text "%20" instead of a real space, pointing at
+     * a path that can never exist. On top of that, the fallback looked one
+     * directory up from the running jar — the jpackage "app" folder — but
+     * {@code --app-content} actually installs its payload into a sibling
+     * "app-content" folder at the install root, not inside "app".
+     *
+     * {@link ProcessHandle#current()} gives the real, already-decoded path to the
+     * actual running native launcher — no fragile macro substitution, no URL
+     * decoding to get wrong — so that's the primary lookup now.
+     */
     private static String getMysqlMsiPath() {
-        String appDir = System.getProperty("jpackage.app-path");
-        if (appDir != null) {
-            File msi = new File(new File(appDir).getParentFile(), "mysql-installer.msi");
-            if (msi.exists()) return msi.getAbsolutePath();
+        try {
+            var command = ProcessHandle.current().info().command();
+            if (command.isPresent()) {
+                File exe = new File(command.get());          // .../POS/POS.exe
+                File installRoot = exe.getParentFile();        // .../POS
+                if (installRoot != null) {
+                    File msi = new File(new File(installRoot, "app-content"), "mysql-installer.msi");
+                    if (msi.exists()) return msi.getAbsolutePath();
+                }
+            }
+        } catch (Exception ignored) {
+            // Fall through to the dev-mode lookup below.
         }
-        String jarDir = new File(
-            FirstRunSetup.class.getProtectionDomain()
-                               .getCodeSource()
-                               .getLocation()
-                               .getPath()
-        ).getParent();
-        return jarDir + File.separator + "mysql-installer.msi";
+
+        // Dev mode (mvn javafx:run) — no jpackage install root to speak of;
+        // look next to wherever these classes/this jar actually loaded from,
+        // decoded properly this time (toURI(), not the raw/encoded getPath()).
+        try {
+            File here = new File(FirstRunSetup.class.getProtectionDomain()
+                    .getCodeSource().getLocation().toURI());
+            return new File(here.getParentFile(), "mysql-installer.msi").getAbsolutePath();
+        } catch (Exception e) {
+            return "mysql-installer.msi";
+        }
     }
 
     // ── Public API ─────────────────────────────────────────────────────────────

@@ -395,9 +395,10 @@
 
                                 <!-- ── Extra files bundled inside the installed app dir ── -->
                                 <!--
-                                    FirstRunSetup looks for mysql-installer.msi in the app dir.
-                                    jpackage copies everything under app-content/ to the root
-                                    of the installed application folder.
+                                    jpackage installs the app-content/ folder itself as a sibling
+                                    of the main .exe — i.e. <installdir>/app-content/mysql-installer.msi,
+                                    NOT flattened into the install root and NOT inside the "app"
+                                    subfolder. FirstRunSetup.getMysqlMsiPath() looks there.
                                 -->
                                 <argument>--app-content</argument>
                                 <argument>${project.build.directory}/app-content</argument>
@@ -436,12 +437,12 @@
                                 <argument>--add-opens=javafx.base/com.sun.javafx.reflect=ALL-UNNAMED</argument>
 
                                 <!--
-                                    Pass the app install location to the JVM so
-                                    FirstRunSetup can locate mysql-installer.msi at runtime.
-                                    $APPDIR is a jpackage token expanded to the app's install dir.
+                                    No -Djpackage.app-path/$APPDIR here any more — that macro
+                                    never actually resolved at runtime (FirstRunSetup.getMysqlMsiPath()
+                                    always fell through to its fallback instead), so it was dead
+                                    weight. FirstRunSetup now finds the install directory via
+                                    ProcessHandle.current() instead, which needs no help from here.
                                 -->
-                                <argument>--java-options</argument>
-                                <argument>-Djpackage.app-path=$APPDIR/${pos.exe.name}.exe</argument>
 
                             </arguments>
                         </configuration>
