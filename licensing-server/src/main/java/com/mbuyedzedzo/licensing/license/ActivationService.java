@@ -27,16 +27,18 @@ public class ActivationService {
     private final LicenseKeyGenerator keyGen;
     private final LicenseTokenService tokens;
     private final LicensingProperties props;
+    private final LicenseAdminService licenseAdmin;
 
     public ActivationService(LicenseRepo licenses, ActivationRepo activations, AuditLogRepo audit,
                              LicenseKeyGenerator keyGen, LicenseTokenService tokens,
-                             LicensingProperties props) {
+                             LicensingProperties props, LicenseAdminService licenseAdmin) {
         this.licenses = licenses;
         this.activations = activations;
         this.audit = audit;
         this.keyGen = keyGen;
         this.tokens = tokens;
         this.props = props;
+        this.licenseAdmin = licenseAdmin;
     }
 
     public record Result(LicenseTokenService.Issued token, License license) {}
@@ -164,10 +166,10 @@ public class ActivationService {
             default -> { /* ISSUED / ACTIVE / EXPIRED handled below */ }
         }
         if (license.isExpired()) {
-            if (license.getStatus() != LicenseStatus.EXPIRED) {
-                license.setStatus(LicenseStatus.EXPIRED);
-                licenses.save(license);
-            }
+            // Own transaction (REQUIRES_NEW) — the LicenseException thrown right
+            // after this would otherwise roll back an inline save() here, since
+            // it's an unchecked exception inside this same @Transactional method.
+            licenseAdmin.markExpired(license.getId(), "system");
             throw new LicenseException(Code.EXPIRED, "This licence expired on " + license.getExpiresAt() + ".");
         }
     }

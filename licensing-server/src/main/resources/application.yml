@@ -3,16 +3,20 @@ server:
 
 spring:
   datasource:
-    # Uses your existing MySQL. Create the database once:  CREATE DATABASE mbuyedzedzo_licensing;
-    # Override host/port/user/password with env vars if needed.
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:mbuyedzedzo_licensing}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USER:root}
+    # Azure SQL Database (the Student subscription this runs on blocks MySQL
+    # hosting entirely — see the README). Create the database once, then
+    # Flyway builds the schema on first startup. encrypt=true is required by
+    # Azure SQL; trustServerCertificate stays false since Azure's own cert is
+    # already in a public CA chain, not self-signed.
+    url: jdbc:sqlserver://${DB_HOST:localhost}:${DB_PORT:1433};databaseName=${DB_NAME:mbuyedzedzo_licensing};encrypt=${DB_ENCRYPT:true};trustServerCertificate=${DB_TRUST_CERT:false}
+    username: ${DB_USER:}
     password: ${DB_PASSWORD:}
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
     properties:
+      hibernate.dialect: org.hibernate.dialect.SQLServerDialect
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true

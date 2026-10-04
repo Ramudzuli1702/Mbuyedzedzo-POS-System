@@ -6,6 +6,7 @@ import com.mbuyedzedzo.licensing.repo.AuditLogRepo;
 import com.mbuyedzedzo.licensing.repo.LicenseRepo;
 import com.mbuyedzedzo.licensing.repo.TransferLogRepo;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -57,6 +58,24 @@ public class LicenseAdminService {
         l.setRevokeReason(reason);
         licenses.save(l);
         writeAudit(actor, "REVOKE", l.getLicenseKey(), reason);
+    }
+
+    /**
+     * Marks a license EXPIRED in its own, independent transaction. Used by
+     * ActivationService.assertUsable(), which calls this and then throws an
+     * (unchecked) LicenseException in the SAME method — without
+     * REQUIRES_NEW, Spring's default rollback-on-RuntimeException would undo
+     * this save the moment that exception propagates, silently reverting the
+     * status flip while still correctly blocking the activation itself.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void markExpired(long licenseId, String actor) {
+        License l = licenses.findById(licenseId).orElseThrow();
+        if (l.getStatus() != LicenseStatus.EXPIRED) {
+            l.setStatus(LicenseStatus.EXPIRED);
+            licenses.save(l);
+            writeAudit(actor, "AUTO_EXPIRE", l.getLicenseKey(), "detected on activate/validate");
+        }
     }
 
     @Transactional
