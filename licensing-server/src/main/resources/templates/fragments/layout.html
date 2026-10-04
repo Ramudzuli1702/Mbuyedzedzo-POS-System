@@ -42,6 +42,8 @@
         <div class="nav-section">System</div>
         <a class="nav-link" href="/admin/audit"
            th:classappend="${uri != null and #strings.startsWith(uri, '/admin/audit')} ? ' active'"><i class="bi bi-clock-history"></i> Audit log</a>
+        <a class="nav-link" href="/admin/settings/email" sec:authorize="hasRole('SUPER_ADMIN')"
+           th:classappend="${uri != null and #strings.startsWith(uri, '/admin/settings')} ? ' active'"><i class="bi bi-envelope-at"></i> Email settings</a>
     </nav>
     <div class="sidebar-foot">Mbuyedzedzo Licensing · v1.0</div>
 </aside>

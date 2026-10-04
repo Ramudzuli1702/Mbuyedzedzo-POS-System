@@ -79,7 +79,7 @@ public class SecurityConfig {
                 .requestMatchers("/login", "/error", "/css/**", "/js/**", "/img/**",
                         "/favicon.ico", "/actuator/health",
                         "/", "/pricing", "/download", "/buy/**", "/request-license").permitAll()
-                .requestMatchers("/admin/agents/**").hasRole("SUPER_ADMIN")
+                .requestMatchers("/admin/agents/**", "/admin/settings/**").hasRole("SUPER_ADMIN")
                 .anyRequest().authenticated())
             .authenticationProvider(daoProvider(uds, encoder))
             .formLogin(f -> f

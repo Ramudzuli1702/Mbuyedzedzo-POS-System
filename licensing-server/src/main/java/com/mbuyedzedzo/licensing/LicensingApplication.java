@@ -1,6 +1,5 @@
 package com.mbuyedzedzo.licensing;
 
-import com.mbuyedzedzo.licensing.config.EmailProperties;
 import com.mbuyedzedzo.licensing.config.LicensingProperties;
 import com.mbuyedzedzo.licensing.config.PayFastProperties;
 import com.mbuyedzedzo.licensing.config.PricingProperties;
@@ -10,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
-@EnableConfigurationProperties({LicensingProperties.class, PayFastProperties.class, PricingProperties.class, EmailProperties.class})
+@EnableConfigurationProperties({LicensingProperties.class, PayFastProperties.class, PricingProperties.class})
 @EnableScheduling
 public class LicensingApplication {
 

@@ -1,33 +1,30 @@
 package com.mbuyedzedzo.licensing.commerce;
 
-import com.mbuyedzedzo.licensing.config.EmailProperties;
+import com.mbuyedzedzo.licensing.admin.MailSettingsService;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 /**
- * Delivers the purchased licence key by email. If {@code spring.mail.username}
- * isn't set (the dev default), it logs the email instead of attempting to
- * send — so the purchase flow is fully testable without real SMTP creds.
+ * Delivers the purchased licence key by email. SMTP settings come from the
+ * admin portal (Settings → Email), stored in the database — see
+ * {@link MailSettingsService} — not Azure App Service environment variables.
+ * If nothing's configured yet, it logs the email instead of attempting to
+ * send, so the purchase/request flow is fully testable without real SMTP
+ * credentials.
  */
 @Service
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
-    private final JavaMailSender mailSender;
-    private final EmailProperties props;
+    private final MailSettingsService mailSettings;
 
-    @Value("${spring.mail.username:}")
-    private String mailUsername;
-
-    public EmailService(JavaMailSender mailSender, EmailProperties props) {
-        this.mailSender = mailSender;
-        this.props = props;
+    public EmailService(MailSettingsService mailSettings) {
+        this.mailSettings = mailSettings;
     }
 
     /**
@@ -85,23 +82,43 @@ public class EmailService {
                 </html>
                 """.formatted(productName, safeBuyerName, productName, licenseType, licenseKey, accountBlock);
 
-        if (mailUsername == null || mailUsername.isBlank()) {
-            log.info("[dev mode — no SMTP configured] Would email {} <{}>: {}\n{}",
+        MailSettingsService.Settings settings = mailSettings.current();
+        JavaMailSenderImpl sender = mailSettings.buildSender();
+        if (sender == null) {
+            log.info("[dev mode — no SMTP configured in Settings → Email] Would email {} <{}>: {}\n{}",
                     buyerName, toEmail, subject, "licence key " + licenseKey);
             return;
         }
 
         try {
-            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessage message = sender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "utf-8");
             helper.setTo(toEmail);
-            helper.setFrom(mailUsername, props.fromName());
+            helper.setFrom(settings.username(), settings.fromName() == null || settings.fromName().isBlank()
+                    ? "Mbuyedzedzo Licensing" : settings.fromName());
             helper.setSubject(subject);
             helper.setText(html, true);
-            mailSender.send(message);
+            sender.send(message);
         } catch (Exception e) {
             log.error("Failed to send licence email to {}: {}", toEmail, e.getMessage(), e);
         }
+    }
+
+    /** Used by the "Send test email" button in Settings → Email. */
+    public void sendTestEmail(String toEmail) throws Exception {
+        MailSettingsService.Settings settings = mailSettings.current();
+        JavaMailSenderImpl sender = mailSettings.buildSender();
+        if (sender == null) {
+            throw new IllegalStateException("SMTP isn't configured yet — fill in the fields above and save first.");
+        }
+        MimeMessage message = sender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, "utf-8");
+        helper.setTo(toEmail);
+        helper.setFrom(settings.username(), settings.fromName() == null || settings.fromName().isBlank()
+                ? "Mbuyedzedzo Licensing" : settings.fromName());
+        helper.setSubject("Mbuyedzedzo Licensing — test email");
+        helper.setText("<p>If you're reading this, your SMTP settings are working.</p>", true);
+        sender.send(message);
     }
 
     private static String escapeHtml(String s) {

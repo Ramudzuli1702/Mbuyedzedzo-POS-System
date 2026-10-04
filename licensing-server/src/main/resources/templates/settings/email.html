@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/layout :: page(~{::title}, ~{::section})}">
+<head><title>Email settings &middot; Mbuyedzedzo Licensing</title></head>
+<body>
+<section>
+    <div class="page-header">
+        <div><h1>Email settings</h1>
+            <div class="sub">SMTP account used to send licence keys, account logins and approval emails.
+                Configured here instead of Azure App Service — nothing else needs to change for this to take effect.</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-4" style="max-width: 560px;">
+            <form th:action="@{/admin/settings/email}" method="post">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">SMTP host</label>
+                    <input type="text" class="form-control" name="host" th:value="${settings.host()}"
+                           placeholder="smtp.gmail.com" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Port</label>
+                    <input type="number" class="form-control" name="port" th:value="${settings.port()}" required style="max-width:140px;">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Email address</label>
+                    <input type="email" class="form-control" name="username" th:value="${settings.username()}"
+                           placeholder="you@yourbusiness.com" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">App password</label>
+                    <input type="password" class="form-control" name="password"
+                           th:placeholder="${hasPasswordSet} ? 'Already set — leave blank to keep it' : 'e.g. a Gmail App Password, not your normal password'">
+                    <div class="form-text">
+                        For Gmail: Google Account &rarr; Security &rarr; App passwords (requires 2-Step Verification
+                        to be on). Leave blank when saving other fields to keep the password you already set.
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">From name</label>
+                    <input type="text" class="form-control" name="fromName" th:value="${settings.fromName()}"
+                           placeholder="Mbuyedzedzo Licensing">
+                </div>
+                <div class="form-check mb-4">
+                    <input type="checkbox" class="form-check-input" id="useStartTls" name="useStartTls" value="true"
+                           th:checked="${settings.useStartTls()}">
+                    <label class="form-check-label" for="useStartTls">Use STARTTLS (leave on for Gmail and most providers)</label>
+                </div>
+                <button class="btn btn-success">Save</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-3">
+        <div class="card-body p-4" style="max-width: 560px;">
+            <h6 class="fw-bold mb-2">Send a test email</h6>
+            <p class="text-muted small mb-3">Save your settings above first, then confirm they actually work.</p>
+            <form th:action="@{/admin/settings/email/test}" method="post" class="d-flex gap-2">
+                <input type="email" class="form-control" name="testEmail" placeholder="send to this address" required>
+                <button class="btn btn-outline-secondary text-nowrap">Send test</button>
+            </form>
+        </div>
+    </div>
+</section>
+</body>
+</html>
