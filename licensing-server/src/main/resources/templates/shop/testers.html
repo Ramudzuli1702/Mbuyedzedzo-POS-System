@@ -71,6 +71,12 @@
         // ── Download as PDF: the same paginated, clause-numbered testing
         // guide document (with the real logo) this page's content mirrors,
         // not a browser print of this page's own card layout.
+        //
+        // The logo is fetched once up front (not inside the click handler) so
+        // the whole PDF builds synchronously on click — triggering doc.save()
+        // from inside an async .then() detaches it from the click's user
+        // gesture, which some browsers silently refuse to download from.
+        var logoDataUrlCache = null;
         function loadLogoDataUrl(){
             return fetch("/img/logo-mark.png")
                 .then(function(r){ return r.blob(); })
@@ -84,10 +90,15 @@
                 })
                 .catch(function(){ return null; });
         }
+        loadLogoDataUrl().then(function(d){ logoDataUrlCache = d; });
 
         document.getElementById("pdfBtn").addEventListener("click", function(){
-            if (!window.jspdf) return;
-            loadLogoDataUrl().then(function(logoDataUrl){
+            if (!window.jspdf) {
+                alert("Could not load the PDF generator (no internet connection?). Please check your connection and try again.");
+                return;
+            }
+            try {
+            var logoDataUrl = logoDataUrlCache;
             var doc = new window.jspdf.jsPDF({ unit: "pt", format: "a4" });
             var pageW = doc.internal.pageSize.getWidth();
             var pageH = doc.internal.pageSize.getHeight();
@@ -223,7 +234,10 @@
             footer();
 
             doc.save("Mbuyedzedzo Testing Guide" + (name ? " - " + name : "") + ".pdf");
-            });
+            } catch (err) {
+                console.error("PDF generation failed:", err);
+                alert("Something went wrong generating the PDF. Please try again, or let me know if it keeps happening.");
+            }
         });
     })();
     </script>
