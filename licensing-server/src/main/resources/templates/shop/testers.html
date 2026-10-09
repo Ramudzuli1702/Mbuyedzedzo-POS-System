@@ -149,19 +149,42 @@
                 doc.text(lines, margin + 32, y);
                 y += lines.length * 13 + 8;
             }
+            // Module name on its own line, description wrapped below it —
+            // clause() assumes a short numeric label like "2.1" that fits in
+            // a 32pt column; a word like "Subscription" is wider than that
+            // column and ran straight into the description at the same
+            // baseline instead.
+            function moduleRow(name, text){
+                doc.setFont("times", "bold"); doc.setFontSize(10);
+                ensure(1);
+                doc.text(name, margin, y);
+                y += 13;
+                doc.setFont("times", "normal");
+                var lines = doc.splitTextToSize(text, maxWidth - 20);
+                ensure(lines.length);
+                doc.text(lines, margin + 20, y);
+                y += lines.length * 13 + 8;
+            }
 
             header();
 
+            // Top-aligned at y (the start of the main content area, already
+            // clear of the running header above it) rather than offset from
+            // a text baseline — the old baseline-relative math placed the
+            // logo's top edge inside the header's own text/rule.
+            var logoSize = 34;
             if (logoDataUrl) {
-                try { doc.addImage(logoDataUrl, "PNG", margin, y - 30, 26, 26); } catch (e) {}
+                try { doc.addImage(logoDataUrl, "PNG", margin, y, logoSize, logoSize); } catch (e) {}
             }
-            var titleX = logoDataUrl ? margin + 34 : margin;
+            var titleX = logoDataUrl ? margin + logoSize + 12 : margin;
+            var titleY = logoDataUrl ? y + logoSize / 2 - 4 : y + 14;
             doc.setFont("times", "bold"); doc.setFontSize(20);
-            doc.text("MBUYEDZEDZO", titleX, y); y += 18;
+            doc.text("MBUYEDZEDZO", titleX, titleY);
             doc.setFont("times", "normal"); doc.setFontSize(10);
             doc.setTextColor(85,82,74);
-            doc.text("TESTING PROCEDURE", titleX, y); y += 20;
+            doc.text("TESTING PROCEDURE", titleX, titleY + 16);
             doc.setTextColor(17,17,17);
+            y += (logoDataUrl ? logoSize : 34) + 16;
             doc.setFontSize(9);
             doc.text("Document Ref: MB-TG-01     Revision: 1     Classification: Internal", margin, y); y += 14;
             doc.text("Issued to: " + (name || "________________"), margin, y); y += 14;
@@ -199,16 +222,16 @@
             clause("6.3", "A short walkthrough runs the first time you open the app. Skip it if you like, you can always get the same explanations later from About this screen.");
 
             clauseHead("7. System Modules");
-            clause("Sales", "The till itself. Scan or search a product, take payment, print the receipt.");
-            clause("Inventory", "Products, stock and barcodes. Each has a purchase price and a selling price.");
-            clause("Users", "Staff accounts and what each person can do.");
-            clause("Customers", "Contacts and purchase history (Standard only).");
-            clause("Reports", "Revenue, real profit margin, stock health.");
-            clause("Sessions", "Login history and that session's receipts.");
-            clause("Approvals", "Sign-off for refunds and exchanges.");
-            clause("Marketing", "Promo codes and how well they perform (Standard only).");
-            clause("Subscription", "Licence status and billing.");
-            clause("Settings", "Business and printer preferences.");
+            moduleRow("Sales", "The till itself. Scan or search a product, take payment, print the receipt.");
+            moduleRow("Inventory", "Products, stock and barcodes. Each has a purchase price and a selling price.");
+            moduleRow("Users", "Staff accounts and what each person can do.");
+            moduleRow("Customers", "Contacts and purchase history (Standard only).");
+            moduleRow("Reports", "Revenue, real profit margin, stock health.");
+            moduleRow("Sessions", "Login history and that session's receipts.");
+            moduleRow("Approvals", "Sign-off for refunds and exchanges.");
+            moduleRow("Marketing", "Promo codes and how well they perform (Standard only).");
+            moduleRow("Subscription", "Licence status and billing.");
+            moduleRow("Settings", "Business and printer preferences.");
 
             clauseHead("8. Scanning Without an Android Device");
             clause("8.1", "A companion Android app turns a phone into a wireless barcode scanner. There's no iPhone version yet; building one needs a Mac, which wasn't possible to arrange for this round.");
