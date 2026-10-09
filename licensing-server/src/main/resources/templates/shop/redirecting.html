@@ -10,7 +10,7 @@
         <form id="payfast-form" th:action="${processUrl}" method="post">
             <input th:each="f : ${fields}" type="hidden" th:name="${f.key}" th:value="${f.value}">
         </form>
-        <noscript><p>JavaScript is disabled — click below to continue.</p>
+        <noscript><p>JavaScript is disabled. Click below to continue.</p>
             <button onclick="document.getElementById('payfast-form').submit()" class="btn btn-success">Continue to PayFast</button>
         </noscript>
     </div>

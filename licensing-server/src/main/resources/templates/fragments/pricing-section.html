@@ -1,0 +1,79 @@
+<div th:fragment="section">
+    <section class="section text-center pb-2">
+        <div class="section-eyebrow">Pricing</div>
+        <h2>One licence, however you'd rather pay</h2>
+        <p class="lede mx-auto">Both editions are the same software, built and supported the same way.
+            The difference is whether your shop needs customer accounts. Pricing is confirmed when we get
+            back to your request.</p>
+    </section>
+
+    <section class="section pt-3">
+        <div class="row g-4 justify-content-center">
+            <div class="col-md-5">
+                <div class="price-card">
+                    <h3>Standard POS</h3>
+                    <p class="tagline">For shops that keep customer accounts: loyalty, contracts, marketing.</p>
+                    <div class="price-row">
+                        <div>
+                            <div class="fw-bold">Once-off licence</div>
+                            <div class="text-muted small">perpetual, one machine</div>
+                        </div>
+                        <form th:action="@{/request-license}" method="get">
+                            <input type="hidden" name="product" value="POS_STANDARD">
+                            <input type="hidden" name="type" value="PERPETUAL">
+                            <button class="btn-brand-outline">Request</button>
+                        </form>
+                    </div>
+                    <div class="price-row">
+                        <div>
+                            <div class="fw-bold">Monthly subscription</div>
+                            <div class="text-muted small">billed every month</div>
+                        </div>
+                        <form th:action="@{/request-license}" method="get">
+                            <input type="hidden" name="product" value="POS_STANDARD">
+                            <input type="hidden" name="type" value="SUBSCRIPTION">
+                            <button class="btn-brand">Request</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="price-card">
+                    <h3>Retail POS</h3>
+                    <p class="tagline">For shops that just sell over the counter: simple, walk-in sales.</p>
+                    <div class="price-row">
+                        <div>
+                            <div class="fw-bold">Once-off licence</div>
+                            <div class="text-muted small">perpetual, one machine</div>
+                        </div>
+                        <form th:action="@{/request-license}" method="get">
+                            <input type="hidden" name="product" value="POS_RETAIL">
+                            <input type="hidden" name="type" value="PERPETUAL">
+                            <button class="btn-brand-outline">Request</button>
+                        </form>
+                    </div>
+                    <div class="price-row">
+                        <div>
+                            <div class="fw-bold">Monthly subscription</div>
+                            <div class="text-muted small">billed every month</div>
+                        </div>
+                        <form th:action="@{/request-license}" method="get">
+                            <input type="hidden" name="product" value="POS_RETAIL">
+                            <input type="hidden" name="type" value="SUBSCRIPTION">
+                            <button class="btn-brand">Request</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="text-center text-muted mt-4 mb-0" style="font-size:.88rem;">
+            Every licence includes free updates, the Android companion-scanner app, and offline activation
+            with a 14-day grace period. Not sure which edition fits? A perpetual licence covers one machine.
+            <a href="/#story">Read more about how it works</a>.
+        </p>
+        <p class="text-center text-muted mt-2 mb-0" style="font-size:.82rem;">
+            Online card payment is still being finished, so for now "Request" sends your details to our
+            team and we'll confirm pricing and email your licence key and login within one business day.
+        </p>
+    </section>
+</div>

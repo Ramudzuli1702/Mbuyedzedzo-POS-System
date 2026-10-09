@@ -4,63 +4,7 @@
 <head><title>Download &middot; Mbuyedzedzo</title></head>
 <body>
 <main>
-    <section class="section text-center pb-2">
-        <div class="section-eyebrow">Download</div>
-        <h2>Get Mbuyedzedzo running on your till</h2>
-        <p class="lede mx-auto">Pick the edition that matches your shop. Both installers set up their own
-            database automatically — there's nothing else to install first.</p>
-    </section>
-
-    <section class="section pt-3">
-        <div class="feature-grid">
-            <div class="feature-card">
-                <div class="icon"><i class="bi bi-display"></i></div>
-                <h3>Standard POS</h3>
-                <p>For shops that keep customer accounts — loyalty, contracts, marketing. Windows 10/11, 64-bit.</p>
-                <a class="btn-brand d-inline-block mt-2"
-                   href="https://github.com/Ramudzuli1702/Mbuyedzedzo-POS-System/releases/download/v1.0.0/Mbuyedzedzo-POS-Standard-Setup.exe">
-                    Download for Windows
-                </a>
-                <div class="text-muted mt-2" style="font-size:.82rem;">~250&nbsp;MB &middot; v1.0.0</div>
-            </div>
-            <div class="feature-card">
-                <div class="icon"><i class="bi bi-shop"></i></div>
-                <h3>Retail POS</h3>
-                <p>For shops that just sell over the counter — simple, walk-in sales. Windows 10/11, 64-bit.</p>
-                <a class="btn-brand d-inline-block mt-2"
-                   href="https://github.com/Ramudzuli1702/Mbuyedzedzo-POS-System/releases/download/v1.0.0/Mbuyedzedzo-POS-Retail-Setup.exe">
-                    Download for Windows
-                </a>
-                <div class="text-muted mt-2" style="font-size:.82rem;">~250&nbsp;MB &middot; v1.0.0</div>
-            </div>
-            <div class="feature-card">
-                <div class="icon"><i class="bi bi-phone"></i></div>
-                <h3>Scanner Companion (Android)</h3>
-                <p>Turns a phone into a wireless barcode scanner for the till over your shop's own Wi-Fi.</p>
-                <a class="btn-brand-outline d-inline-block mt-2"
-                   href="https://github.com/Ramudzuli1702/Mbuyedzedzo-POS-System/releases/download/v1.0.0/Mbuyedzedzo-Scanner.apk">
-                    Download APK
-                </a>
-                <div class="text-muted mt-2" style="font-size:.82rem;">~6&nbsp;MB &middot; sideload, not on Play Store yet</div>
-            </div>
-        </div>
-    </section>
-
-    <section class="section">
-        <div class="panel p-4 p-md-5">
-            <h3 class="mb-3">Setting up for the first time</h3>
-            <ol class="text-muted mb-0" style="font-size:.95rem; line-height:1.9;">
-                <li>Run the installer for your edition and follow the prompts — it sets up its own database, no
-                    separate MySQL install needed.</li>
-                <li>On first launch you'll be asked to activate: paste in a licence key from
-                    <a th:href="@{/pricing}">your purchase</a>, or start the free 30-day trial straight from that
-                    screen if you just want to try it first.</li>
-                <li>The first account you create becomes the admin account for that till.</li>
-                <li>To add the phone scanner, install the APK on an Android phone on the same Wi-Fi as the till,
-                    then scan the QR code shown under the WiFi status button in the app.</li>
-            </ol>
-        </div>
-    </section>
+    <div th:replace="~{fragments/download-section :: section}"></div>
 </main>
 </body>
 </html>

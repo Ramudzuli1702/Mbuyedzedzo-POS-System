@@ -44,9 +44,7 @@ public class OrderFulfillmentService {
         this.licenseAdminService = licenseAdminService;
         this.email = email;
         this.pricing = pricing;
-        // Reuses the same host PayFast redirects back to — simplest single source of truth.
-        this.accountBaseUrl = env.getProperty("payfast.return-url", "http://localhost:8080/buy/success")
-                .replaceAll("/buy/success$", "");
+        this.accountBaseUrl = env.getProperty("app.base-url", "http://localhost:8080");
     }
 
     public enum Outcome { FULFILLED, ALREADY_PAID, UNKNOWN_ORDER, AMOUNT_MISMATCH }

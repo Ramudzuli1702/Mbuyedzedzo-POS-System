@@ -6,7 +6,7 @@
 <main>
     <section class="section" style="max-width: 560px;">
         <div class="section-eyebrow">Request a licence</div>
-        <h2 th:text="${productName} + (${type.name() == 'SUBSCRIPTION'} ? ' — monthly subscription' : ' — perpetual licence')">Product</h2>
+        <h2 th:text="${productName} + (${type.name() == 'SUBSCRIPTION'} ? ' (monthly subscription)' : ' (perpetual licence)')">Product</h2>
         <p class="lede mb-4">Tell us about your shop and we'll email your licence key and a login within
             one business day.</p>
 

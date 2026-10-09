@@ -8,40 +8,51 @@
         <span class="mark-hero"><img src="/img/logo-mark.png" alt="Mbuyedzedzo"></span>
         <h1>Point-of-sale software built for South African shops</h1>
         <p class="lede">
-            Sales, inventory, staff accounts and reporting — Standard or walk-in Retail,
-            in one package. Buy a licence online, activate in minutes, and it keeps
+            Sales, inventory, staff accounts and reporting, in one package (Standard or
+            walk-in Retail). Buy a licence online, activate in minutes, and it keeps
             working even when your internet doesn't.
         </p>
         <div class="cta-row">
-            <a href="/pricing" class="btn-brand">See pricing</a>
+            <a href="/#pricing" class="btn-brand">See pricing</a>
             <a href="/#story" class="btn-brand-outline">What makes it different</a>
         </div>
     </section>
 
-    <section class="section">
+    <section class="section pt-0">
+        <div class="panel tester-banner d-flex align-items-center justify-content-between flex-wrap gap-3 p-4">
+            <div>
+                <div class="fw-bold mb-1">Are you part of our selected testing team?</div>
+                <div class="text-muted" style="font-size:.92rem;">Get the step-by-step testing guide,
+                    the feedback form, and what to document while you use it.</div>
+            </div>
+            <a href="/testers" class="btn-brand-outline flex-shrink-0">View the testing guide</a>
+        </div>
+    </section>
+
+    <section class="section" id="features">
         <div class="feature-grid">
             <div class="feature-card">
                 <div class="icon"><i class="bi bi-wifi-off"></i></div>
                 <h3>Works without the internet</h3>
-                <p>The till keeps ringing up sales through a load-shedding outage or a dead router —
-                    your licence is checked offline, with a 14-day grace period if it can't phone home.</p>
+                <p>The till keeps ringing up sales through a load-shedding outage or a dead router.
+                    Your licence is checked offline, with a 14-day grace period if it can't phone home.</p>
             </div>
             <div class="feature-card">
                 <div class="icon"><i class="bi bi-phone"></i></div>
                 <h3>Your phone is a second scanner</h3>
                 <p>The companion Android app pairs over your shop's own Wi-Fi and scans barcodes straight
-                    into the till or inventory — no extra hardware to buy.</p>
+                    into the till or inventory. No extra hardware to buy.</p>
             </div>
             <div class="feature-card">
                 <div class="icon"><i class="bi bi-upc-scan"></i></div>
                 <h3>Real barcode scanners too</h3>
-                <p>Plug in an ordinary USB barcode scanner and it just works — no drivers, no setup.</p>
+                <p>Plug in an ordinary USB barcode scanner and it just works. No drivers, no setup.</p>
             </div>
             <div class="feature-card">
                 <div class="icon"><i class="bi bi-shield-check"></i></div>
                 <h3>Two products, your choice</h3>
                 <p>Retail for simple walk-in counters, Standard for shops that run customer accounts,
-                    loyalty and marketing — switch editions without switching software.</p>
+                    loyalty and marketing. Switch editions without switching software.</p>
             </div>
         </div>
     </section>
@@ -56,21 +67,21 @@
                 invoices and a manual stock count used to cost them every week.
             </p>
             <p class="text-muted mb-0">
-                That's the whole brief behind this product — a point of sale that stays honest about stock,
-                keeps a paper trail for every sale, exchange and return, and doesn't fall over the moment
-                the internet does. It's built as one small, coherent system end to end: the till app on your
-                counter, the licence that keeps it legitimately yours, and the phone in your pocket that can
-                scan for it — rather than three different vendors stitched together.
+                That's really the whole idea: a point of sale that keeps your stock numbers honest, keeps
+                a paper trail for every sale, exchange and return, and doesn't fall over the moment the
+                internet does. The till app, the licence, and the phone scanner are all one system built by
+                one team, not three different vendors stitched together.
             </p>
         </div>
     </section>
 
-    <section class="section text-center">
-        <h2 class="mb-3">Ready to get set up?</h2>
-        <p class="lede mx-auto mb-4">Pick Standard or Retail, buy online, and your licence key
-            lands in your inbox within minutes — ready to activate.</p>
-        <a href="/pricing" class="btn-brand">See pricing</a>
-    </section>
+    <div id="pricing">
+        <div th:replace="~{fragments/pricing-section :: section}"></div>
+    </div>
+
+    <div id="download">
+        <div th:replace="~{fragments/download-section :: section}"></div>
+    </div>
 </main>
 </body>
 </html>

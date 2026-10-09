@@ -25,11 +25,17 @@
 
 * { box-sizing: border-box; }
 
+html { scroll-behavior: smooth; }
+
 body {
     font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
 }
+
+/* Anchor targets (#story, #pricing, #download) sit right under the sticky
+   nav, so jumping to them doesn't tuck the heading underneath it. */
+#story, #pricing, #download { scroll-margin-top: 76px; }
 
 a { text-decoration: none; }
 
@@ -149,6 +155,21 @@ a { text-decoration: none; }
     padding: 16px 0; border-top: 1px solid var(--border);
 }
 .price-row:first-of-type { border-top: none; padding-top: 20px; }
+
+/* ── Tester callout (home page) ──────────────────────────────────────── */
+.tester-banner {
+    max-width: 1080px; margin: 0 auto;
+    background: var(--brand-tint); border-color: var(--brand-tint);
+}
+
+/* ── Print (used by the "Download as PDF" button on /testers) ───────── */
+@media print {
+    .shop-nav, .shop-footer, .no-print { display: none !important; }
+    body { background: #fff; }
+    .section { padding: 12px 0; max-width: none; }
+    .panel, .feature-card { box-shadow: none; border: 1px solid #ddd; }
+    a[href]:after { content: ""; }
+}
 
 /* ── Footer ───────────────────────────────────────────────────────── */
 .shop-footer {

@@ -46,8 +46,7 @@ public class LicenseRequestAdminService {
         this.email = email;
         this.pricing = pricing;
         this.audit = audit;
-        this.accountBaseUrl = env.getProperty("payfast.return-url", "http://localhost:8080/buy/success")
-                .replaceAll("/buy/success$", "");
+        this.accountBaseUrl = env.getProperty("app.base-url", "http://localhost:8080");
     }
 
     public List<LicenseRequest> listPending() {

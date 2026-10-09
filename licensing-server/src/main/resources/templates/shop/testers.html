@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="~{fragments/shop-layout :: page(~{::title}, ~{::main})}">
+<head><title>Testing guide &middot; Mbuyedzedzo</title></head>
+<body>
+<main>
+    <section class="hero" style="padding-bottom:40px;">
+        <div class="section-eyebrow">For our testing team</div>
+        <h1 style="font-size:clamp(1.8rem,3.5vw,2.4rem);">Are you part of our selected testing team?</h1>
+
+        <div id="nameGate" class="panel p-4 mx-auto no-print" style="max-width:420px;">
+            <label for="testerName" class="fw-bold mb-2 d-block">What's your name?</label>
+            <div class="d-flex gap-2">
+                <input type="text" id="testerName" class="form-control" placeholder="e.g. Thandi" maxlength="80">
+                <button id="nameGateGo" class="btn-brand flex-shrink-0">Continue</button>
+            </div>
+        </div>
+
+        <div id="greeting" class="lede" style="display:none;">
+            <p>Hi <strong id="greetName"></strong>, thank you so much for helping me test this. I really
+                appreciate you taking the time.</p>
+            <p>This page is your complete walkthrough: requesting a licence, installing, and using every
+                part of the till. No technical background needed, just follow it in order the first time,
+                then come back to any section later as a reference.</p>
+        </div>
+
+        <p class="lede" id="fallbackIntro">
+            Welcome. This page is your complete walkthrough: requesting a licence, installing,
+            and using every part of the till. No technical background needed, just follow it in
+            order the first time, then come back to any section later as a reference.
+        </p>
+
+        <div class="cta-row no-print">
+            <button onclick="window.print()" class="btn-brand"><i class="bi bi-download"></i>&nbsp; Download as PDF</button>
+            <a href="#feedback" class="btn-brand-outline">Jump to the feedback form</a>
+        </div>
+    </section>
+
+    <script>
+    (function () {
+        var KEY = "mbuyedzedzo-tester-name";
+        var gate = document.getElementById("nameGate");
+        var greeting = document.getElementById("greeting");
+        var fallback = document.getElementById("fallbackIntro");
+        var input = document.getElementById("testerName");
+        var nameSpan = document.getElementById("greetName");
+
+        function reveal(name) {
+            nameSpan.textContent = name;
+            gate.style.display = "none";
+            fallback.style.display = "none";
+            greeting.style.display = "block";
+        }
+
+        gate.style.display = "block";
+        var saved = null;
+        try { saved = localStorage.getItem(KEY); } catch (e) {}
+        if (saved) { reveal(saved); }
+
+        document.getElementById("nameGateGo").addEventListener("click", function () {
+            var name = input.value.trim();
+            if (!name) { input.focus(); return; }
+            try { localStorage.setItem(KEY, name); } catch (e) {}
+            reveal(name);
+        });
+        input.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") document.getElementById("nameGateGo").click();
+        });
+    })();
+    </script>
+
+    <section class="section pt-0">
+        <div class="panel p-4" style="background: var(--brand-tint); border-color: var(--brand-tint);">
+            <div class="fw-bold mb-1">Before you start</div>
+            <p class="mb-0 text-muted">You'll be testing with a real licence key, not a trial, so the
+                first thing to do is request one below. It only takes a couple of minutes to fill in, and
+                the key usually arrives by email within one business day.</p>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="panel p-4 p-md-5">
+            <h3 class="mb-3">Getting set up</h3>
+            <ol class="text-muted mb-0" style="font-size:.95rem; line-height:2;">
+                <li><strong>Request a licence.</strong> Go to <a href="/#pricing">Pricing</a>, pick the
+                    edition you'll be testing, and click "Request" on whichever licence type you've been
+                    asked to test. Fill in your name, a business name (anything's fine for testing), and
+                    your email. A licence key and a login for managing it will land in your inbox.</li>
+                <li><strong>Download.</strong> Once your key arrives, go to <a href="/#download">Download</a>
+                    and pick the matching edition. It's a Windows installer, about 250&nbsp;MB.</li>
+                <li><strong>Install.</strong> Run the <code>.exe</code> and follow the prompts. Windows will
+                    ask for permission to make changes to your PC, say yes: the installer sets up its own
+                    private database behind the scenes. The very first launch can take a few minutes while
+                    that finishes, which is normal, not a freeze. If antivirus or SmartScreen flags the
+                    installer as new and unrecognised, choose "More info" &rarr; "Run anyway".</li>
+                <li><strong>Activate.</strong> On first launch, paste in the licence key from your email
+                    and click Activate.</li>
+                <li><strong>First login.</strong> The very first account you create becomes the admin
+                    account for that installation. Use it for your own testing; if you want to see what a
+                    cashier sees, create a second, more limited account later from User Management.</li>
+            </ol>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-eyebrow">What's inside</div>
+        <h2>A quick tour of each part</h2>
+        <p class="text-muted" style="max-width:640px;">You'll find all of these down the left-hand menu
+            once you're signed in. The app also offers a short "get to know the system" walkthrough the
+            first time it opens, and you can come back to the same explanations any time from the small
+            <strong>&#9432; About this screen</strong> button at the top of any page.</p>
+        <div class="feature-grid mt-3">
+            <div class="feature-card"><h3>Sales</h3><p>The till itself. Scan or search a product, build
+                up a cart, take payment, print or email the receipt.</p></div>
+            <div class="feature-card"><h3>Inventory</h3><p>Add products, track stock, print barcodes.
+                Each product has both a purchase price and a selling price.</p></div>
+            <div class="feature-card"><h3>User Management</h3><p>Add staff accounts and set what each
+                person is allowed to do.</p></div>
+            <div class="feature-card"><h3>Customers</h3><p>Keep contact details and purchase history for
+                regulars (Standard edition only).</p></div>
+            <div class="feature-card"><h3>Reports</h3><p>Revenue, real profit margin, best sellers, stock
+                health. Export anything to Excel.</p></div>
+            <div class="feature-card"><h3>Sessions</h3><p>A log of who was logged in, when, and for how
+                long.</p></div>
+            <div class="feature-card"><h3>Approvals</h3><p>Refunds and exchanges above a set amount wait
+                here for a manager to approve.</p></div>
+            <div class="feature-card"><h3>Marketing</h3><p>Promo codes and discounts, and how well each
+                one performs (Standard edition only).</p></div>
+            <div class="feature-card"><h3>Subscription</h3><p>Licence status, renewal date, and
+                billing.</p></div>
+            <div class="feature-card"><h3>Settings</h3><p>Business details, receipt layout, tax rate,
+                printer and other preferences.</p></div>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="panel p-4 p-md-5">
+            <h3 class="mb-3">Scanning without an Android phone</h3>
+            <p class="text-muted">There's a companion Android app that turns a phone into a wireless
+                barcode scanner. If you're on an iPhone, you can't use that specific app today: an iOS
+                version would need to be built on a Mac, which isn't part of this round of testing.</p>
+            <p class="text-muted mb-0">That doesn't stop you from testing the real thing, though. Every
+                barcode field also accepts just typing the number in, so you can ring up a product without
+                scanning anything. And a cheap wired USB barcode scanner (under R300 at most electronics
+                shops) plugs in and works with no setup, no drivers, and no phone at all, arguably the
+                better test of the real checkout experience anyway.</p>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-eyebrow">Please do this</div>
+        <h2>Document what you see</h2>
+        <div class="panel p-4 p-md-5">
+            <p class="text-muted">While you're testing, take photos or screen recordings of yourself
+                using the system, ringing up a sale, adding stock, pulling up a report, whatever you're
+                doing at the time. Seeing exactly what you saw and clicked is far more useful to us than a
+                written description alone, especially for anything that looked wrong, felt slow, or
+                confused you.</p>
+            <p class="text-muted mb-0">A phone video of the screen while you talk through what you're
+                doing is ideal. It doesn't need to be polished, rough and honest is exactly what we want.
+                Send these along with your written feedback below.</p>
+        </div>
+    </section>
+
+    <section class="section text-center" id="feedback">
+        <h2 class="mb-3">Telling us what you find</h2>
+        <p class="lede mx-auto mb-4">Use it the way you'd actually run a shop day: ring up sales, add
+            stock, issue a refund, pull up a report. Anything that confused you, felt slow, looked wrong,
+            or didn't work the way you expected is exactly the kind of feedback that's useful, even if it
+            feels minor.</p>
+        <a href="https://claude.ai/artifact/FPAAjuSanNvMWx3SsGsiVq" target="_blank" rel="noopener" class="btn-brand">
+            Fill in the feedback form</a>
+        <p class="text-muted mt-3 mb-0" style="font-size:.88rem;">It walks through installation, first
+            sign-in, everyday use, and look and feel, then lets you copy your answers to send straight
+            back, along with your photos and videos, whichever way's easiest (WhatsApp, email, a call).</p>
+
+        <div class="panel p-4 mt-5 mx-auto" style="max-width:420px;">
+            <p class="mb-1" style="font-size:.95rem;">With thanks,</p>
+            <p class="fw-bold mb-1">Ralidzhivha Ramudzuli Ricardo</p>
+            <p class="text-muted mb-0" style="font-size:.9rem;">
+                <a href="mailto:ralidzhivhar@gmail.com">ralidzhivhar@gmail.com</a><br>
+                +27 63 620 2691
+            </p>
+        </div>
+    </section>
+</main>
+</body>
+</html>

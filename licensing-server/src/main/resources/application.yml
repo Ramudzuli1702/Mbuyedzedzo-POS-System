@@ -1,6 +1,13 @@
 server:
   port: 8080
 
+app:
+  # The public URL this app is reachable at — used to build links that go
+  # into emails (account set-password links, etc.), independent of PayFast's
+  # own return/cancel/notify URLs. Must be overridden in every real
+  # deployment; the default only makes sense for local dev.
+  base-url: ${APP_BASE_URL:http://localhost:8080}
+
 spring:
   datasource:
     # Azure SQL Database (the Student subscription this runs on blocks MySQL
