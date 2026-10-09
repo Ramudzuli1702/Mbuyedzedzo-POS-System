@@ -18,8 +18,8 @@ import java.util.*;
 /**
  * ReportService — all queries use the correct schema columns:
  *   - Revenue  = SUM(t.SalePrice * t.Quantity)         [SalePrice = actual selling price]
- *   - Cost     = SUM(p.Price     * t.Quantity)         [Price     = cost/purchase price]
- *   - Profit   = SUM((t.SalePrice - p.Price) * t.Quantity)
+ *   - Cost     = SUM(p.CostPrice * t.Quantity)         [CostPrice = what the shop paid]
+ *   - Profit   = SUM((t.SalePrice - p.CostPrice) * t.Quantity)
  *   - Returns  filtered to Status = 'Approved' only
  *   - Payment breakdown uses t.PaymentMethod (Cash / Card)
  */
@@ -42,7 +42,7 @@ public class ReportService {
     /** Total cost of goods sold for the period (cost price × quantity). */
     public BigDecimal getTotalCOGS(LocalDate start, LocalDate end) {
         String sql = """
-            SELECT COALESCE(SUM(p.Price * t.Quantity), 0) AS total
+            SELECT COALESCE(SUM(p.CostPrice * t.Quantity), 0) AS total
             FROM Transactions t
             JOIN Product p ON t.ProductID = p.ProductID
             WHERE t.TransactionDate BETWEEN ? AND ?
@@ -252,10 +252,10 @@ public class ReportService {
                    c.CategoryName,
                    SUM(t.Quantity)                                     AS units_sold,
                    SUM(t.SalePrice * t.Quantity)                       AS revenue,
-                   SUM(p.Price     * t.Quantity)                       AS cost,
-                   SUM((t.SalePrice - p.Price) * t.Quantity)           AS profit,
+                   SUM(p.CostPrice * t.Quantity)                       AS cost,
+                   SUM((t.SalePrice - p.CostPrice) * t.Quantity)       AS profit,
                    CASE WHEN SUM(t.SalePrice * t.Quantity) = 0 THEN 0
-                        ELSE ROUND(SUM((t.SalePrice - p.Price) * t.Quantity)
+                        ELSE ROUND(SUM((t.SalePrice - p.CostPrice) * t.Quantity)
                                  / SUM(t.SalePrice * t.Quantity) * 100, 1)
                    END AS margin_pct
             FROM Transactions t
@@ -296,7 +296,7 @@ public class ReportService {
                    p.Quantity                              AS stock,
                    COALESCE(s.units_sold, 0)              AS units_sold,
                    COALESCE(s.revenue, 0)                 AS revenue,
-                   p.Price                                AS cost_price
+                   p.CostPrice                            AS cost_price
             FROM Product p
             JOIN Category c ON p.CategoryID = c.CategoryID
             LEFT JOIN (
@@ -344,7 +344,7 @@ public class ReportService {
             SELECT c.CategoryName,
                    SUM(t.Quantity)                               AS units_sold,
                    SUM(t.SalePrice * t.Quantity)                AS revenue,
-                   SUM((t.SalePrice - p.Price) * t.Quantity)    AS profit,
+                   SUM((t.SalePrice - p.CostPrice) * t.Quantity) AS profit,
                    CASE WHEN AVG(p.Quantity) = 0 THEN 0
                         ELSE ROUND(SUM(t.Quantity) / NULLIF(AVG(p.Quantity), 0), 2)
                    END AS turnover_ratio,
@@ -389,7 +389,7 @@ public class ReportService {
                    s.UserType,
                    COUNT(DISTINCT t.SaleID)                                AS sales_count,
                    COALESCE(SUM(t.SalePrice * t.Quantity), 0)              AS revenue,
-                   COALESCE(SUM((t.SalePrice - p.Price) * t.Quantity), 0)  AS profit,
+                   COALESCE(SUM((t.SalePrice - p.CostPrice) * t.Quantity), 0)  AS profit,
                    COALESCE(AVG(sale_totals.sale_total), 0)                AS avg_sale_value,
                    COALESCE(AVG(
                        TIMESTAMPDIFF(MINUTE, ci.LoginStamp, ci.LogoutStamp) / 60.0
@@ -764,8 +764,8 @@ public class ReportService {
             SELECT p.ProductName,
                    c.CategoryName,
                    p.Quantity                                           AS stock,
-                   p.Price                                             AS cost_price,
-                   p.Price * p.Quantity                                AS stock_value,
+                   p.CostPrice                                          AS cost_price,
+                   p.CostPrice * p.Quantity                            AS stock_value,
                    COALESCE(s.units_sold, 0)                          AS units_sold,
                    COALESCE(s.units_sold, 0) / ?                      AS daily_avg,
                    CASE WHEN COALESCE(s.units_sold, 0) = 0 THEN 9999
@@ -818,7 +818,7 @@ public class ReportService {
             SELECT c.CategoryName,
                    COUNT(p.ProductID)           AS product_count,
                    SUM(p.Quantity)              AS total_stock,
-                   SUM(p.Price * p.Quantity)    AS stock_value,
+                   SUM(p.CostPrice * p.Quantity) AS stock_value,
                    SUM(CASE WHEN p.Quantity = 0 THEN 1 ELSE 0 END) AS out_of_stock,
                    SUM(CASE WHEN p.Quantity > 0 AND p.Quantity < 10 THEN 1 ELSE 0 END) AS low_stock
             FROM Product p
@@ -1030,7 +1030,6 @@ public class ReportService {
             buildExcelSummarySheet      (wb.createSheet("Executive Summary"), start, end);
             buildExcelRevenueSheet      (wb.createSheet("Revenue & Profit"),   start, end);
             buildExcelProductSheet      (wb.createSheet("Products"),           start, end);
-            buildExcelCategorySheet     (wb.createSheet("Categories"),         start, end);
             buildExcelStaffSheet        (wb.createSheet("Staff Performance"),  start, end);
             buildExcelCustomerSheet     (wb.createSheet("Customers"),          start, end);
             buildExcelInventorySheet    (wb.createSheet("Inventory"),          start, end);
@@ -1169,21 +1168,6 @@ public class ReportService {
         h.autosize(7);
     }
 
-    private void buildExcelCategorySheet(Sheet sheet, LocalDate start, LocalDate end) {
-        ExcelHelper h = new ExcelHelper(sheet);
-        h.title("CATEGORY ANALYSIS — " + start + " to " + end, 6);
-        h.blank();
-        h.headerRow("Category", "Products", "Units Sold", "Revenue (R)", "Profit (R)", "Turnover Ratio");
-        for (Map<String, Object> row : getCategoryAnalysis(start, end)) {
-            h.dataRow(
-                str(row, "name"),     str(row, "productCount"),
-                str(row, "unitsSold"), fmt(bd(row, "revenue")),
-                fmt(bd(row, "profit")), String.format("%.2f", dbl(row, "turnover"))
-            );
-        }
-        h.autosize(6);
-    }
-
     private void buildExcelStaffSheet(Sheet sheet, LocalDate start, LocalDate end) {
         ExcelHelper h = new ExcelHelper(sheet);
         h.title("STAFF PERFORMANCE — " + start + " to " + end, 7);
@@ -1245,17 +1229,6 @@ public class ReportService {
     private void buildExcelInventorySheet(Sheet sheet, LocalDate start, LocalDate end) {
         ExcelHelper h = new ExcelHelper(sheet);
         h.title("INVENTORY HEALTH — " + start + " to " + end, 8);
-        h.blank();
-
-        h.sectionHeader("SUMMARY BY CATEGORY", 6);
-        h.headerRow("Category", "Products", "Total Stock", "Stock Value (R)", "Out of Stock", "Low Stock");
-        for (Map<String, Object> row : getStockByCategory()) {
-            h.dataRow(
-                str(row, "category"),    str(row, "productCount"),
-                str(row, "totalStock"),  fmt(bd(row, "stockValue")),
-                str(row, "outOfStock"),  str(row, "lowStock")
-            );
-        }
         h.blank();
 
         h.sectionHeader("STOCK COVERAGE (days until stockout)", 8);

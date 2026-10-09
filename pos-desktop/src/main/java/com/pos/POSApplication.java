@@ -195,6 +195,20 @@ public class POSApplication extends Application {
             return;
         }
 
+        // ── 1b. Restore from a backup, if one was chosen on the setup screen ──
+        if (setupView != null && setupView.getChosenBackupFile() != null) {
+            setupView.setStatus("Restoring from backup...");
+            var result = new com.pos.services.SettingsService().restoreBackup(setupView.getChosenBackupFile());
+            log.info("Backup restore: {} — {}", result.success(), result.message());
+            if (!result.success()) {
+                setupView.showError(
+                    "Failed to restore the backup you chose.\n\n" + result.message()
+                    + "\n\nRe-launch the app to try again, or start fresh by not choosing a backup file."
+                );
+                return;
+            }
+        }
+
         // ── 2. Licence gate ──────────────────────────────────────────────────
         com.pos.license.LicenseManager licence = new com.pos.license.LicenseManager();
         com.pos.license.LicenseManager.Status ls = licence.check();

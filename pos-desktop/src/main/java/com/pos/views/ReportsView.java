@@ -241,7 +241,7 @@ public class ReportsView {
         contentArea.getChildren().add(sectionLabel("Revenue Overview"));
         GridPane charts1 = chartGrid(2);
         charts1.add(buildDailyRevenueTrend(s, e), 0, 0);
-        charts1.add(buildCategoryRevenueChart(s, e), 1, 0);
+        charts1.add(buildHourlySalesChart(s, e), 1, 0);
         contentArea.getChildren().add(charts1);
 
         GridPane charts2 = chartGrid(2);
@@ -309,9 +309,6 @@ public class ReportsView {
 
         contentArea.getChildren().add(sectionLabel("Slow-Moving Stock (high stock, low sales)"));
         contentArea.getChildren().add(buildSlowMoversTable(s, e));
-
-        contentArea.getChildren().add(sectionLabel("Revenue by Category"));
-        contentArea.getChildren().add(buildCategoryRevenueChart(s, e));
     }
 
     private void buildCustomerInsights() {
@@ -370,9 +367,6 @@ public class ReportsView {
         kpi.add(kpiCard("Stock Value",     fmtR(svc.getTotalStockValue()),            0, C_PURPLE, "at cost price"), 2, 0);
         kpi.add(kpiCard("Out of Stock",    String.valueOf(svc.getOutOfStockCount()),  0, C_RED,    "urgent restock"),3, 0);
         contentArea.getChildren().add(kpi);
-
-        contentArea.getChildren().add(sectionLabel("Stock by Category"));
-        contentArea.getChildren().add(buildStockByCategoryTable());
 
         contentArea.getChildren().add(sectionLabel("Stock Coverage — Days Until Stockout (sorted: urgent first)"));
         contentArea.getChildren().add(buildInventoryHealthTable(s, e));
@@ -475,20 +469,6 @@ public class ReportsView {
         );
         chart.getData().add(series);
         return chartCard("Daily Revenue Trend", chart);
-    }
-
-    private VBox buildCategoryRevenueChart(LocalDate s, LocalDate e) {
-        PieChart chart = new PieChart();
-        chart.setLegendSide(javafx.geometry.Side.RIGHT);
-        svc.getCategoryAnalysis(s, e).forEach(row -> {
-            BigDecimal rev = (BigDecimal) row.get("revenue");
-            if (rev != null && rev.compareTo(BigDecimal.ZERO) > 0)
-                chart.getData().add(new PieChart.Data(
-                    (String) row.get("name") + " (R" + String.format("%.0f", rev.doubleValue()) + ")",
-                    rev.doubleValue()
-                ));
-        });
-        return chartCard("Revenue by Category", chart);
     }
 
     private VBox buildPaymentMethodChart(LocalDate s, LocalDate e) {
@@ -731,20 +711,6 @@ public class ReportsView {
         );
         table.getItems().setAll(svc.getStaffAttendance(s, e));
         return card(table, 260);
-    }
-
-    private VBox buildStockByCategoryTable() {
-        TableView<Map<String, Object>> table = baseTable();
-        table.getColumns().addAll(
-            strCol("Category",    "category",    160),
-            intCol("Products",    "productCount", 80),
-            intCol("Total Stock", "totalStock",   100),
-            moneyCol("Stock Value","stockValue",  120),
-            intCol("Out of Stock","outOfStock",    90),
-            intCol("Low Stock",   "lowStock",      90)
-        );
-        table.getItems().setAll(svc.getStockByCategory());
-        return card(table, 300);
     }
 
     private VBox buildInventoryHealthTable(LocalDate s, LocalDate e) {

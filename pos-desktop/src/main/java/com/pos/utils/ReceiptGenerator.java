@@ -162,13 +162,59 @@ public class ReceiptGenerator {
 
     // ── Print ───────────────────────────────────────────────────────────────
 
-    public static void printReceipt(String receiptText) {
+    /**
+     * Prints via the OS default printer (a USB/driver-installed receipt
+     * printer shows up to Windows like any other printer — no raw ESC/POS
+     * needed for that case). Unlike the old silent version, every failure
+     * path now surfaces a dialog instead of just logging to a console no one
+     * is watching — "should one of my customers have a receipt printer" only
+     * actually works if a cashier can tell whether it printed.
+     */
+    // Printer names Windows uses for "print to a file" virtual drivers. Handing
+    // these a print job pops a native Save-As dialog that has no JavaFX owner
+    // and can open behind the main window — the app then looks completely
+    // frozen because that invisible dialog is still blocking, waiting for a
+    // filename no one can see to type into. Refusing these outright (common
+    // on a dev/test machine with no real printer attached) is safer than
+    // hoping the user notices a hidden window.
+    private static final String[] VIRTUAL_PRINTER_MARKERS = {
+        "pdf", "xps", "onenote", "fax", "onedrive", "microsoft print"
+    };
+
+    private static boolean isVirtualPrinter(String printerName) {
+        if (printerName == null) return false;
+        String n = printerName.toLowerCase();
+        for (String marker : VIRTUAL_PRINTER_MARKERS) {
+            if (n.contains(marker)) return true;
+        }
+        return false;
+    }
+
+    public static boolean printReceipt(String receiptText) {
         System.out.println(receiptText);
         try {
             Printer printer = Printer.getDefaultPrinter();
-            if (printer == null) return;
+            if (printer == null) {
+                Dialogs.error("Can't print", "No printer is set up on this computer. "
+                        + "Connect/install a printer in Windows and set it as default, "
+                        + "then try again. The receipt has still been saved to file.");
+                return false;
+            }
+            if (isVirtualPrinter(printer.getName())) {
+                Dialogs.error("No receipt printer set up", "The default printer on this computer is \""
+                        + printer.getName() + "\", which saves to a file instead of printing — it would "
+                        + "pop up a hidden Save dialog and make the app look stuck. Connect a real "
+                        + "receipt/USB printer, set it as the Windows default, and try again. "
+                        + "The receipt has still been saved to file.");
+                return false;
+            }
             PrinterJob job = PrinterJob.createPrinterJob(printer);
-            if (job == null) return;
+            if (job == null) {
+                Dialogs.error("Can't print", "The default printer (" + printer.getName()
+                        + ") could not be reached. Check it's switched on and connected, "
+                        + "then try again. The receipt has still been saved to file.");
+                return false;
+            }
             Text text = new Text(receiptText);
             text.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 9pt;");
 
@@ -177,9 +223,16 @@ public class ReceiptGenerator {
             var logo = com.pos.utils.BrandAssets.logoMark(30);
             if (logo != null) page.getChildren().add(logo);
 
-            if (job.printPage(page)) job.endJob();
+            if (job.printPage(page)) {
+                job.endJob();
+                return true;
+            }
+            Dialogs.error("Can't print", "Printing to " + printer.getName()
+                    + " failed partway through. Check it has paper and is online, then try again.");
+            return false;
         } catch (Exception e) {
-            System.err.println("Printing not available: " + e.getMessage());
+            Dialogs.error("Can't print", "Printing failed unexpectedly.", e);
+            return false;
         }
     }
 

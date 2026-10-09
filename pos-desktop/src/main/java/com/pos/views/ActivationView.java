@@ -22,6 +22,9 @@ import javafx.stage.Stage;
  */
 public class ActivationView {
 
+    /** No trials for now — every activation must use a real licence key. */
+    private static final boolean TRIALS_ENABLED = false;
+
     private final Stage stage;
     private final LicenseManager manager;
     private final Runnable onActivated;
@@ -66,6 +69,10 @@ public class ActivationView {
 
         Button activateBtn = primary("Activate");
         Button trialBtn = secondary("Start 30-day trial");
+        // Trials are switched off for now — every activation must use a real
+        // licence key. Flip this back to re-enable the button.
+        trialBtn.setVisible(TRIALS_ENABLED);
+        trialBtn.setManaged(TRIALS_ENABLED);
 
         // Advanced: server URL
         TextField serverField = new TextField(manager.serverUrl());

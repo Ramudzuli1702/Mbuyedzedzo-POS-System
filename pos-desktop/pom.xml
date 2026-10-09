@@ -343,7 +343,17 @@
                                 <argument>${project.build.directory}/${shaded.jar.name}.jar;${javafx.jmods.path}</argument>
 
                                 <argument>--add-modules</argument>
-                                <argument>javafx.controls,javafx.fxml,javafx.swing,java.base,java.logging,java.management,java.sql,java.desktop,java.xml,java.naming,jdk.crypto.ec,jdk.httpserver,java.net.http</argument>
+                                <!--
+                                    jdk.charsets is required even though nothing here uses a
+                                    CJK/extended charset directly: ZXing's StringUtils (used by
+                                    the WiFi-pairing QR code) statically loads Charset.forName
+                                    ("EUC_JP") at class-init, which throws
+                                    UnsupportedCharsetException without this module — a custom
+                                    jlink runtime only bundles US-ASCII/ISO-8859-1/UTF-8/16 by
+                                    default. Without it, the WiFi-status button's QR dialog (and
+                                    anything else that touches that class) crashes outright.
+                                -->
+                                <argument>javafx.controls,javafx.fxml,javafx.swing,java.base,java.logging,java.management,java.sql,java.desktop,java.xml,java.naming,jdk.crypto.ec,jdk.httpserver,java.net.http,jdk.charsets</argument>
 
                                 <argument>--output</argument>
                                 <argument>${project.build.directory}/runtime</argument>
@@ -412,6 +422,13 @@
 
                                 <argument>--icon</argument>
                                 <argument>${app.icon}</argument>
+
+                                <!-- Shown as a license-acceptance page inside the native
+                                     Windows installer itself, before any files are copied —
+                                     separate from (and in addition to) TermsView's in-app
+                                     acceptance screen on first launch. -->
+                                <argument>--license-file</argument>
+                                <argument>${project.basedir}/installer/license.rtf</argument>
 
                                 <!-- ── Windows installer options ─────────────────── -->
                                 <argument>--win-dir-chooser</argument>

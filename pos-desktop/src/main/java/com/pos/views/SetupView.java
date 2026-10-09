@@ -12,8 +12,10 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
+import java.io.File;
 import java.util.concurrent.SynchronousQueue;
 
 /**
@@ -33,6 +35,8 @@ public class SetupView {
     private Label       statusLabel;
     private Label       errorLabel;
     private ProgressBar progressBar;
+    private Label       restoreChosenLabel;
+    private File        chosenBackupFile;
 
     // Password-prompt panel
     private VBox        promptPanel;
@@ -90,6 +94,9 @@ public class SetupView {
         statusLabel.setMaxWidth(480);
         statusLabel.setAlignment(Pos.CENTER);
 
+        // ── Restore from backup (optional, for a replacement/new PC) ──
+        VBox restorePanel = buildRestorePanel();
+
         // ── Password prompt panel (hidden until needed) ──
         promptPanel = buildPasswordPromptPanel();
         promptPanel.setVisible(false);
@@ -112,7 +119,7 @@ public class SetupView {
 
         root.getChildren().addAll(
             appName, tagLine, progressBar, statusLabel,
-            promptPanel, errorLabel
+            restorePanel, promptPanel, errorLabel
         );
 
         Scene scene = new Scene(root); // no explicit size — see LoginView
@@ -120,6 +127,60 @@ public class SetupView {
         root.prefHeightProperty().bind(scene.heightProperty());
         stage.setScene(scene);
         stage.show();
+    }
+
+    // ── Restore-from-backup panel ───────────────────────────────────────────────
+
+    /**
+     * Setting up on a replacement/new PC after an old one died or was
+     * swapped out shouldn't mean starting from an empty shop — this lets
+     * that first-run pick a previous backup .sql file (made from Settings on
+     * the old machine) to restore instead of the usual blank database.
+     * Picking a file here doesn't do anything by itself; POSApplication
+     * imports it right after the fresh schema is created, overwriting it
+     * with the backup's real data.
+     */
+    private VBox buildRestorePanel() {
+        VBox panel = new VBox(6);
+        panel.setAlignment(Pos.CENTER);
+
+        Button chooseBtn = new Button("Restore from a backup file instead...");
+        chooseBtn.setFont(Font.font("System", 13));
+        chooseBtn.setStyle(
+            "-fx-background-color: transparent;" +
+            "-fx-text-fill: #ccfbf1;" +
+            "-fx-underline: true;" +
+            "-fx-cursor: hand;" +
+            "-fx-border-color: transparent;"
+        );
+
+        restoreChosenLabel = new Label();
+        restoreChosenLabel.setFont(Font.font("System", 12));
+        restoreChosenLabel.setTextFill(Color.web("#ccfbf1"));
+        restoreChosenLabel.setVisible(false);
+        restoreChosenLabel.setManaged(false);
+
+        chooseBtn.setOnAction(e -> {
+            FileChooser chooser = new FileChooser();
+            chooser.setTitle("Choose a backup file (.sql)");
+            chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("SQL backup files", "*.sql"));
+            File file = chooser.showOpenDialog(stage);
+            if (file != null) {
+                chosenBackupFile = file;
+                restoreChosenLabel.setText("Will restore from: " + file.getName());
+                restoreChosenLabel.setVisible(true);
+                restoreChosenLabel.setManaged(true);
+            }
+        });
+
+        panel.getChildren().addAll(chooseBtn, restoreChosenLabel);
+        return panel;
+    }
+
+    /** The backup file picked on this screen, or null if setup should proceed fresh/empty. */
+    public File getChosenBackupFile() {
+        return chosenBackupFile;
     }
 
     // ── Password prompt panel builder ──────────────────────────────────────────

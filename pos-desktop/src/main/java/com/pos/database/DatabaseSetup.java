@@ -409,6 +409,14 @@ public class DatabaseSetup {
         try (Connection conn = DatabaseConnection.getConnection()) {
             addColumnIfMissing(conn, "Product", "SalePrice",
                 "DECIMAL(10,2) DEFAULT NULL AFTER Price");
+            // What the shop paid for the stock — distinct from Price (what it
+            // sells for). Reports' profit-margin figures used to alias Price
+            // as the cost basis too, which made gross profit read as ~zero on
+            // any sale without a promo/exchange adjustment. Defaults to 0 for
+            // existing products; the Inventory form will ask for it going
+            // forward, but old rows need a manual edit to get a real figure.
+            addColumnIfMissing(conn, "Product", "CostPrice",
+                "DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER Price");
             addColumnIfMissing(conn, "Promo", "PromoName",
                 "VARCHAR(100) AFTER PromoCode");
             addColumnIfMissing(conn, "Promo", "DiscountType",
@@ -425,8 +433,47 @@ public class DatabaseSetup {
                 "INT DEFAULT 0 AFTER UsageLimit");
             addColumnIfMissing(conn, "CustomerCommunications", "UnsubToken",
                 "VARCHAR(64) DEFAULT NULL AFTER TermsAccepted");
+            regenerateBarcodeImagesOnce(conn);
             System.out.println("Migrations complete.");
         }
+    }
+
+    /**
+     * One-time backfill for installs created before product labels switched
+     * from QR codes to real (CODE_128) barcodes: every existing product's
+     * stored "QRCode" image column still holds the old QR picture, so
+     * Inventory's "Show Barcode" dialog displayed a QR code for any product
+     * added/edited before that change, even though new products get a real
+     * barcode. Regenerating from the existing BarCode text fixes old rows
+     * without needing a manual re-save in the UI. Marked done in
+     * BusinessSettings so it only ever runs once.
+     */
+    private static void regenerateBarcodeImagesOnce(Connection conn) throws SQLException {
+        try (PreparedStatement check = conn.prepareStatement(
+                "SELECT 1 FROM BusinessSettings WHERE SettingKey = 'migration.barcodesRegenerated'")) {
+            if (check.executeQuery().next()) return;
+        }
+
+        int updated = 0;
+        try (PreparedStatement select = conn.prepareStatement("SELECT ProductID, BarCode FROM Product");
+             ResultSet rs = select.executeQuery()) {
+            while (rs.next()) {
+                String image = com.pos.utils.BarcodeUtil.generateBarcode(rs.getString("BarCode"));
+                if (image == null) continue;
+                try (PreparedStatement update = conn.prepareStatement(
+                        "UPDATE Product SET QRCode = ? WHERE ProductID = ?")) {
+                    update.setString(1, image);
+                    update.setInt(2, rs.getInt("ProductID"));
+                    updated += update.executeUpdate();
+                }
+            }
+        }
+
+        try (PreparedStatement mark = conn.prepareStatement(
+                "INSERT IGNORE INTO BusinessSettings (SettingKey, SettingValue) VALUES ('migration.barcodesRegenerated', 'true')")) {
+            mark.executeUpdate();
+        }
+        System.out.println("Regenerated barcode images for " + updated + " existing product(s).");
     }
 
     /**

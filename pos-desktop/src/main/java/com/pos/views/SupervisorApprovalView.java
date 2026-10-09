@@ -257,10 +257,8 @@ public class SupervisorApprovalView {
             com.pos.components.Ui.detailRow("Reason:", exchange.getReason())
         );
 
-        Button approveBtn = new Button("Approve");
-        Button rejectBtn  = new Button("Reject");
-        approveBtn.setStyle(approveStyle());
-        rejectBtn.setStyle(rejectStyle());
+        Button approveBtn = com.pos.components.Ui.actionButton("Approve", "#16a34a", "Approve this exchange");
+        Button rejectBtn  = com.pos.components.Ui.actionButton("Reject", "#dc2626", "Reject this exchange");
         approveBtn.setOnAction(e -> handleExchangeApproval(exchange, true));
         rejectBtn.setOnAction(e -> handleExchangeApproval(exchange, false));
 
@@ -278,10 +276,8 @@ public class SupervisorApprovalView {
             com.pos.components.Ui.detailRow("Reason:", ret.getReason())
         );
 
-        Button approveBtn = new Button("Approve");
-        Button rejectBtn  = new Button("Reject");
-        approveBtn.setStyle(approveStyle());
-        rejectBtn.setStyle(rejectStyle());
+        Button approveBtn = com.pos.components.Ui.actionButton("Approve", "#16a34a", "Approve this return");
+        Button rejectBtn  = com.pos.components.Ui.actionButton("Reject", "#dc2626", "Reject this return");
         approveBtn.setOnAction(e -> handleReturnApproval(ret, true));
         rejectBtn.setOnAction(e -> handleReturnApproval(ret, false));
 
@@ -411,13 +407,4 @@ public class SupervisorApprovalView {
         com.pos.components.Ui.showAlert(exchangeTable, title, content, type);
     }
 
-    private String approveStyle() {
-        return "-fx-background-color: #16a34a; -fx-text-fill: white;" +
-               "-fx-font-size: 10; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;";
-    }
-
-    private String rejectStyle() {
-        return "-fx-background-color: #dc2626; -fx-text-fill: white;" +
-               "-fx-font-size: 10; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;";
-    }
 }

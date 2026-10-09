@@ -249,10 +249,8 @@ public class MarketingView {
         TableColumn<String[], Void> actionCol = new TableColumn<>("");
         actionCol.setPrefWidth(110);
         actionCol.setCellFactory(col -> new TableCell<>() {
-            private final Button btn = new Button("Unsubscribe");
+            private final Button btn = com.pos.components.Ui.actionButton("Unsubscribe", "#dc2626", "Remove from marketing emails");
             {
-                btn.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white;"
-                    + "-fx-font-size: 10; -fx-padding: 4 8; -fx-background-radius: 4; -fx-cursor: hand;");
                 btn.setOnAction(e -> {
                     String[] row = getTableView().getItems().get(getIndex());
                     int accountID = Integer.parseInt(row[3]);

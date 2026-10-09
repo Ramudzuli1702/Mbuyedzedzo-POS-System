@@ -2,7 +2,7 @@ package com.pos.services;
 
 import com.pos.database.DatabaseConnection;
 import com.pos.models.Product;
-import com.pos.utils.QRCodeUtil;
+import com.pos.utils.BarcodeUtil;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 
@@ -15,13 +15,14 @@ public class ProductService {
     ========================= */
     public boolean addProduct(Product product) {
 
-        String qrData = "PRODUCT:" + product.getBarCode();
-        String qrCode = QRCodeUtil.generateQRCode(qrData);
+        // The "QRCode" column holds whatever label image gets generated for
+        // this product — a barcode image now, not a QR code (see BarcodeUtil).
+        String barcodeImage = BarcodeUtil.generateBarcode(product.getBarCode());
 
         String sql = """
             INSERT INTO Product
-            (StaffID, CategoryID, ProductName, QRCode, BarCode, Quantity, NoSold, Price)
-            VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+            (StaffID, CategoryID, ProductName, QRCode, BarCode, Quantity, NoSold, Price, CostPrice)
+            VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
         """;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -30,17 +31,18 @@ public class ProductService {
             pstmt.setInt(1, product.getStaffID());
             pstmt.setInt(2, product.getCategoryID());
             pstmt.setString(3, product.getProductName());
-            pstmt.setString(4, qrCode);
+            pstmt.setString(4, barcodeImage);
             pstmt.setString(5, product.getBarCode());
             pstmt.setInt(6, product.getQuantity());
             pstmt.setBigDecimal(7, product.getPrice());
+            pstmt.setBigDecimal(8, product.getCostPrice());
 
             if (pstmt.executeUpdate() == 0) return false;
 
             try (ResultSet rs = pstmt.getGeneratedKeys()) {
                 if (rs.next()) {
                     product.setProductID(rs.getInt(1));
-                    product.setQrCode(qrCode);
+                    product.setQrCode(barcodeImage);
                 }
             }
             return true;
@@ -56,9 +58,14 @@ public class ProductService {
     ========================= */
     public boolean updateProduct(Product product) {
 
+        // The barcode VALUE may have changed, so the generated label image
+        // is regenerated too — otherwise an edited barcode would print a
+        // label that doesn't match the number underneath it.
+        String barcodeImage = BarcodeUtil.generateBarcode(product.getBarCode());
+
         String sql = """
             UPDATE Product
-            SET ProductName = ?, CategoryID = ?, BarCode = ?, Quantity = ?, Price = ?
+            SET ProductName = ?, CategoryID = ?, BarCode = ?, QRCode = ?, Quantity = ?, Price = ?, CostPrice = ?
             WHERE ProductID = ?
         """;
 
@@ -68,11 +75,15 @@ public class ProductService {
             pstmt.setString(1, product.getProductName());
             pstmt.setInt(2, product.getCategoryID());
             pstmt.setString(3, product.getBarCode());
-            pstmt.setInt(4, product.getQuantity());
-            pstmt.setBigDecimal(5, product.getPrice());
-            pstmt.setInt(6, product.getProductID());
+            pstmt.setString(4, barcodeImage);
+            pstmt.setInt(5, product.getQuantity());
+            pstmt.setBigDecimal(6, product.getPrice());
+            pstmt.setBigDecimal(7, product.getCostPrice());
+            pstmt.setInt(8, product.getProductID());
 
-            return pstmt.executeUpdate() > 0;
+            boolean ok = pstmt.executeUpdate() > 0;
+            if (ok) product.setQrCode(barcodeImage);
+            return ok;
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -281,6 +292,7 @@ public class ProductService {
         product.setQuantity(rs.getInt("Quantity"));
         product.setNoSold(rs.getInt("NoSold"));
         product.setPrice(rs.getBigDecimal("Price"));
+        product.setCostPrice(rs.getBigDecimal("CostPrice"));
         product.setCategoryName(rs.getString("CategoryName"));
 
         return product;

@@ -29,8 +29,17 @@ public class MainDashboard {
     private VBox sidebar;
     private WiFiHandler wifiHandler;
     private Object currentView;
+    private String currentSection = "sales";
+    private Button infoBtn;
+    private BorderPane contentArea;
+    private VBox sidebarExtraInfo;
+    private boolean sidebarCollapsed = false;
+    private final java.util.Map<Button, String> menuButtonLabels = new java.util.HashMap<>();
+    private static final double SIDEBAR_EXPANDED_WIDTH  = 250;
+    private static final double SIDEBAR_COLLAPSED_WIDTH = 72;
 
     private Button salesBtn;
+    private Button salesHistoryBtn;
     private Button inventoryBtn;
     private Button userMgmtBtn;
     private Button customerBtn;
@@ -55,6 +64,13 @@ public class MainDashboard {
         sidebar = createSidebar();
         mainLayout.setLeft(sidebar);
 
+        // The info bar belongs to the content area only — it must not sit in
+        // mainLayout's own top region, which spans the full window width and
+        // would otherwise run straight over the sidebar.
+        contentArea = new BorderPane();
+        contentArea.setTop(createTopBar());
+        mainLayout.setCenter(contentArea);
+
         navigateTo("sales");
 
         // No explicit width/height — see LoginView for why.
@@ -70,6 +86,55 @@ public class MainDashboard {
         stage.setMinWidth(1100);
         stage.setMinHeight(600);
         stage.show();
+
+        if (!com.pos.setup.TutorialState.hasSeenTutorial()) {
+            com.pos.setup.TutorialState.markSeen();
+            Platform.runLater(() ->
+                com.pos.components.TutorialOverlay.showWalkthrough(stage, visibleSections()));
+        }
+    }
+
+    /** Sections this user/edition actually has in the menu, in menu order. */
+    private java.util.List<String> visibleSections() {
+        java.util.List<String> all = com.pos.utils.HelpContent.sectionsInOrder();
+        java.util.List<String> visible = new java.util.ArrayList<>();
+        boolean full = currentUser.hasFullAccess();
+        boolean hasCustomers = com.pos.Edition.current().hasCustomers();
+        for (String s : all) {
+            if (("users" .equals(s) || "customers".equals(s) || "reports".equals(s)
+                    || "approvals".equals(s) || "marketing".equals(s) || "settings".equals(s)) && !full) continue;
+            if (("customers".equals(s) || "marketing".equals(s)) && !hasCustomers) continue;
+            if ("salesHistory".equals(s) && hasCustomers) continue;
+            visible.add(s);
+        }
+        return visible;
+    }
+
+    private HBox createTopBar() {
+        Button collapseBtn = new Button("☰");
+        collapseBtn.setTooltip(new Tooltip("Collapse / expand the menu"));
+        collapseBtn.setStyle(
+            "-fx-background-color: transparent; -fx-text-fill: " + Theme.BRAND + ";" +
+            "-fx-font-weight: bold; -fx-cursor: hand; -fx-font-size: 15px;"
+        );
+        collapseBtn.setOnAction(e -> toggleSidebar());
+
+        infoBtn = new Button("ⓘ About this screen");
+        infoBtn.setStyle(
+            "-fx-background-color: transparent; -fx-text-fill: " + Theme.BRAND + ";" +
+            "-fx-font-weight: bold; -fx-cursor: hand; -fx-font-size: 13px;"
+        );
+        infoBtn.setOnAction(e ->
+            com.pos.components.TutorialOverlay.showSingle(stage, currentSection));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox bar = new HBox(collapseBtn, spacer, infoBtn);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(8, 16, 8, 16));
+        bar.setStyle("-fx-background-color: white; -fx-border-color: transparent transparent #e5e7eb transparent; -fx-border-width: 0 0 1 0;");
+        return bar;
     }
 
     private void navigateTo(String section) {
@@ -92,67 +157,74 @@ public class MainDashboard {
         // only torn down on logout / window close via cleanupCurrentView().
         if (currentView instanceof SessionView v) v.cleanup();
         resetButtonStyles();
+        currentSection = section;
 
         switch (section) {
             case "sales" -> {
                 salesBtn.setStyle(getActiveButtonStyle());
                 SalesView view = new SalesView(currentUser);
                 BorderPane.setMargin(view.getView(), Insets.EMPTY);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "inventory" -> {
                 inventoryBtn.setStyle(getActiveButtonStyle());
                 InventoryView view = new InventoryView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
+                currentView = view;
+            }
+            case "salesHistory" -> {
+                salesHistoryBtn.setStyle(getActiveButtonStyle());
+                SalesHistoryView view = new SalesHistoryView(currentUser);
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "users" -> {
                 userMgmtBtn.setStyle(getActiveButtonStyle());
                 UserManagementView view = new UserManagementView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "customers" -> {
                 customerBtn.setStyle(getActiveButtonStyle());
                 CustomerView view = new CustomerView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "reports" -> {
                 reportsBtn.setStyle(getActiveButtonStyle());
                 ReportsView view = new ReportsView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "sessions" -> {
                 sessionsBtn.setStyle(getActiveButtonStyle());
                 SessionView view = new SessionView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "approvals" -> {
                 approvalsBtn.setStyle(getActiveButtonStyle());
                 SupervisorApprovalView view = new SupervisorApprovalView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "marketing" -> {
                 marketingBtn.setStyle(getActiveButtonStyle());
                 MarketingView view = new MarketingView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "subscription" -> {
                 subscriptionBtn.setStyle(getActiveButtonStyle());
                 SubscriptionView view = new SubscriptionView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
             case "settings" -> {
                 settingsBtn.setStyle(getActiveButtonStyle());
                 SettingsView view = new SettingsView(currentUser);
-                mainLayout.setCenter(view.getView());
+                contentArea.setCenter(view.getView());
                 currentView = view;
             }
         }
@@ -185,9 +257,9 @@ public class MainDashboard {
 
     private VBox createSidebar() {
         VBox sb = new VBox(0);
-        sb.setPrefWidth(250);
-        sb.setMinWidth(250);
-        sb.setMaxWidth(250);
+        sb.setPrefWidth(SIDEBAR_EXPANDED_WIDTH);
+        sb.setMinWidth(SIDEBAR_EXPANDED_WIDTH);
+        sb.setMaxWidth(SIDEBAR_EXPANDED_WIDTH);
         // Flat colour, not a gradient: the ScrollPane below can't reliably paint a
         // matching gradient without the "transparent ScrollPane renders labels
         // blank on some Windows GPUs" bug seen elsewhere in this codebase, so an
@@ -242,8 +314,31 @@ public class MainDashboard {
         WiFiStatusButton wifiBtn = new WiFiStatusButton();
         wifiBtn.setMaxWidth(Double.MAX_VALUE);
 
-        header.getChildren().addAll(systemTitle, userName, userRole, wifiBtn);
+        com.pos.components.ScannerStatusButton scannerBtn = new com.pos.components.ScannerStatusButton();
+        scannerBtn.setMaxWidth(Double.MAX_VALUE);
+
+        // Collapsed into its own box so toggleSidebar() can hide it as one unit,
+        // leaving just the short branding title visible in the narrow rail.
+        sidebarExtraInfo = new VBox(10, userName, userRole, wifiBtn, scannerBtn);
+        sidebarExtraInfo.setAlignment(Pos.CENTER);
+
+        header.getChildren().addAll(systemTitle, sidebarExtraInfo);
         return header;
+    }
+
+    private void toggleSidebar() {
+        sidebarCollapsed = !sidebarCollapsed;
+        double width = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH;
+        sidebar.setPrefWidth(width);
+        sidebar.setMinWidth(width);
+        sidebar.setMaxWidth(width);
+
+        sidebarExtraInfo.setVisible(!sidebarCollapsed);
+        sidebarExtraInfo.setManaged(!sidebarCollapsed);
+
+        for (var entry : menuButtonLabels.entrySet()) {
+            entry.getKey().setText(sidebarCollapsed ? null : entry.getValue());
+        }
     }
 
     private VBox createMenuBox() {
@@ -253,6 +348,7 @@ public class MainDashboard {
         boolean full = currentUser.hasFullAccess();
 
         salesBtn     = createMenuButton(Icons.sales(18),        "Sales",           true);
+        salesHistoryBtn = createMenuButton(Icons.reports(18),   "Sales History",   true);
         inventoryBtn = createMenuButton(Icons.inventory(18),     "Inventory",       full);
         userMgmtBtn  = createMenuButton(Icons.users(18),         "User Management", full);
         customerBtn  = createMenuButton(Icons.customers(18),     "Customers",       full);
@@ -264,6 +360,7 @@ public class MainDashboard {
         settingsBtn  = createMenuButton(Icons.settings(18),      "Settings",        full);
 
         salesBtn.setOnAction(e     -> navigateTo("sales"));
+        salesHistoryBtn.setOnAction(e -> navigateTo("salesHistory"));
         inventoryBtn.setOnAction(e -> navigateTo("inventory"));
         userMgmtBtn.setOnAction(e  -> navigateTo("users"));
         customerBtn.setOnAction(e  -> navigateTo("customers"));
@@ -275,6 +372,10 @@ public class MainDashboard {
         settingsBtn.setOnAction(e  -> navigateTo("settings"));
 
         menuBox.getChildren().add(salesBtn);
+        // Retail only: Standard already covers returns/exchanges per real
+        // customer via the Customers screen, which Retail doesn't have —
+        // every Retail sale books against one shared walk-in account instead.
+        if (!com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(salesHistoryBtn);
         menuBox.getChildren().add(inventoryBtn);
         menuBox.getChildren().add(userMgmtBtn);
         if (com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(customerBtn);
@@ -326,9 +427,8 @@ public class MainDashboard {
         btn.setPadding(new Insets(15, 20, 15, 20));
         btn.setStyle(getDefaultButtonStyle());
         btn.setDisable(!enabled);
-        if (!enabled) {
-            btn.setTooltip(new Tooltip("Managers and admins only"));
-        }
+        btn.setTooltip(new Tooltip(enabled ? text : "Managers and admins only"));
+        menuButtonLabels.put(btn, text);
 
         if (enabled) {
             btn.setOnMouseEntered(e -> {
@@ -346,7 +446,7 @@ public class MainDashboard {
 
     private void resetButtonStyles() {
         Button[] buttons = {
-            salesBtn, inventoryBtn, userMgmtBtn, customerBtn,
+            salesBtn, salesHistoryBtn, inventoryBtn, userMgmtBtn, customerBtn,
             reportsBtn, sessionsBtn, approvalsBtn, marketingBtn, subscriptionBtn, settingsBtn
         };
         for (Button b : buttons) {

@@ -1,9 +1,15 @@
 package com.pos.views;
 
+import com.pos.models.Customer;
 import com.pos.models.User;
+import com.pos.services.CustomerService;
+import com.pos.services.ExchangeReturnService;
 import com.pos.services.SessionService;
 import com.pos.services.SessionService.BusinessSession;
+import com.pos.services.SessionService.SessionSaleSummary;
 import com.pos.services.UserService;
+import com.pos.utils.ReceiptGenerator;
+import javafx.collections.ObservableList;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -43,9 +49,11 @@ public class SessionView {
     private User currentUser;
     private SessionService sessionService;
     private UserService userService;
+    private final CustomerService customerService = new CustomerService();
 
     private TableView<BusinessSession> sessionTable;
     private TableView<SessionActivity> activityFeed;
+    private TableView<SessionSaleSummary> receiptsTable;
 
     private VBox sessionStrip;
     private Label statusLabel;
@@ -154,7 +162,9 @@ public class SessionView {
 
         liveTab = new Tab("Live Feed", createActivityFeed());
         Tab historyTab = new Tab("Session History", createSessionTable());
-        tabPane.getTabs().addAll(liveTab, historyTab);
+        Tab receiptsTab = new Tab("Receipts", createReceiptsTab());
+        receiptsTab.setOnSelectionChanged(e -> { if (receiptsTab.isSelected()) refreshReceiptsTab(); });
+        tabPane.getTabs().addAll(liveTab, historyTab, receiptsTab);
         tabPane.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> userPickedTab = true);
         VBox.setVgrow(tabPane, Priority.ALWAYS);
 
@@ -350,6 +360,122 @@ public class SessionView {
         };
     }
 
+    // ── Receipts tab ─────────────────────────────────────────────────────────
+
+    private VBox createReceiptsTab() {
+        VBox box = new VBox(12);
+        box.setStyle(
+                "-fx-background-color: white; -fx-background-radius: 14;"
+                + "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
+        box.setPadding(new Insets(18));
+
+        Label title = new Label("Receipts — this session");
+        title.setFont(Font.font("System", FontWeight.BOLD, 15));
+
+        receiptsTable = new TableView<>();
+        receiptsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        receiptsTable.setPlaceholder(new Label("No sales yet this session."));
+        VBox.setVgrow(receiptsTable, Priority.ALWAYS);
+
+        TableColumn<SessionSaleSummary, String> saleIdCol = new TableColumn<>("Sale ID");
+        saleIdCol.setMaxWidth(90);
+        saleIdCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                String.valueOf(d.getValue().saleID())));
+
+        TableColumn<SessionSaleSummary, String> timeCol = new TableColumn<>("Time");
+        timeCol.setMaxWidth(110);
+        timeCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                d.getValue().saleDate().format(TIME_FMT)));
+
+        TableColumn<SessionSaleSummary, String> staffCol = new TableColumn<>("Sold By");
+        staffCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(d.getValue().staffName()));
+
+        TableColumn<SessionSaleSummary, String> amtCol = new TableColumn<>("Amount");
+        amtCol.setMaxWidth(120);
+        amtCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        amtCol.setCellValueFactory(d -> new javafx.beans.property.SimpleStringProperty(
+                String.format("R %.2f", d.getValue().amount())));
+
+        TableColumn<SessionSaleSummary, Void> actionCol = new TableColumn<>("");
+        actionCol.setPrefWidth(140);
+        actionCol.setCellFactory(col -> new TableCell<>() {
+            private final Button viewBtn = com.pos.components.Ui.actionButton("View / Print", "#2563eb", "View or print this sale's receipt");
+            {
+                viewBtn.setOnAction(e -> {
+                    SessionSaleSummary sale = getTableView().getItems().get(getIndex());
+                    showReceiptDialog(sale.saleID());
+                });
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                setGraphic(empty ? null : viewBtn);
+            }
+        });
+
+        receiptsTable.getColumns().addAll(saleIdCol, timeCol, staffCol, amtCol, actionCol);
+
+        box.getChildren().addAll(title, receiptsTable);
+        return box;
+    }
+
+    private void refreshReceiptsTab() {
+        BusinessSession active = sessionService.getActiveSession();
+        if (active == null || receiptsTable == null) return;
+        receiptsTable.setItems(sessionService.getSessionSales(active.getSessionID()));
+    }
+
+    /** Reconstructs and shows the receipt for a sale made during this session, with a Print button. */
+    private void showReceiptDialog(int saleId) {
+        Integer accountId = customerService.getAccountIdForSale(saleId);
+        if (accountId == null) {
+            showAlert("Not Found", "Could not find which account this sale belongs to.", Alert.AlertType.ERROR);
+            return;
+        }
+        Customer customer = customerService.getCustomerById(accountId);
+        if (customer == null) {
+            showAlert("Not Found", "Could not load the account for this sale.", Alert.AlertType.ERROR);
+            return;
+        }
+
+        com.pos.services.CustomerService.Sale sale = null;
+        for (var s : customerService.getCustomerPurchases(accountId)) {
+            if (s.getSaleID() == saleId) { sale = s; break; }
+        }
+        if (sale == null) {
+            showAlert("Not Found", "Could not load this sale's items.", Alert.AlertType.ERROR);
+            return;
+        }
+
+        String receiptText = ReceiptGenerator.generateSaleReceipt(
+                sale, customer, customerService, new ExchangeReturnService());
+
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Receipt — Sale #" + saleId);
+
+        TextArea area = new TextArea(receiptText);
+        area.setEditable(false);
+        area.setWrapText(false);
+        area.setStyle("-fx-font-family: 'Consolas','Courier New',monospace; -fx-font-size: 12;");
+        area.setPrefSize(420, 480);
+
+        Button printBtn = new Button("Print");
+        printBtn.setStyle(
+                "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;"
+                + "-fx-padding: 10 24; -fx-background-radius: 6; -fx-cursor: hand; -fx-font-size: 13;");
+        printBtn.setOnAction(e -> ReceiptGenerator.printReceipt(receiptText));
+
+        HBox buttonBar = new HBox(printBtn);
+        buttonBar.setAlignment(Pos.CENTER_RIGHT);
+        buttonBar.setPadding(new Insets(10, 0, 0, 0));
+
+        VBox content = new VBox(10, area, buttonBar);
+        content.setPadding(new Insets(10));
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.showAndWait();
+    }
+
     private VBox createSessionTable() {
         VBox tableBox = new VBox(15);
         tableBox.setStyle(
@@ -509,6 +635,7 @@ public class SessionView {
             applyTotals(active);
             styleActionButton(true);
             actionButton.setDisable(false);
+            refreshReceiptsTab();
 
             mergeActivityFeed(sessionService.getSessionActivities(active.getSessionID()));
             if (!userPickedTab) tabPane.getSelectionModel().select(liveTab);
@@ -1012,13 +1139,37 @@ public class SessionView {
         else                  showAlert("Error", "Failed to generate reports", Alert.AlertType.ERROR);
     }
 
+    /**
+     * Opens a just-generated PDF in the OS's own default viewer right away —
+     * so the cashier sees the declaration/statement immediately instead of
+     * having to leave the app and go find it in a folder themselves. Best
+     * effort only: if no PDF viewer is associated or Desktop isn't supported
+     * here, this silently does nothing — the file is still safely on disk
+     * either way, same as before.
+     */
+    private void openFileQuietly(String path) {
+        try {
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
+                if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
+                    desktop.open(new File(path));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Could not auto-open " + path + ": " + e.getMessage());
+        }
+    }
+
     private boolean generateDeclarationPDF(int sessionID) {
         try {
-            File reportsDir = new File("reports");
+            // An absolute, user-writable folder — a relative "reports/..." path
+            // resolves against the installed app's own directory (e.g. Program
+            // Files), which a standard user usually can't write to.
+            File reportsDir = new File(new com.pos.services.SettingsService().getReportsSavePath());
             if (!reportsDir.exists()) reportsDir.mkdirs();
 
-            String filename = "reports/session_" + sessionID + "_declaration_"
-                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf";
+            String filename = new File(reportsDir, "session_" + sessionID + "_declaration_"
+                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf").getPath();
 
             Document document = new Document(PageSize.A4);
             PdfWriter.getInstance(document, new FileOutputStream(filename));
@@ -1110,6 +1261,7 @@ public class SessionView {
                     "===============================================", normalFont));
 
             document.close();
+            openFileQuietly(filename);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
@@ -1119,11 +1271,11 @@ public class SessionView {
 
     private boolean generateStatementPDF(int sessionID) {
         try {
-            File reportsDir = new File("reports");
+            File reportsDir = new File(new com.pos.services.SettingsService().getReportsSavePath());
             if (!reportsDir.exists()) reportsDir.mkdirs();
 
-            String filename = "reports/session_" + sessionID + "_statement_"
-                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf";
+            String filename = new File(reportsDir, "session_" + sessionID + "_statement_"
+                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf").getPath();
 
             Document document = new Document(PageSize.A4);
             PdfWriter.getInstance(document, new FileOutputStream(filename));
@@ -1292,6 +1444,7 @@ public class SessionView {
                     String.format("Total Sales:      R%.2f", session.getTotalSales()), normalFont));
 
             document.close();
+            openFileQuietly(filename);
             return true;
         } catch (Exception e) {
             e.printStackTrace();

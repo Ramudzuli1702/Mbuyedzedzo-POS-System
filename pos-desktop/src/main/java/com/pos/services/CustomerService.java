@@ -270,6 +270,24 @@ public class CustomerService {
         return 0;
     }
 
+    /**
+     * Which account a given sale belongs to — needed to reprint a receipt
+     * starting from just a SaleID (e.g. a session's receipts list), since
+     * every other Sale lookup here is scoped by a known accountID.
+     */
+    public Integer getAccountIdForSale(int saleId) {
+        String query = "SELECT AccountID FROM Transactions WHERE SaleID = ? LIMIT 1";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, saleId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) return rs.getInt("AccountID");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
     // ── getCustomerPurchases ──────────────────────────────────────────────────
     //
     // Reads the ORIGINAL Quantity from Transactions (not the mutated value).

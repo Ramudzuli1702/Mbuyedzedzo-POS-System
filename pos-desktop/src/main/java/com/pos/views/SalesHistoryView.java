@@ -3,8 +3,6 @@ package com.pos.views;
 import com.pos.models.Customer;
 import com.pos.models.Product;
 import com.pos.models.User;
-import com.pos.services.CommunicationsService;
-import com.pos.services.CommunicationsService.CommPreferences;
 import com.pos.services.CustomerService;
 import com.pos.services.ExchangeReturnService;
 import com.pos.services.ProductService;
@@ -26,23 +24,30 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class CustomerView {
-    private User currentUser;
-    private CustomerService customerService;
-    private ProductService productService;
-    private final CommunicationsService commService = new CommunicationsService();
-    private final com.pos.services.ReportService reportService = new com.pos.services.ReportService();
-    private TableView<Customer> customerTable;
-    private TextField searchField;
+/**
+ * Retail-edition sales history: every retail sale is booked against one
+ * shared "Walk-in Customer" account (see CustomerService.getOrCreateWalkInAccount),
+ * since Retail has no per-customer accounts at all. Standard already covers
+ * this same return/exchange workflow per real customer via CustomerView — this
+ * view is the Retail-only equivalent, scoped to that one shared account, so
+ * Retail shops can actually look up a past sale and process a return or
+ * exchange, which previously had no entry point at all in this edition.
+ */
+public class SalesHistoryView {
+    private final User currentUser;
+    private final CustomerService customerService;
+    private final ProductService productService;
+    private Customer walkIn;
+    private TableView<CustomerService.Sale> salesTable;
 
     private static final DateTimeFormatter DT_FMT =
-            DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");    public CustomerView(User user) {
+            DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
+
+    public SalesHistoryView(User user) {
         this.currentUser = user;
         this.customerService = new CustomerService();
         this.productService = new ProductService();
@@ -51,218 +56,41 @@ public class CustomerView {
     public BorderPane getView() {
         BorderPane layout = new BorderPane();
         layout.setStyle("-fx-background-color: #f5f7fa;");
-        layout.setTop(createTopBar());
+
+        walkIn = customerService.getOrCreateWalkInAccount(currentUser.getStaffID());
 
         VBox mainContent = new VBox(20);
         mainContent.setPadding(new Insets(20));
-        mainContent.getChildren().addAll(createSummaryCards(), createCustomerTable());
-        layout.setCenter(mainContent);
 
-        return layout;
-    }
-
-    private javafx.scene.layout.HBox createSummaryCards() {
-        java.time.LocalDate today = java.time.LocalDate.now();
-        java.time.LocalDate monthStart = today.withDayOfMonth(1);
-
-        int total     = reportService.getTotalCustomers();
-        int newThisMonth = reportService.getNewCustomers(monthStart, today);
-        double repeat = reportService.getRepeatCustomerRate(today.minusMonths(6), today);
-        int subscribers = commService.getSubscribedCustomers().size();
-
-        return com.pos.components.SummaryCards.row(
-            new com.pos.components.SummaryCards.Card("Total Customers", String.format("%,d", total), "#0f766e", "all accounts"),
-            new com.pos.components.SummaryCards.Card("New This Month", String.valueOf(newThisMonth), "#16a34a", monthStart.getMonth().getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault()) + " " + today.getYear()),
-            new com.pos.components.SummaryCards.Card("Repeat Buyers", String.format("%.0f%%", repeat), "#7c3aed", "2+ purchases, 6 mo"),
-            new com.pos.components.SummaryCards.Card("Marketing Opt-Ins", String.valueOf(subscribers), "#d97706", "receive campaigns")
-        );
-    }
-
-    // ── Top bar ───────────────────────────────────────────────────────────────
-
-    private HBox createTopBar() {
-        HBox topBar = new HBox(20);
-        topBar.setPadding(new Insets(20));
-        topBar.setAlignment(Pos.CENTER_LEFT);
-        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
-
-        Label title = new Label("Customer Management");
+        Label title = new Label("Sales History");
         title.setFont(Font.font("System", FontWeight.BOLD, 24));
         title.setTextFill(Color.web("#0f766e"));
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Label sub = new Label("Every till sale, searchable so you can process a return or exchange.");
+        sub.setTextFill(Color.web("#64748b"));
 
-        searchField = new TextField();
-        searchField.setPromptText("Search customers...");
-        searchField.setPrefWidth(300);
-        searchField.setStyle("-fx-font-size: 13; -fx-padding: 10;");
-        searchField.textProperty().addListener((obs, oldVal, newVal) -> searchCustomers(newVal));
-
-        Button addBtn = new Button("+ Add Customer");
-        addBtn.setStyle(
-                "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;" +
-                "-fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
-        addBtn.setOnAction(e -> showAddCustomerDialog());
-
-        topBar.getChildren().addAll(title, spacer, searchField, addBtn);
-        return topBar;
-    }
-
-    // ── Customer table ────────────────────────────────────────────────────────
-
-    private VBox createCustomerTable() {
-        VBox tableBox = new VBox(15);
-        tableBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 14;" +
-                "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
-        tableBox.setPadding(new Insets(20));
-
-        Label tableTitle = new Label("Customer List");
-        tableTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
-
-        customerTable = new TableView<>();
-        customerTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-
-        TableColumn<Customer, Integer> idCol = new TableColumn<>("ID");
-        idCol.setCellValueFactory(new PropertyValueFactory<>("accountID"));
-        idCol.setPrefWidth(60);
-
-        TableColumn<Customer, String> nameCol = new TableColumn<>("Full Name");
-        nameCol.setCellValueFactory(new PropertyValueFactory<>("fullNames"));
-        nameCol.setPrefWidth(200);
-
-        TableColumn<Customer, String> emailCol = new TableColumn<>("Email");
-        emailCol.setCellValueFactory(new PropertyValueFactory<>("emailAddress"));
-        emailCol.setPrefWidth(220);
-
-        TableColumn<Customer, String> phoneCol = new TableColumn<>("Phone");
-        phoneCol.setCellValueFactory(new PropertyValueFactory<>("contactNo"));
-        phoneCol.setPrefWidth(150);
-
-        TableColumn<Customer, LocalDate> dobCol = new TableColumn<>("Date of Birth");
-        dobCol.setCellValueFactory(new PropertyValueFactory<>("dateOfBirth"));
-        dobCol.setPrefWidth(120);
-
-        TableColumn<Customer, Void> purchasesCol = new TableColumn<>("Net Purchases");
-        purchasesCol.setPrefWidth(100);
-        purchasesCol.setCellFactory(param -> new TableCell<>() {
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty) { setText(null); return; }
-                Customer c = getTableView().getItems().get(getIndex());
-                setText(String.valueOf(customerService.getCustomerNetPurchaseQuantity(c.getAccountID())));
-            }
-        });
-
-        TableColumn<Customer, Void> actionCol = new TableColumn<>("");
-        actionCol.setPrefWidth(90);
-        actionCol.setCellFactory(param -> new TableCell<>() {
-            private final Button viewBtn = com.pos.components.Ui.viewButton();
-            {
-                viewBtn.setOnAction(e -> {
-                    showCustomerDetails(getTableView().getItems().get(getIndex()));
-                    loadCustomers();
-                });
-            }
-            @Override
-            protected void updateItem(Void item, boolean empty) {
-                super.updateItem(item, empty);
-                setGraphic(empty ? null : viewBtn);
-            }
-        });
-
-        customerTable.getColumns().addAll(idCol, nameCol, emailCol, phoneCol, dobCol, purchasesCol, actionCol);
-        loadCustomers();
-        VBox.setVgrow(customerTable, Priority.ALWAYS);
-        tableBox.getChildren().addAll(tableTitle, customerTable);
-        return tableBox;
-    }
-
-    private void loadCustomers() {
-        customerTable.setItems(customerService.getAllCustomers());
-        customerTable.refresh();
-    }
-
-    private void searchCustomers(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            loadCustomers();
-        } else {
-            customerTable.setItems(customerService.searchCustomers(keyword));
-            customerTable.refresh();
+        if (walkIn == null) {
+            mainContent.getChildren().addAll(title, sub,
+                new Label("Could not load sales history — check the log for details."));
+            layout.setCenter(mainContent);
+            return layout;
         }
-    }
 
-    // ── Customer details window ───────────────────────────────────────────────
-
-    private void showCustomerDetails(Customer customer) {
-        Stage stage = new Stage();
-        stage.setTitle("Customer Details - " + customer.getFullNames());
-        stage.initModality(Modality.WINDOW_MODAL);
-        stage.setResizable(true);
-
-        BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #f5f7fa;");
-
-        // Info box
-        VBox infoBox = new VBox(10);
-        infoBox.setPadding(new Insets(20));
-        infoBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 14;" +
-                "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
-        String signupStaff = customerService.getStaffName(customer.getStaffID());
-
-        Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit this customer");
-        Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#dc2626", "Deactivate this customer");
-        editBtn.setOnAction(e -> {
-            stage.close();
-            showEditCustomerDialog(customer);
-            loadCustomers();
-        });
-        deleteBtn.setOnAction(e -> {
-            stage.close();
-            deleteCustomer(customer);
-        });
-        HBox actionBar = new HBox(10, editBtn, deleteBtn);
-
-        infoBox.getChildren().addAll(
-                createLabeledField("Customer ID",      String.valueOf(customer.getAccountID())),
-                createLabeledField("Full Name",        customer.getFullNames()),
-                createLabeledField("Email",            customer.getEmailAddress()),
-                createLabeledField("Phone",            customer.getContactNo()),
-                createLabeledField("Date of Birth",    customer.getDateOfBirth().toString()),
-                createLabeledField("Signed Up By",     signupStaff),
-                createLabeledField("Member Since",     customer.getTimeStamp().toLocalDate().toString()),
-                createLabeledField("Total Net Purchases",
-                        customerService.getCustomerNetPurchaseQuantity(customer.getAccountID()) + " items"),
-                createMarketingToggleRow(customer),
-                actionBar);
-        root.setTop(infoBox);
-
-        // Purchases table
-        VBox tableBox = new VBox(15);
-        tableBox.setPadding(new Insets(20));
-
-        Label purchasesTitle = new Label("Previous Purchases (Grouped by Sale)");
-        purchasesTitle.setFont(Font.font("System", FontWeight.BOLD, 16));
-        tableBox.getChildren().add(purchasesTitle);
-
-        TableView<CustomerService.Sale> salesTable = buildSalesTable(customer);
-        ObservableList<CustomerService.Sale> sales = customerService.getCustomerPurchases(customer.getAccountID());
-        salesTable.setItems(sales);
+        salesTable = buildSalesTable(walkIn);
+        salesTable.setItems(customerService.getCustomerPurchases(walkIn.getAccountID()));
         VBox.setVgrow(salesTable, Priority.ALWAYS);
-        tableBox.getChildren().add(salesTable);
 
-        root.setCenter(tableBox);
-
-        stage.setScene(new Scene(root, 800, 700));
-        stage.showAndWait();
+        mainContent.getChildren().addAll(title, sub, salesTable);
+        layout.setCenter(mainContent);
+        return layout;
     }
+
+    // ── Sales table ───────────────────────────────────────────────────────────
 
     private TableView<CustomerService.Sale> buildSalesTable(Customer customer) {
-        TableView<CustomerService.Sale> salesTable = new TableView<>();
-        salesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        TableView<CustomerService.Sale> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPlaceholder(new Label("No sales yet."));
 
         TableColumn<CustomerService.Sale, Integer> saleIdCol = new TableColumn<>("Sale ID");
         saleIdCol.setCellValueFactory(new PropertyValueFactory<>("saleID"));
@@ -301,8 +129,8 @@ public class CustomerView {
             }
         });
 
-        salesTable.getColumns().addAll(saleIdCol, dateCol, qtyCol, totalCol, staffCol, actionsCol);
-        return salesTable;
+        table.getColumns().addAll(saleIdCol, dateCol, qtyCol, totalCol, staffCol, actionsCol);
+        return table;
     }
 
     // ── Sale details window ───────────────────────────────────────────────────
@@ -318,7 +146,6 @@ public class CustomerView {
         subRoot.setPadding(new Insets(20));
         subRoot.setStyle("-fx-background-color: #f5f7fa;");
 
-        // Summary row
         Label summaryLbl = new Label(
                 "Date: " + sale.getSaleDate().format(DT_FMT) +
                 "   |   Sold By: " + sale.getStaffName() +
@@ -326,7 +153,6 @@ public class CustomerView {
         summaryLbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
         subRoot.getChildren().add(summaryLbl);
 
-        // Items table
         TableView<CustomerService.Purchase> itemsTable = new TableView<>();
         itemsTable.setItems(sale.getItems());
         itemsTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
@@ -372,11 +198,9 @@ public class CustomerView {
         promoCol.setCellValueFactory(new PropertyValueFactory<>("promoCode"));
         promoCol.setPrefWidth(70);
 
-        // ── Actions column — context-aware ───────────────────────────────
         TableColumn<CustomerService.Purchase, Void> actionCol = new TableColumn<>("Status / Actions");
         actionCol.setPrefWidth(200);
         actionCol.setCellFactory(param -> new TableCell<>() {
-
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
@@ -385,7 +209,6 @@ public class CustomerView {
                 CustomerService.Purchase purchase = getTableView().getItems().get(getIndex());
                 int txID = purchase.getTransactionID();
 
-                // Look up exchange / return status for this transaction
                 ExchangeReturnStatus status = getExchangeReturnStatus(txID);
 
                 HBox box = new HBox(6);
@@ -403,7 +226,6 @@ public class CustomerView {
                     box.getChildren().add(retBtn);
                 }
 
-                // Only show action buttons if no exchange/return yet and there's remaining qty
                 int remaining = customerService.getRemainingQuantity(txID);
                 if (!status.hasExchange() && !status.hasReturn()) {
                     Button returnBtn = com.pos.components.Ui.actionButton("↩️ Return", "#d97706", "Process a return for this item");
@@ -414,7 +236,7 @@ public class CustomerView {
 
                     returnBtn.setOnAction(e -> {
                         handleReturn(purchase, customer, itemsTable, sale, salesTable);
-                        itemsTable.refresh(); // refresh so status buttons update
+                        itemsTable.refresh();
                     });
                     exchangeBtn.setOnAction(e -> {
                         handleExchange(purchase, customer, itemsTable, sale, salesTable);
@@ -432,7 +254,6 @@ public class CustomerView {
         VBox.setVgrow(itemsTable, Priority.ALWAYS);
         subRoot.getChildren().add(itemsTable);
 
-        // ── Print Receipt button ─────────────────────────────────────────
         Button printBtn = new Button("Print Receipt");
         printBtn.setStyle(
                 "-fx-background-color: #0f766e; -fx-text-fill: white; -fx-font-weight: bold;" +
@@ -446,15 +267,13 @@ public class CustomerView {
 
         ScrollPane scroll = new ScrollPane(subRoot);
         scroll.setFitToWidth(true);
-        // Opaque background: a transparent ScrollPane background makes label
-        // text inside it render blank on some Windows GPUs.
         scroll.setStyle("-fx-background: #f5f7fa; -fx-background-color: #f5f7fa;");
 
         subStage.setScene(new Scene(scroll, 900, 560));
         subStage.showAndWait();
     }
 
-    // ── Exchange info popup ───────────────────────────────────────────────────
+    // ── Exchange / return info popups ────────────────────────────────────────
 
     private void showExchangeInfo(ExchangeReturnService.ExchangeRequest ex) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -470,8 +289,6 @@ public class CustomerView {
                 "Date             : " + ex.getExchangeDate().format(DT_FMT));
         alert.showAndWait();
     }
-
-    // ── Return info popup ─────────────────────────────────────────────────────
 
     private void showReturnInfo(ExchangeReturnService.ReturnRequest ret) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -494,33 +311,22 @@ public class CustomerView {
         String receiptText = ReceiptGenerator.generateSaleReceipt(
                 sale, customer, customerService, exchangeService);
 
-        // Save a copy to the configured receipts folder
         ReceiptGenerator.saveReceipt(receiptText, "sale_" + sale.getSaleID());
-
-        // Print via ReceiptGenerator (handles printer availability + fallback)
         ReceiptGenerator.printReceipt(receiptText);
-
-        // Also show inline so the cashier can review before walking away
         showAlert("Receipt — Sale #" + sale.getSaleID(), receiptText, Alert.AlertType.INFORMATION);
     }
 
     // ── Exchange/return status lookup ────────────────────────────────────────
 
-    /**
-     * Queries the database for the most recent exchange and return for a given
-     * transaction ID and wraps them in a lightweight status holder.
-     */
     private ExchangeReturnStatus getExchangeReturnStatus(int transactionID) {
         ExchangeReturnService svc = new ExchangeReturnService();
 
-        // Find exchange for this specific transaction
         ExchangeReturnService.ExchangeRequest exchange = null;
         for (ExchangeReturnService.ExchangeRequest ex : svc.getExchangesForTransaction(transactionID)) {
-            exchange = ex; // take the most recent (service returns DESC)
+            exchange = ex;
             break;
         }
 
-        // Find return for this specific transaction
         ExchangeReturnService.ReturnRequest ret = null;
         for (ExchangeReturnService.ReturnRequest r : svc.getReturnsForTransaction(transactionID)) {
             ret = r;
@@ -542,100 +348,6 @@ public class CustomerView {
 
         boolean hasExchange() { return exchange != null; }
         boolean hasReturn()   { return ret != null; }
-    }
-
-    // ── Add customer ──────────────────────────────────────────────────────────
-
-    private void showAddCustomerDialog() {
-        Dialog<Customer> dialog = new Dialog<>();
-        dialog.setTitle("Add New Customer");
-        dialog.setHeaderText("Enter customer details");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10); grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField  = new TextField();
-        TextField emailField = new TextField();
-        TextField phoneField = new TextField();
-        DatePicker dobPicker = new DatePicker();
-
-        grid.add(new Label("Full Name:"),    0, 0); grid.add(nameField,  1, 0);
-        grid.add(new Label("Email:"),        0, 1); grid.add(emailField, 1, 1);
-        grid.add(new Label("Phone:"),        0, 2); grid.add(phoneField, 1, 2);
-        grid.add(new Label("Date of Birth:"),0, 3); grid.add(dobPicker,  1, 3);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(btn -> {
-            if (btn == saveButtonType) {
-                Customer c = new Customer();
-                c.setStaffID(currentUser.getStaffID());
-                c.setFullNames(nameField.getText());
-                c.setEmailAddress(emailField.getText());
-                c.setContactNo(phoneField.getText());
-                c.setDateOfBirth(dobPicker.getValue());
-                return c;
-            }
-            return null;
-        });
-
-        dialog.showAndWait().ifPresent(c -> {
-            if (customerService.addCustomer(c)) {
-                showAlert("Success", "Customer added successfully", Alert.AlertType.INFORMATION);
-                loadCustomers();
-            } else {
-                showAlert("Error", "Failed to add customer", Alert.AlertType.ERROR);
-            }
-        });
-    }
-
-    // ── Edit customer ─────────────────────────────────────────────────────────
-
-    private void showEditCustomerDialog(Customer customer) {
-        Dialog<Customer> dialog = new Dialog<>();
-        dialog.setTitle("Edit Customer");
-        dialog.setHeaderText("Modify customer details");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10); grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField  = new TextField(customer.getFullNames());
-        TextField emailField = new TextField(customer.getEmailAddress());
-        TextField phoneField = new TextField(customer.getContactNo());
-        DatePicker dobPicker = new DatePicker(customer.getDateOfBirth());
-
-        grid.add(new Label("Full Name:"),    0, 0); grid.add(nameField,  1, 0);
-        grid.add(new Label("Email:"),        0, 1); grid.add(emailField, 1, 1);
-        grid.add(new Label("Phone:"),        0, 2); grid.add(phoneField, 1, 2);
-        grid.add(new Label("Date of Birth:"),0, 3); grid.add(dobPicker,  1, 3);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(btn -> {
-            if (btn == saveButtonType) {
-                customer.setFullNames(nameField.getText());
-                customer.setEmailAddress(emailField.getText());
-                customer.setContactNo(phoneField.getText());
-                customer.setDateOfBirth(dobPicker.getValue());
-                return customer;
-            }
-            return null;
-        });
-
-        dialog.showAndWait().ifPresent(c -> {
-            if (customerService.updateCustomer(c)) {
-                showAlert("Success", "Customer updated successfully", Alert.AlertType.INFORMATION);
-                loadCustomers();
-            } else {
-                showAlert("Error", "Failed to update customer", Alert.AlertType.ERROR);
-            }
-        });
     }
 
     // ── Handle return ─────────────────────────────────────────────────────────
@@ -901,82 +613,14 @@ public class CustomerView {
         });
     }
 
-    // ── Delete customer ───────────────────────────────────────────────────────
-
-    private void deleteCustomer(Customer customer) {
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Delete Customer");
-        alert.setHeaderText("Are you sure you want to delete this customer?");
-        alert.setContentText(customer.getFullNames());
-        if (alert.showAndWait().get() == ButtonType.OK) {
-            if (customerService.deleteCustomer(customer.getAccountID())) {
-                showAlert("Success", "Customer deleted successfully", Alert.AlertType.INFORMATION);
-                loadCustomers();
-            } else {
-                showAlert("Error", "Failed to delete customer", Alert.AlertType.ERROR);
-            }
-        }
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private VBox createLabeledField(String labelText, String valueText) {
-        VBox vbox = new VBox(2);
-        Label label = new Label(labelText + ":");
-        label.setStyle("-fx-font-weight: bold; -fx-text-fill: #0f766e;");
-        vbox.getChildren().addAll(label, new Label(valueText));
-        return vbox;
-    }
-
-    /** Marketing opt-in toggle for the customer detail window. */
-    private VBox createMarketingToggleRow(Customer customer) {
-        VBox vbox = new VBox(4);
-        Label label = new Label("Marketing Emails:");
-        label.setStyle("-fx-font-weight: bold; -fx-text-fill: #0f766e;");
-
-        CommPreferences prefs = commService.getPreferences(customer.getAccountID());
-        CheckBox optIn = new CheckBox("Customer receives marketing emails and special offers");
-        optIn.setSelected(prefs.isMarketingEmails());
-
-        Label note = new Label();
-        note.setFont(Font.font("System", 10));
-        note.setTextFill(Color.web("#64748b"));
-
-        optIn.setOnAction(e -> {
-            boolean ok = commService.setMarketingOptIn(
-                    customer.getAccountID(), optIn.isSelected(),
-                    "Staff",
-                    optIn.isSelected() ? "Re-subscribed from customer detail"
-                                       : "Unsubscribed from customer detail",
-                    currentUser.getStaffID());
-            if (ok) {
-                note.setTextFill(Color.web("#16a34a"));
-                note.setText(optIn.isSelected() ? "Opted in — saved." : "Opted out — saved.");
-            } else {
-                optIn.setSelected(!optIn.isSelected());
-                note.setTextFill(Color.web("#dc2626"));
-                note.setText("Could not save the change.");
-            }
-        });
-
-        vbox.getChildren().addAll(label, optIn, note);
-        return vbox;
-    }
-
-    private String truncate(String s, int max) {
-        return s != null && s.length() > max ? s.substring(0, max - 1) + "…" : (s != null ? s : "");
-    }
-
-    private void showAlert(String title, String content, Alert.AlertType type) {
-        com.pos.components.Ui.showAlert(customerTable, title, content, type);
-    }
-
-    // ── Inner types ───────────────────────────────────────────────────────────
-
     private static class ExchangeInfo {
         Product newProduct;
         String reason;
         PaymentInfo payment;
         ExchangeInfo(Product p, String r, PaymentInfo pay) { newProduct = p; reason = r; payment = pay; }
+    }
+
+    private void showAlert(String title, String content, Alert.AlertType type) {
+        com.pos.components.Ui.showAlert(salesTable, title, content, type);
     }
 }

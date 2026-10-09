@@ -12,6 +12,7 @@ public class Product {
     private int quantity;
     private int noSold;
     private BigDecimal price;
+    private BigDecimal costPrice;
     private String categoryName;
     
     public Product() {}
@@ -51,6 +52,10 @@ public class Product {
     
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
+
+    /** What the shop paid to acquire this unit — the basis for real profit-margin reporting. */
+    public BigDecimal getCostPrice() { return costPrice; }
+    public void setCostPrice(BigDecimal costPrice) { this.costPrice = costPrice; }
     
     public String getCategoryName() { return categoryName; }
     public void setCategoryName(String categoryName) { this.categoryName = categoryName; }

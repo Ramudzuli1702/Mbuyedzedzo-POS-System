@@ -68,6 +68,7 @@ public final class BarcodeScannerSupport {
 
             if (looksLikeScan) {
                 e.consume();
+                ScannerDetection.recordScan();
                 onScan.accept(candidate);
             }
         });

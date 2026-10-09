@@ -1,6 +1,7 @@
 package com.pos.components;
 
 import com.pos.utils.Theme;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -129,11 +130,20 @@ public final class Ui {
             for (Button a : actions) {
                 // Closing the dialog before the action runs matches how every
                 // existing action already behaves: it shows its own result
-                // alert and refreshes the table itself.
+                // alert and refreshes the table itself. The original handler
+                // must NOT run synchronously in this same callback though —
+                // dialog.close() only requests the outer showAndWait() nested
+                // event loop to unwind, it doesn't unwind it immediately, so
+                // an action that opens a second Dialog/TextInputDialog right
+                // here starts it reentrant on top of a loop still mid-
+                // teardown: the new window gets a title bar but never a real
+                // layout/paint pass (blank content) and can misroute input.
+                // Deferring with runLater lets the outer dialog actually
+                // finish closing first.
                 var original = a.getOnAction();
                 a.setOnAction(e -> {
                     dialog.close();
-                    if (original != null) original.handle(e);
+                    if (original != null) Platform.runLater(() -> original.handle(e));
                 });
                 actionBar.getChildren().add(a);
             }

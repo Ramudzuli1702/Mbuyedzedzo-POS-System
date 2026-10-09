@@ -109,25 +109,34 @@ public class SalesView {
 
     private void initializeWiFiReceiver() {
         new Thread(() -> {
-            boolean started;
-            if (wifiHandler.isServerRunning()) {
-                started = true;
-            } else {
-                started = wifiHandler.startListening(
-                        scannedData -> {
-                            Platform.runLater(() -> {
-                                if (searchField != null) {
-                                    String cleanQuery = scannedData;
-                                    if (scannedData.startsWith("PRODUCT:")) {
-                                        cleanQuery = scannedData.substring(8).trim();
-                                    }
-                                    searchField.setText(cleanQuery);
-                                    addProductToCart(cleanQuery);
-                                }
-                            });
-                        },
-                        null);
-            }
+            // Registered unconditionally, via the dedicated setter rather than
+            // startListening(...) — startListening() overwrites BOTH the scan
+            // and product callbacks every time it's called, so whichever view
+            // happened to start the server first would silently wipe out the
+            // other view's callback the moment this ran. Inventory already
+            // registers its product callback this same way; previously this
+            // view only registered its scan callback inside the "not yet
+            // running" branch, so if Inventory (or anything else) had started
+            // the server first, Sales's scan callback was simply never set —
+            // every barcode scanned from the phone while on this screen did
+            // nothing at all, as if the product didn't exist.
+            // Must boot the socket (if it isn't already) BEFORE setting the
+            // callback below — startListening() unconditionally overwrites
+            // both callback fields itself, so calling it afterwards would
+            // immediately wipe out the setScanCallback() call that follows.
+            boolean started = wifiHandler.isServerRunning() || wifiHandler.startListening(null, null);
+
+            wifiHandler.setScanCallback(scannedData -> Platform.runLater(() -> {
+                if (searchField != null) {
+                    String cleanQuery = scannedData;
+                    if (scannedData.startsWith("PRODUCT:")) {
+                        cleanQuery = scannedData.substring(8).trim();
+                    }
+                    searchField.setText(cleanQuery);
+                    addProductToCart(cleanQuery);
+                }
+            }));
+
             Platform.runLater(() -> updateWiFiStatus(started));
         }, "WiFi-Init").start();
     }

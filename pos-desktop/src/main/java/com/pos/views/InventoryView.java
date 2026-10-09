@@ -8,7 +8,6 @@ import com.pos.services.ProductService;
 import com.pos.services.ReportService;
 import com.pos.services.WiFiHandler;
 import com.pos.utils.Icons;
-import com.pos.utils.QRCodeUtil;
 import com.pos.utils.Theme;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
@@ -64,17 +63,15 @@ public class InventoryView {
 
     private void initializeWiFiReceiver() {
         new Thread(() -> {
-            wifiHandler.setProductCallback(product -> Platform.runLater(() -> handleProductFromAndroid(product)));
+            // Must boot the socket (if it isn't already) BEFORE setting the
+            // callback below — startListening() unconditionally overwrites
+            // both the scan and product callbacks itself, so calling it
+            // afterwards (or from the "not yet running" branch only, as this
+            // used to) would wipe out whichever callback the OTHER screen
+            // (e.g. Sales's barcode-scan handler) had already registered.
+            boolean started = wifiHandler.isServerRunning() || wifiHandler.startListening(null, null);
 
-            boolean started;
-            if (wifiHandler.isServerRunning()) {
-                started = true;
-                System.out.println("WiFi already running - product callback registered on existing server");
-            } else {
-                started = wifiHandler.startListening(
-                        null,
-                        product -> Platform.runLater(() -> handleProductFromAndroid(product)));
-            }
+            wifiHandler.setProductCallback(product -> Platform.runLater(() -> handleProductFromAndroid(product)));
 
             Platform.runLater(() -> updateWiFiStatus(started));
         }, "WiFi-Inventory-Init").start();
@@ -88,7 +85,6 @@ public class InventoryView {
         alert.setHeaderText("New product scanned from mobile device");
         alert.setContentText(
                 "Product: " + product.getProductName() + "\n" +
-                        "Category: " + product.getCategoryName() + "\n" +
                         "Barcode: " + product.getBarCode() + "\n" +
                         "Quantity: " + product.getQuantity() + "\n" +
                         "Price: R " + String.format("%.2f", product.getPrice()) + "\n\n" +
@@ -105,40 +101,13 @@ public class InventoryView {
     }
 
     private void addProductToDatabase(Product product) {
-        int categoryId = categoryService.getCategoryId(product.getCategoryName());
-
-        if (categoryId == -1) {
-            Alert categoryAlert = new Alert(Alert.AlertType.CONFIRMATION);
-            categoryAlert.setTitle("Create New Category");
-            categoryAlert.setHeaderText("Category '" + product.getCategoryName() + "' does not exist");
-            categoryAlert.setContentText("Would you like to create this category?");
-
-            Optional<ButtonType> categoryResult = categoryAlert.showAndWait();
-
-            if (categoryResult.isPresent() && categoryResult.get() == ButtonType.OK) {
-                System.out.println("📁 Creating new category: " + product.getCategoryName());
-
-                boolean categoryCreated = categoryService.addCategory(product.getCategoryName());
-
-                if (categoryCreated) {
-                    categoryId = categoryService.getCategoryId(product.getCategoryName());
-                    System.out.println("Category created with ID: " + categoryId);
-                } else {
-                    System.err.println("Failed to create category");
-                    showAlert("Error", "Failed to create category: " + product.getCategoryName(),
-                            Alert.AlertType.ERROR);
-                    wifiHandler.sendData("{\"type\":\"error\",\"message\":\"Failed to create category\"}");
-                    return;
-                }
-            } else {
-                System.out.println("Category creation cancelled");
-                wifiHandler.sendData("{\"type\":\"product_rejected\",\"message\":\"Category creation cancelled\"}");
-                return;
-            }
-        }
-
-        product.setCategoryID(categoryId);
+        product.setCategoryID(categoryService.getOrCreateDefaultCategoryId());
         product.setStaffID(currentUser.getStaffID());
+        // The phone only ever sends a selling price, never a cost price —
+        // CostPrice is NOT NULL, so leaving this unset crashed the insert for
+        // every product added from the Android scanner. Defaults to 0 until
+        // someone edits it in Inventory with the real purchase price.
+        if (product.getCostPrice() == null) product.setCostPrice(BigDecimal.ZERO);
 
         boolean success = productService.addProduct(product);
 
@@ -151,8 +120,7 @@ public class InventoryView {
                     "Product added successfully from mobile scanner!\n\n" +
                             "Product: " + product.getProductName() + "\n" +
                             "Product ID: " + product.getProductID() + "\n" +
-                            "Barcode: " + product.getBarCode() + "\n" +
-                            "Category: " + product.getCategoryName(),
+                            "Barcode: " + product.getBarCode(),
                     Alert.AlertType.INFORMATION);
 
             wifiHandler.sendData(
@@ -263,11 +231,7 @@ public class InventoryView {
         Theme.hover(addBtn, Theme.primaryButton(), Theme.primaryHover());
         addBtn.setOnAction(e -> showAddProductDialog());
 
-        Button categoriesBtn = new Button("Categories");
-        Theme.hover(categoriesBtn, Theme.secondaryButton(), Theme.secondaryHover());
-        categoriesBtn.setOnAction(e -> showCategoriesDialog());
-
-        topBar.getChildren().addAll(title, spacer, searchField, categoriesBtn, addBtn);
+        topBar.getChildren().addAll(title, spacer, searchField, addBtn);
         return topBar;
     }
 
@@ -324,10 +288,6 @@ public class InventoryView {
         TableColumn<Product, String> nameCol = new TableColumn<>("Product Name");
         nameCol.setCellValueFactory(new PropertyValueFactory<>("productName"));
         nameCol.setPrefWidth(200);
-
-        TableColumn<Product, String> categoryCol = new TableColumn<>("Category");
-        categoryCol.setCellValueFactory(new PropertyValueFactory<>("categoryName"));
-        categoryCol.setPrefWidth(120);
 
         TableColumn<Product, String> barcodeCol = new TableColumn<>("Barcode");
         barcodeCol.setCellValueFactory(new PropertyValueFactory<>("barCode"));
@@ -393,7 +353,7 @@ public class InventoryView {
         });
 
         productTable.getColumns().addAll(
-            idCol, nameCol, categoryCol, barcodeCol,
+            idCol, nameCol, barcodeCol,
             quantityCol, soldCol, priceCol, actionCol
         );
 
@@ -425,45 +385,46 @@ public class InventoryView {
     private void showProductDetailsDialog(Product product) {
         VBox summary = new VBox(10);
         summary.getChildren().addAll(
-            com.pos.components.Ui.detailRow("Category:", product.getCategoryName()),
             com.pos.components.Ui.detailRow("Barcode:", product.getBarCode()),
             com.pos.components.Ui.detailRow("Quantity in stock:", String.valueOf(product.getQuantity())
                 + (product.getQuantity() < 10 ? "  (low stock)" : "")),
             com.pos.components.Ui.detailRow("Units sold:", String.valueOf(product.getNoSold())),
-            com.pos.components.Ui.detailRow("Price:", "R " + String.format("%.2f", product.getPrice()))
+            com.pos.components.Ui.detailRow("Selling price:", "R " + String.format("%.2f", product.getPrice())),
+            com.pos.components.Ui.detailRow("Purchase price:", "R " + String.format("%.2f", product.getCostPrice()))
         );
 
-        Button viewQRBtn  = com.pos.components.Ui.actionButton("Show QR", Theme.INFO, "Show / print the product QR code");
+        Button viewBarcodeBtn = com.pos.components.Ui.actionButton("Show Barcode", Theme.INFO, "Show / print the product barcode");
         Button editBtn    = com.pos.components.Ui.actionButton("Edit", Theme.WARNING, "Edit product details");
         Button restockBtn = com.pos.components.Ui.actionButton("Restock", Theme.SUCCESS, "Add stock for this product");
         Button deleteBtn  = com.pos.components.Ui.actionButton("Delete", Theme.DANGER, "Delete this product");
 
-        viewQRBtn.setOnAction(e -> showQRCode(product));
+        viewBarcodeBtn.setOnAction(e -> showBarcode(product));
         editBtn.setOnAction(e -> showEditProductDialog(product));
         restockBtn.setOnAction(e -> showRestockDialog(product));
         deleteBtn.setOnAction(e -> deleteProduct(product));
 
         com.pos.components.Ui.showDetailDialog("Product Details", product.getProductName(), summary,
-            viewQRBtn, editBtn, restockBtn, deleteBtn);
+            viewBarcodeBtn, editBtn, restockBtn, deleteBtn);
     }
 
-    private void showQRCode(Product product) {
+    private void showBarcode(Product product) {
         Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Product QR Code");
+        dialog.setTitle("Product Barcode");
         dialog.setHeaderText(product.getProductName());
 
         VBox content = new VBox(15);
         content.setAlignment(Pos.CENTER);
         content.setPadding(new Insets(20));
 
-        ImageView qrImageView = new ImageView(QRCodeUtil.getQRCodeImage(product.getQrCode()));
-        qrImageView.setFitWidth(300);
-        qrImageView.setFitHeight(300);
+        ImageView barcodeImageView = new ImageView(com.pos.utils.BarcodeUtil.getBarcodeImage(product.getQrCode()));
+        barcodeImageView.setFitWidth(280);
+        barcodeImageView.setFitHeight(105);
+        barcodeImageView.setPreserveRatio(true);
 
-        Label barcodeLabel = new Label("Barcode: " + product.getBarCode());
-        barcodeLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+        Label barcodeLabel = new Label(product.getBarCode());
+        barcodeLabel.setFont(Font.font("Courier New", FontWeight.BOLD, 16));
 
-        content.getChildren().addAll(qrImageView, barcodeLabel);
+        content.getChildren().addAll(barcodeImageView, barcodeLabel);
 
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
@@ -484,21 +445,20 @@ public class InventoryView {
         grid.setPadding(new Insets(20));
 
         TextField nameField     = new TextField();
-        ComboBox<String> categoryCombo = new ComboBox<>();
-        categoryCombo.setItems(categoryService.getAllCategories());
         TextField barcodeField  = new TextField();
         TextField quantityField = new TextField();
+        TextField costPriceField = new TextField();
         TextField priceField    = new TextField();
 
         grid.add(new Label("Product Name:"), 0, 0);
         grid.add(nameField, 1, 0);
-        grid.add(new Label("Category:"), 0, 1);
-        grid.add(categoryCombo, 1, 1);
-        grid.add(new Label("Barcode:"), 0, 2);
-        grid.add(barcodeField, 1, 2);
-        grid.add(new Label("Quantity:"), 0, 3);
-        grid.add(quantityField, 1, 3);
-        grid.add(new Label("Price (R):"), 0, 4);
+        grid.add(new Label("Barcode:"), 0, 1);
+        grid.add(barcodeField, 1, 1);
+        grid.add(new Label("Quantity:"), 0, 2);
+        grid.add(quantityField, 1, 2);
+        grid.add(new Label("Purchase Price (R):"), 0, 3);
+        grid.add(costPriceField, 1, 3);
+        grid.add(new Label("Selling Price (R):"), 0, 4);
         grid.add(priceField, 1, 4);
 
         dialog.getDialogPane().setContent(grid);
@@ -509,9 +469,10 @@ public class InventoryView {
                     Product product = new Product();
                     product.setStaffID(currentUser.getStaffID());
                     product.setProductName(nameField.getText());
-                    product.setCategoryID(categoryService.getCategoryId(categoryCombo.getValue()));
+                    product.setCategoryID(categoryService.getOrCreateDefaultCategoryId());
                     product.setBarCode(barcodeField.getText());
                     product.setQuantity(Integer.parseInt(quantityField.getText()));
+                    product.setCostPrice(new BigDecimal(costPriceField.getText()));
                     product.setPrice(new BigDecimal(priceField.getText()));
                     return product;
                 } catch (NumberFormatException e) {
@@ -547,22 +508,20 @@ public class InventoryView {
         grid.setPadding(new Insets(20));
 
         TextField nameField     = new TextField(product.getProductName());
-        ComboBox<String> categoryCombo = new ComboBox<>();
-        categoryCombo.setItems(categoryService.getAllCategories());
-        categoryCombo.setValue(product.getCategoryName());
         TextField barcodeField  = new TextField(product.getBarCode());
         TextField quantityField = new TextField(String.valueOf(product.getQuantity()));
+        TextField costPriceField = new TextField(product.getCostPrice() == null ? "0.00" : product.getCostPrice().toString());
         TextField priceField    = new TextField(product.getPrice().toString());
 
         grid.add(new Label("Product Name:"), 0, 0);
         grid.add(nameField, 1, 0);
-        grid.add(new Label("Category:"), 0, 1);
-        grid.add(categoryCombo, 1, 1);
-        grid.add(new Label("Barcode:"), 0, 2);
-        grid.add(barcodeField, 1, 2);
-        grid.add(new Label("Quantity:"), 0, 3);
-        grid.add(quantityField, 1, 3);
-        grid.add(new Label("Price (R):"), 0, 4);
+        grid.add(new Label("Barcode:"), 0, 1);
+        grid.add(barcodeField, 1, 1);
+        grid.add(new Label("Quantity:"), 0, 2);
+        grid.add(quantityField, 1, 2);
+        grid.add(new Label("Purchase Price (R):"), 0, 3);
+        grid.add(costPriceField, 1, 3);
+        grid.add(new Label("Selling Price (R):"), 0, 4);
         grid.add(priceField, 1, 4);
 
         dialog.getDialogPane().setContent(grid);
@@ -571,9 +530,9 @@ public class InventoryView {
             if (dialogButton == saveButtonType) {
                 try {
                     product.setProductName(nameField.getText());
-                    product.setCategoryID(categoryService.getCategoryId(categoryCombo.getValue()));
                     product.setBarCode(barcodeField.getText());
                     product.setQuantity(Integer.parseInt(quantityField.getText()));
+                    product.setCostPrice(new BigDecimal(costPriceField.getText()));
                     product.setPrice(new BigDecimal(priceField.getText()));
                     return product;
                 } catch (NumberFormatException e) {
@@ -638,160 +597,12 @@ public class InventoryView {
         }
     }
 
-    private void showCategoriesDialog() {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Category Management");
-        dialog.setHeaderText(null);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setPrefWidth(500);
-
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(20));
-
-        Label title = Theme.sectionTitleLabel("Manage Categories");
-
-        HBox addRow = new HBox(10);
-        addRow.setAlignment(Pos.CENTER_LEFT);
-
-        TextField newCategoryField = new TextField();
-        newCategoryField.setPromptText("New category name...");
-        newCategoryField.setPrefWidth(280);
-        newCategoryField.setStyle(Theme.input());
-        HBox.setHgrow(newCategoryField, Priority.ALWAYS);
-
-        Button addCategoryBtn = new Button("+ Add");
-        Theme.hover(addCategoryBtn, Theme.primaryButton(), Theme.primaryHover());
-
-        addRow.getChildren().addAll(newCategoryField, addCategoryBtn);
-
-        ListView<javafx.util.Pair<Integer, String>> categoryListView = new ListView<>();
-        categoryListView.setPrefHeight(300);
-        categoryListView.setStyle("-fx-background-radius: " + Theme.RADIUS_SM + "px; -fx-border-color: " + Theme.BORDER + "; -fx-border-radius: " + Theme.RADIUS_SM + "px;");
-
-        Runnable refreshList = () -> categoryListView.setItems(categoryService.getAllCategoriesWithId());
-        refreshList.run();
-
-        categoryListView.setCellFactory(lv -> new ListCell<>() {
-            private final Label nameLabel = new Label();
-            private final Button editBtn   = new Button("Edit");
-            private final Button deleteBtn = new Button("Delete");
-            private final HBox row = new HBox(10, nameLabel, new Region(), editBtn, deleteBtn);
-
-            {
-                HBox.setHgrow(row.getChildren().get(1), Priority.ALWAYS);
-                row.setAlignment(Pos.CENTER_LEFT);
-                row.setPadding(new Insets(4, 8, 4, 8));
-
-                editBtn.setStyle(
-                        "-fx-background-color: " + Theme.WARNING + "; -fx-text-fill: white;" +
-                        "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
-                deleteBtn.setStyle(
-                        "-fx-background-color: " + Theme.DANGER + "; -fx-text-fill: white;" +
-                        "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
-                nameLabel.setFont(Font.font("System", 13));
-
-                editBtn.setOnAction(e -> {
-                    javafx.util.Pair<Integer, String> item = getItem();
-                    if (item == null) return;
-
-                    TextInputDialog editDialog = new TextInputDialog(item.getValue());
-                    editDialog.setTitle("Edit Category");
-                    editDialog.setHeaderText("Rename category");
-                    editDialog.setContentText("New name:");
-
-                    editDialog.showAndWait().ifPresent(newName -> {
-                        String trimmed = newName.trim();
-                        if (trimmed.isEmpty()) {
-                            showAlert("Error", "Category name cannot be empty.", Alert.AlertType.ERROR);
-                            return;
-                        }
-                        if (categoryService.updateCategory(item.getKey(), trimmed)) {
-                            showAlert("Success", "Category renamed to \"" + trimmed + "\".",
-                                    Alert.AlertType.INFORMATION);
-                            refreshList.run();
-                            loadProducts();
-                        } else {
-                            showAlert("Error", "Failed to rename category.", Alert.AlertType.ERROR);
-                        }
-                    });
-                });
-
-                deleteBtn.setOnAction(e -> {
-                    javafx.util.Pair<Integer, String> item = getItem();
-                    if (item == null) return;
-
-                    Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-                    confirm.setTitle("Delete Category");
-                    confirm.setHeaderText("Delete \"" + item.getValue() + "\"?");
-                    confirm.setContentText(
-                            "This will fail if any products are assigned to this category.\n" +
-                            "Reassign or delete those products first.");
-
-                    confirm.showAndWait().ifPresent(response -> {
-                        if (response == ButtonType.OK) {
-                            boolean deleted = categoryService.deleteCategory(item.getKey());
-                            if (deleted) {
-                                showAlert("Success", "Category deleted.", Alert.AlertType.INFORMATION);
-                                refreshList.run();
-                            } else {
-                                showAlert("Cannot Delete",
-                                        "\"" + item.getValue() + "\" has products assigned to it.\n" +
-                                        "Please reassign or delete those products first.",
-                                        Alert.AlertType.WARNING);
-                            }
-                        }
-                    });
-                });
-            }
-
-            @Override
-            protected void updateItem(javafx.util.Pair<Integer, String> item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setGraphic(null);
-                } else {
-                    nameLabel.setText(item.getValue());
-                    setGraphic(row);
-                }
-            }
-        });
-
-        addCategoryBtn.setOnAction(e -> {
-            String name = newCategoryField.getText().trim();
-            if (name.isEmpty()) {
-                showAlert("Error", "Please enter a category name.", Alert.AlertType.ERROR);
-                return;
-            }
-            if (categoryService.addCategory(name)) {
-                newCategoryField.clear();
-                refreshList.run();
-                showAlert("Success", "Category \"" + name + "\" added.", Alert.AlertType.INFORMATION);
-            } else {
-                showAlert("Error", "Failed to add category. It may already exist.", Alert.AlertType.ERROR);
-            }
-        });
-
-        newCategoryField.setOnAction(e -> addCategoryBtn.fire());
-
-        Label countLabel = new Label();
-        countLabel.setFont(Font.font("System", 11));
-        countLabel.setTextFill(Color.web("#64748b"));
-
-        categoryListView.itemsProperty().addListener((obs, o, n) -> {
-            int count = n == null ? 0 : n.size();
-            countLabel.setText(count + " categor" + (count == 1 ? "y" : "ies") + " total");
-        });
-        countLabel.setText(categoryListView.getItems().size() + " categor" +
-                (categoryListView.getItems().size() == 1 ? "y" : "ies") + " total");
-
-        content.getChildren().addAll(title, addRow, categoryListView, countLabel);
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
-    }
-
     public void cleanup() {
-        wifiHandler.setProductCallback(null);
-        System.out.println("🧹 InventoryView: product callback cleared");
+        // Deliberately does NOT clear the WiFi product callback — a product
+        // scanned/added from the Android app must still go through even when
+        // Inventory isn't the active screen (the whole point of a phone as a
+        // second scanner). The callback is only ever torn down at actual app
+        // shutdown, via MainDashboard's handleCloseRequest -> wifiHandler.cleanup().
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {

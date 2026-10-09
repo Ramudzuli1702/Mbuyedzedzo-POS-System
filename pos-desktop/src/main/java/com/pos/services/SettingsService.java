@@ -113,9 +113,22 @@ public class SettingsService {
      * on first use — never a relative path, which an installed build resolves
      * against its own install directory (e.g. Program Files), often not even
      * writable by a standard user. A path saved in Settings always wins if set.
+     *
+     * DatabaseSetup seeds "reports.savePath"/"backup.savePath" as literal
+     * relative strings ("reports/", "backups/") on every fresh install, so
+     * getBusinessSetting() always finds a stored row and never falls through
+     * to the safe default above — the isAbsolute() check here is what
+     * actually makes the fallback take effect (same guard ReceiptGenerator's
+     * receiptsDir() already applies to receipt.savePath).
      */
-    public String getReportsSavePath() { return getBusinessSetting("reports.savePath", defaultDesktopFolder("Reports")); }
-    public String getBackupSavePath()  { return getBusinessSetting("backup.savePath",  defaultDesktopFolder("Backups")); }
+    public String getReportsSavePath() { return absoluteOrDefault("reports.savePath", "Reports"); }
+    public String getBackupSavePath()  { return absoluteOrDefault("backup.savePath",  "Backups"); }
+
+    private String absoluteOrDefault(String key, String subfolder) {
+        String configured = getBusinessSetting(key, "").trim();
+        if (!configured.isEmpty() && new File(configured).isAbsolute()) return configured;
+        return defaultDesktopFolder(subfolder);
+    }
 
     private static String defaultDesktopFolder(String subfolder) {
         return System.getProperty("user.home") + File.separator + "Desktop" + File.separator
@@ -246,6 +259,52 @@ public class SettingsService {
     }
 
     public record BackupResult(boolean success, String message, String filePath) {}
+
+    /**
+     * Imports a mysqldump .sql file (as produced by {@link #createBackup()})
+     * back into the live database, via the "mysql" CLI with the file piped
+     * in as stdin. Safe to run against a schema that already exists — the
+     * dump's own DROP TABLE IF EXISTS / CREATE TABLE statements replace
+     * everything table by table.
+     */
+    public BackupResult restoreBackup(File sqlFile) {
+        if (sqlFile == null || !sqlFile.isFile()) {
+            return new BackupResult(false, "Backup file not found.", null);
+        }
+
+        String[] command = {
+            locateMysqlExecutable("mysql"),
+            "--host=" + DatabaseConnection.HOST,
+            "--port=" + DatabaseConnection.PORT,
+            "--user=" + DatabaseConnection.USERNAME,
+            DatabaseConnection.DATABASE
+        };
+
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
+            pb.environment().put("MYSQL_PWD", DatabaseConnection.PASSWORD == null ? "" : DatabaseConnection.PASSWORD);
+            pb.redirectInput(sqlFile);
+            pb.redirectErrorStream(true);
+
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes());
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0) {
+                return new BackupResult(true, "Backup restored from: " + sqlFile.getName(), sqlFile.getAbsolutePath());
+            } else {
+                return new BackupResult(false, "mysql exited with code " + exitCode
+                        + (output.isBlank() ? "" : (": " + output.trim())), null);
+            }
+        } catch (IOException e) {
+            return new BackupResult(false,
+                    "Could not find or run mysql (" + e.getMessage() + "). "
+                    + "MySQL may not have added itself to the system PATH — check that "
+                    + "MySQL Server is installed and try again after restarting this PC.", null);
+        } catch (Exception e) {
+            return new BackupResult(false, "Restore failed: " + e.getMessage(), null);
+        }
+    }
 
     /**
      * Finds a MySQL CLI tool (mysqldump, mysql, ...) at its actual install

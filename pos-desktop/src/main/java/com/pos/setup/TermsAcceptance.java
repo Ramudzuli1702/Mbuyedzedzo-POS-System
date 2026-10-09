@@ -12,6 +12,10 @@ import java.time.LocalDateTime;
  *
  * Stored next to db.properties ({@code %PROGRAMDATA%\POS System\config\}) —
  * same per-machine convention as {@link com.pos.database.DatabaseConnection}.
+ *
+ * Scoped per edition (the filename includes STANDARD/RETAIL): Standard and
+ * Retail are installed and licensed as separate products, so accepting the
+ * terms for one must not silently skip them for the other on the same PC.
  */
 public final class TermsAcceptance {
 
@@ -19,7 +23,7 @@ public final class TermsAcceptance {
         System.getenv("PROGRAMDATA") + File.separator +
         "POS System" + File.separator +
         "config" + File.separator +
-        "terms-accepted.flag");
+        "terms-accepted-" + com.pos.Edition.current().name() + ".flag");
 
     private TermsAcceptance() {}
 

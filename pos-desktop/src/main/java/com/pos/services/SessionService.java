@@ -319,6 +319,41 @@ public class SessionService {
         return sessions;
     }
 
+    /** One row per completed sale in a session — for a receipts list, not a line-item feed. */
+    public record SessionSaleSummary(int saleID, LocalDateTime saleDate, String staffName, double amount) {}
+
+    public ObservableList<SessionSaleSummary> getSessionSales(int sessionID) {
+        ObservableList<SessionSaleSummary> sales = FXCollections.observableArrayList();
+        String query = """
+            SELECT t.SaleID, MIN(t.TransactionDate) AS SaleDate, MIN(s.FullNames) AS StaffName,
+                   SUM(t.SalePrice * t.Quantity) AS Amount
+            FROM SessionTransactions st
+            JOIN Transactions t ON st.SaleID = t.SaleID
+            JOIN Staff s ON t.StaffID = s.StaffID
+            WHERE st.SessionID = ?
+            GROUP BY t.SaleID
+            ORDER BY SaleDate DESC
+            """;
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement pstmt = conn.prepareStatement(query)) {
+
+            pstmt.setInt(1, sessionID);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                sales.add(new SessionSaleSummary(
+                    rs.getInt("SaleID"),
+                    rs.getTimestamp("SaleDate").toLocalDateTime(),
+                    rs.getString("StaffName"),
+                    rs.getDouble("Amount")
+                ));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return sales;
+    }
+
     public ObservableList<SessionActivity> getSessionActivities(int sessionID) {
         ObservableList<SessionActivity> activities = FXCollections.observableArrayList();
 
