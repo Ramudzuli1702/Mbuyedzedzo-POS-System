@@ -31,11 +31,12 @@
         </p>
 
         <div class="cta-row no-print">
-            <button onclick="window.print()" class="btn-brand"><i class="bi bi-download"></i>&nbsp; Download as PDF</button>
+            <button id="pdfBtn" type="button" class="btn-brand"><i class="bi bi-download"></i>&nbsp; Download as PDF</button>
             <a href="#feedback" class="btn-brand-outline">Jump to the feedback form</a>
         </div>
     </section>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script>
     (function () {
         var KEY = "mbuyedzedzo-tester-name";
@@ -65,6 +66,164 @@
         });
         input.addEventListener("keydown", function (e) {
             if (e.key === "Enter") document.getElementById("nameGateGo").click();
+        });
+
+        // ── Download as PDF: the same paginated, clause-numbered testing
+        // guide document (with the real logo) this page's content mirrors,
+        // not a browser print of this page's own card layout.
+        function loadLogoDataUrl(){
+            return fetch("/img/logo-mark.png")
+                .then(function(r){ return r.blob(); })
+                .then(function(blob){
+                    return new Promise(function(resolve){
+                        var reader = new FileReader();
+                        reader.onload = function(){ resolve(reader.result); };
+                        reader.onerror = function(){ resolve(null); };
+                        reader.readAsDataURL(blob);
+                    });
+                })
+                .catch(function(){ return null; });
+        }
+
+        document.getElementById("pdfBtn").addEventListener("click", function(){
+            if (!window.jspdf) return;
+            loadLogoDataUrl().then(function(logoDataUrl){
+            var doc = new window.jspdf.jsPDF({ unit: "pt", format: "a4" });
+            var pageW = doc.internal.pageSize.getWidth();
+            var pageH = doc.internal.pageSize.getHeight();
+            var margin = 58;
+            var maxWidth = pageW - margin * 2;
+            var y = margin;
+            var name = input.value.trim();
+            var pageNum = 1;
+
+            function footer(){
+                doc.setFont("times", "normal"); doc.setFontSize(8);
+                doc.setTextColor(90,90,90);
+                doc.text("Mbuyedzedzo Testing Guide, Page " + pageNum, pageW - margin, pageH - 34, { align: "right" });
+                doc.setDrawColor(17,17,17);
+                doc.line(margin, pageH - 44, pageW - margin, pageH - 44);
+                doc.setTextColor(17,17,17);
+            }
+            function header(){
+                doc.setFont("courier", "normal"); doc.setFontSize(7.5);
+                doc.setTextColor(90,90,90);
+                doc.text("MBUYEDZEDZO / TESTING PROCEDURE / INTERNAL CIRCULATION", margin, margin - 20);
+                doc.setDrawColor(17,17,17);
+                doc.line(margin, margin - 12, pageW - margin, margin - 12);
+                doc.setTextColor(17,17,17);
+            }
+            function newPage(){
+                footer();
+                doc.addPage();
+                pageNum++;
+                y = margin + 6;
+                header();
+            }
+            function ensure(lines){
+                if (y + lines * 13 > pageH - margin - 20) newPage();
+            }
+            function clauseHead(text){
+                ensure(2);
+                doc.setFont("times", "bold"); doc.setFontSize(11.5);
+                doc.text(text.toUpperCase(), margin, y); y += 18;
+                doc.setDrawColor(17,17,17); doc.line(margin, y - 12, pageW - margin, y - 12);
+            }
+            function clause(num, text){
+                doc.setFont("times", "bold"); doc.setFontSize(10);
+                var lines = doc.splitTextToSize(text, maxWidth - 36);
+                ensure(lines.length);
+                doc.text(num, margin, y);
+                doc.setFont("times", "normal");
+                doc.text(lines, margin + 32, y);
+                y += lines.length * 13 + 8;
+            }
+
+            header();
+
+            if (logoDataUrl) {
+                try { doc.addImage(logoDataUrl, "PNG", margin, y - 30, 26, 26); } catch (e) {}
+            }
+            var titleX = logoDataUrl ? margin + 34 : margin;
+            doc.setFont("times", "bold"); doc.setFontSize(20);
+            doc.text("MBUYEDZEDZO", titleX, y); y += 18;
+            doc.setFont("times", "normal"); doc.setFontSize(10);
+            doc.setTextColor(85,82,74);
+            doc.text("TESTING PROCEDURE", titleX, y); y += 20;
+            doc.setTextColor(17,17,17);
+            doc.setFontSize(9);
+            doc.text("Document Ref: MB-TG-01     Revision: 1     Classification: Internal", margin, y); y += 14;
+            doc.text("Issued to: " + (name || "________________"), margin, y); y += 14;
+            doc.text("Issued by: Ralidzhivha Ramudzuli Ricardo (ralidzhivhar@gmail.com, +27 63 620 2691)", margin, y); y += 24;
+            doc.setDrawColor(17,17,17); doc.line(margin, y - 10, pageW - margin, y - 10);
+
+            clauseHead("1. Scope and Purpose");
+            clause("1.1", "You've been given a working, licensed copy of Mbuyedzedzo to test. This guide assumes no technical background, just follow the steps.");
+            clause("1.2", "Read it through once in order. After that, treat it as a reference and jump to whichever section you need.");
+            clause("1.3", "You'll be testing with a real licence key, not a trial. Clause 3 covers how to get one.");
+
+            clauseHead("2. What I'm Expecting From You");
+            clause("2.1", "This isn't a five-minute poke-around. Please actually run a shop on it for a week or two, the way you'd use a real till day to day.");
+            clause("2.2", "Over that time: ring up several sales across separate sessions (cash and card); add and then edit a product yourself; process at least one return and one exchange start to finish; open Reports and export one to Excel; add a second staff account and sign in as that user; and close out a session and look over the declaration and receipts it generates.");
+            clause("2.3", "Try to break it, honestly. Odd input, going fast, backing out halfway through something. That finds real problems far better than clicking carefully in the right order every time.");
+            clause("2.4", "Be blunt. Confusion, something that looks cheap, a button that didn't do what you expected, anything that felt slow, all of that is exactly what I want to hear.");
+            clause("2.5", "One ask: this hasn't launched publicly yet, so please keep screenshots and recordings between the two of us for now.");
+
+            clauseHead("3. Requesting a Licence");
+            clause("3.1", "Go to mbuyedzedzo-licensing.azurewebsites.net/pricing and pick the edition you've been asked to test: Standard or Retail.");
+            clause("3.2", "Click Request on the right licence type, then fill in your name, a business name (anything works for testing), and your email.");
+            clause("3.3", "The key and login details will land in your inbox, usually within a business day. Hold onto that email, you'll need the key again in Clause 6.");
+
+            clauseHead("4. Downloading the Software");
+            clause("4.1", "Once your key arrives, go to mbuyedzedzo-licensing.azurewebsites.net/download and download the matching edition. Standard keeps customer accounts and marketing tools; Retail is a leaner, till-only edition. Both are Windows installers, about 250 MB.");
+
+            clauseHead("5. Installation");
+            clause("5.1", "Run the installer and follow the prompts.");
+            clause("5.2", "Windows will ask for permission to make changes to your PC. Say yes, it needs that to set up its own private database; nothing else needs installing first.");
+            clause("5.3", "The first launch can take a few minutes while that database finishes setting up. That's normal, not a freeze. If SmartScreen or your antivirus flags the installer, choose More info, then Run anyway.");
+
+            clauseHead("6. Activation and First Sign-In");
+            clause("6.1", "On first launch you'll land on the activation screen. Paste in the key from Clause 3 and hit Activate.");
+            clause("6.2", "The first account you create becomes the admin account for this installation, with full access. Use it for the rest of testing.");
+            clause("6.3", "A short walkthrough runs the first time you open the app. Skip it if you like, you can always get the same explanations later from About this screen.");
+
+            clauseHead("7. System Modules");
+            clause("Sales", "The till itself. Scan or search a product, take payment, print the receipt.");
+            clause("Inventory", "Products, stock and barcodes. Each has a purchase price and a selling price.");
+            clause("Users", "Staff accounts and what each person can do.");
+            clause("Customers", "Contacts and purchase history (Standard only).");
+            clause("Reports", "Revenue, real profit margin, stock health.");
+            clause("Sessions", "Login history and that session's receipts.");
+            clause("Approvals", "Sign-off for refunds and exchanges.");
+            clause("Marketing", "Promo codes and how well they perform (Standard only).");
+            clause("Subscription", "Licence status and billing.");
+            clause("Settings", "Business and printer preferences.");
+
+            clauseHead("8. Scanning Without an Android Device");
+            clause("8.1", "A companion Android app turns a phone into a wireless barcode scanner. There's no iPhone version yet; building one needs a Mac, which wasn't possible to arrange for this round.");
+            clause("8.2", "Type any barcode straight into the field, no scanning needed, or plug in a cheap USB barcode scanner (under R300), which needs no setup at all.");
+
+            clauseHead("9. Documentation Requirements");
+            clause("9.1", "Take photos or short screen recordings while testing. A rough, narrated phone video beats a polished one, just talk through what you're doing.");
+
+            clauseHead("10. Feedback Submission");
+            clause("10.1", "Use it the way you'd run a real shop day. Anything that confused you, felt slow, or looked wrong is worth telling me, even if it seems minor.");
+            clause("10.2", "A short feedback form is provided separately at the link shared with this guide.");
+
+            ensure(4);
+            y += 10;
+            doc.setDrawColor(17,17,17); doc.line(margin, y, pageW - margin, y); y += 20;
+            doc.setFont("times", "normal"); doc.setFontSize(10);
+            doc.text("Thanks for giving this your time. It genuinely helps.", margin, y); y += 20;
+            doc.setFont("times", "bold");
+            doc.text("Ralidzhivha Ramudzuli Ricardo", margin, y); y += 13;
+            doc.setFont("times", "normal"); doc.setFontSize(9);
+            doc.text("ralidzhivhar@gmail.com | +27 63 620 2691", margin, y);
+
+            footer();
+
+            doc.save("Mbuyedzedzo Testing Guide" + (name ? " - " + name : "") + ".pdf");
+            });
         });
     })();
     </script>

@@ -43,6 +43,8 @@ public class SalesHistoryView {
     private final ProductService productService;
     private Customer walkIn;
     private TableView<CustomerService.Sale> salesTable;
+    private TextField searchField;
+    private ObservableList<CustomerService.Sale> allSales = FXCollections.observableArrayList();
 
     private static final DateTimeFormatter DT_FMT =
             DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm");
@@ -56,36 +58,103 @@ public class SalesHistoryView {
     public BorderPane getView() {
         BorderPane layout = new BorderPane();
         layout.setStyle("-fx-background-color: #f5f7fa;");
+        layout.setTop(createTopBar());
 
         walkIn = customerService.getOrCreateWalkInAccount(currentUser.getStaffID());
 
         VBox mainContent = new VBox(20);
         mainContent.setPadding(new Insets(20));
 
-        Label title = new Label("Sales History");
-        title.setFont(Font.font("System", FontWeight.BOLD, 24));
-        title.setTextFill(Color.web("#0f766e"));
-
-        Label sub = new Label("Every till sale, searchable so you can process a return or exchange.");
-        sub.setTextFill(Color.web("#64748b"));
-
         if (walkIn == null) {
-            mainContent.getChildren().addAll(title, sub,
+            mainContent.getChildren().add(
                 new Label("Could not load sales history — check the log for details."));
             layout.setCenter(mainContent);
             return layout;
         }
 
-        salesTable = buildSalesTable(walkIn);
-        salesTable.setItems(customerService.getCustomerPurchases(walkIn.getAccountID()));
-        VBox.setVgrow(salesTable, Priority.ALWAYS);
+        allSales = customerService.getCustomerPurchases(walkIn.getAccountID());
 
-        mainContent.getChildren().addAll(title, sub, salesTable);
+        mainContent.getChildren().addAll(createSummaryCards(), createSalesTableCard());
         layout.setCenter(mainContent);
         return layout;
     }
 
+    // ── Top bar ───────────────────────────────────────────────────────────────
+
+    private HBox createTopBar() {
+        HBox topBar = new HBox(20);
+        topBar.setPadding(new Insets(20));
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
+
+        Label title = new Label("Sales History");
+        title.setFont(Font.font("System", FontWeight.BOLD, 24));
+        title.setTextFill(Color.web("#0f766e"));
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        searchField = new TextField();
+        searchField.setPromptText("Search by sale ID or staff name...");
+        searchField.setPrefWidth(300);
+        searchField.setStyle("-fx-font-size: 13; -fx-padding: 10;");
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> searchSales(newVal));
+
+        topBar.getChildren().addAll(title, spacer, searchField);
+        return topBar;
+    }
+
+    private void searchSales(String query) {
+        if (salesTable == null) return;
+        if (query == null || query.trim().isEmpty()) {
+            salesTable.setItems(allSales);
+            return;
+        }
+        String q = query.trim().toLowerCase();
+        salesTable.setItems(allSales.stream()
+                .filter(s -> String.valueOf(s.getSaleID()).contains(q)
+                        || (s.getStaffName() != null && s.getStaffName().toLowerCase().contains(q)))
+                .collect(Collectors.toCollection(FXCollections::observableArrayList)));
+    }
+
+    // ── Summary cards ─────────────────────────────────────────────────────────
+
+    private HBox createSummaryCards() {
+        int totalSales = allSales.size();
+        double totalRevenue = allSales.stream().mapToDouble(CustomerService.Sale::getTotalAmount).sum();
+        java.time.LocalDate today = java.time.LocalDate.now();
+        long todaysSales = allSales.stream()
+                .filter(s -> s.getSaleDate() != null && s.getSaleDate().toLocalDate().equals(today))
+                .count();
+        double avgSale = totalSales == 0 ? 0 : totalRevenue / totalSales;
+
+        return com.pos.components.SummaryCards.row(
+            new com.pos.components.SummaryCards.Card("Total Sales", String.format("%,d", totalSales), "#0f766e", "all time"),
+            new com.pos.components.SummaryCards.Card("Today's Sales", String.valueOf(todaysSales), "#16a34a", today.format(DateTimeFormatter.ofPattern("dd MMM yyyy"))),
+            new com.pos.components.SummaryCards.Card("Net Revenue", "R" + String.format("%,.2f", totalRevenue), "#7c3aed", "all time"),
+            new com.pos.components.SummaryCards.Card("Average Sale", "R" + String.format("%,.2f", avgSale), "#d97706", "per transaction")
+        );
+    }
+
     // ── Sales table ───────────────────────────────────────────────────────────
+
+    private VBox createSalesTableCard() {
+        VBox tableBox = new VBox(15);
+        tableBox.setStyle(
+                "-fx-background-color: white; -fx-background-radius: 14;" +
+                "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
+        tableBox.setPadding(new Insets(20));
+
+        Label tableTitle = new Label("Recent Sales");
+        tableTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
+
+        salesTable = buildSalesTable(walkIn);
+        salesTable.setItems(allSales);
+        VBox.setVgrow(salesTable, Priority.ALWAYS);
+
+        tableBox.getChildren().addAll(tableTitle, salesTable);
+        return tableBox;
+    }
 
     private TableView<CustomerService.Sale> buildSalesTable(Customer customer) {
         TableView<CustomerService.Sale> table = new TableView<>();
@@ -410,7 +479,8 @@ public class SalesHistoryView {
                         sale.calculateNetTotals(customerService);
                         itemsTable.setItems(sale.getItems());
                         itemsTable.refresh();
-                        salesTable.setItems(customerService.getCustomerPurchases(customer.getAccountID()));
+                        allSales = customerService.getCustomerPurchases(customer.getAccountID());
+                        salesTable.setItems(allSales);
                         salesTable.refresh();
                     } else {
                         showAlert("Error", "Failed to submit return request", Alert.AlertType.ERROR);
@@ -605,7 +675,8 @@ public class SalesHistoryView {
                 sale.calculateNetTotals(customerService);
                 itemsTable.setItems(sale.getItems());
                 itemsTable.refresh();
-                salesTable.setItems(customerService.getCustomerPurchases(customer.getAccountID()));
+                allSales = customerService.getCustomerPurchases(customer.getAccountID());
+                salesTable.setItems(allSales);
                 salesTable.refresh();
             } else {
                 showAlert("Error", "Failed to submit exchange request", Alert.AlertType.ERROR);
