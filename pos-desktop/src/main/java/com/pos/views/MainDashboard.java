@@ -92,6 +92,34 @@ public class MainDashboard {
             Platform.runLater(() ->
                 com.pos.components.TutorialOverlay.showWalkthrough(stage, visibleSections()));
         }
+
+        if (com.pos.setup.BackupReminder.isDue()) {
+            Platform.runLater(this::showBackupReminder);
+        }
+    }
+
+    /** Nagging reminder, shown once every 7 days — see BackupReminder. */
+    private void showBackupReminder() {
+        Alert alert = new Alert(AlertType.NONE);
+        alert.initOwner(stage);
+        alert.setTitle("Back Up Your Data");
+        alert.setHeaderText("It's been a week since your last backup reminder.");
+        alert.setContentText(
+            "Back up your database regularly, and keep a copy on external storage " +
+            "(a USB drive or external disk) in case this computer is ever lost, stolen, " +
+            "or damaged.");
+
+        ButtonType backupNow = new ButtonType("Back Up Now", ButtonBar.ButtonData.OK_DONE);
+        ButtonType remindLater = new ButtonType("Remind Me in 7 Days", ButtonBar.ButtonData.CANCEL_CLOSE);
+        alert.getButtonTypes().setAll(backupNow, remindLater);
+
+        com.pos.setup.BackupReminder.markReminded();
+
+        alert.showAndWait().ifPresent(choice -> {
+            if (choice == backupNow) {
+                navigateTo("settings");
+            }
+        });
     }
 
     /** Sections this user/edition actually has in the menu, in menu order. */

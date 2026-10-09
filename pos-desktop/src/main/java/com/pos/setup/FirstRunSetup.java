@@ -141,8 +141,12 @@ public class FirstRunSetup {
         }
 
         progress.accept("Saving configuration...");
+        // Edition-specific database name — Standard and Retail share one MySQL
+        // instance and one %PROGRAMDATA%\POS System\ folder when both are
+        // installed on the same machine, so they must not share a schema.
+        String dbName = "pos_db_" + com.pos.Edition.current().name().toLowerCase();
         DatabaseConnection.saveConfig(
-            "127.0.0.1", 3306, "pos_db", "root", generatedPassword
+            "127.0.0.1", 3306, dbName, "root", generatedPassword
         );
 
         progress.accept("Setup complete!");

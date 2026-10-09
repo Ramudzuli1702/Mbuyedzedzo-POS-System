@@ -243,6 +243,7 @@ public class SettingsService {
 
             if (exitCode == 0) {
                 long fileSize = new File(filename).length();
+                com.pos.setup.BackupReminder.markBackedUp();
                 return new BackupResult(true, "Backup created: " + filename,
                         filename + " (" + (fileSize / 1024) + " KB)");
             } else {

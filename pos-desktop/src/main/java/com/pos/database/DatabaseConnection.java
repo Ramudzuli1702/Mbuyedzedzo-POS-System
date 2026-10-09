@@ -38,7 +38,9 @@ public class DatabaseConnection {
     // threads afterwards.
     public static volatile String HOST     = "127.0.0.1";
     public static volatile int    PORT     = 3306;
-    public static volatile String DATABASE = "pos_db";
+    // Edition-specific default so Standard and Retail never land on the same
+    // schema even before FirstRunSetup writes a config file (e.g. dev mode).
+    public static volatile String DATABASE = "pos_db_" + com.pos.Edition.current().name().toLowerCase();
     public static volatile String USERNAME = "root";
     public static volatile String PASSWORD = "";  // overwritten from config on real installs
 
@@ -57,8 +59,23 @@ public class DatabaseConnection {
      */
     public static volatile String TIMEZONE = "+02:00";
 
-    // Path the installer / first-run setup writes the config to
+    // Path the installer / first-run setup writes the config to.
+    // Named per edition — Standard and Retail install to the same
+    // %PROGRAMDATA%\POS System\ folder, so a shared "db.properties" would let
+    // whichever edition runs first-run setup last silently point both
+    // editions at the same database (and the same stored credentials).
     public static final String CONFIG_PATH =
+        System.getenv("PROGRAMDATA") + File.separator +
+        "POS System"                 + File.separator +
+        "config"                     + File.separator +
+        "db-" + com.pos.Edition.current().name().toLowerCase() + ".properties";
+
+    // The old shared path, from before configs were split per edition. An
+    // install that already ran first-run setup under the old scheme has its
+    // real config here, not at CONFIG_PATH — migrated below so it keeps using
+    // its existing database instead of looking "unconfigured" and silently
+    // provisioning a new, empty one on first launch after this change.
+    private static final String LEGACY_CONFIG_PATH =
         System.getenv("PROGRAMDATA") + File.separator +
         "POS System"                 + File.separator +
         "config"                     + File.separator +
@@ -66,7 +83,29 @@ public class DatabaseConnection {
 
     // ── Static init — load config file if present ──────────────────────────────
     static {
+        migrateLegacyConfigIfNeeded();
         loadConfig();
+    }
+
+    /**
+     * One-time migration: if this edition hasn't got its own config yet but the
+     * pre-split shared file exists, adopt it as-is (same host/db/credentials)
+     * rather than falling through to "not configured". Leaves the legacy file
+     * in place — if both editions are installed, each copies it independently
+     * the first time it runs post-update.
+     */
+    private static void migrateLegacyConfigIfNeeded() {
+        try {
+            File own = new File(CONFIG_PATH);
+            File legacy = new File(LEGACY_CONFIG_PATH);
+            if (!own.exists() && legacy.exists()) {
+                own.getParentFile().mkdirs();
+                java.nio.file.Files.copy(legacy.toPath(), own.toPath());
+                log.info("Migrated legacy shared db.properties to {}", CONFIG_PATH);
+            }
+        } catch (Exception e) {
+            log.warn("Could not migrate legacy db.properties — continuing as unconfigured", e);
+        }
     }
 
     /**
