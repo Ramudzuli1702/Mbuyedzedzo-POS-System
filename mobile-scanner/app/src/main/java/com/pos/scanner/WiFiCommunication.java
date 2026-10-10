@@ -10,13 +10,10 @@ import android.widget.Toast;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * WiFi client for Android scanner app
@@ -258,11 +255,6 @@ public class WiFiCommunication {
             Log.d(TAG, "✅ JSON parsed. Type: [" + type + "]");
 
             switch (type) {
-                case "categories":
-                    Log.d(TAG, "🎯 CATEGORIES MESSAGE DETECTED");
-                    handleCategoriesReceived(json);
-                    break;
-
                 case "scan_ack":
                 case "product_ack":
                     String ackMsg = json.has("message") ? json.get("message").getAsString() : "no message";
@@ -290,63 +282,6 @@ public class WiFiCommunication {
         }
     }
 
-    /**
-     * Handle categories received from desktop
-     */
-    private void handleCategoriesReceived(JsonObject json) {
-        Log.d(TAG, "╔════════════════════════════════════════╗");
-        Log.d(TAG, "║      HANDLING CATEGORIES RECEIVED      ║");
-        Log.d(TAG, "╚════════════════════════════════════════╝");
-
-        try {
-            if (!json.has("data")) {
-                Log.e(TAG, "❌ JSON has no 'data' field. Keys: " + json.keySet().toString());
-                return;
-            }
-
-            JsonArray categoriesArray = json.getAsJsonArray("data");
-
-            if (categoriesArray == null) {
-                Log.e(TAG, "❌ Categories array is NULL");
-                return;
-            }
-
-            Log.d(TAG, "✅ Categories array size: " + categoriesArray.size());
-
-            List<String> categories = new ArrayList<>();
-            for (int i = 0; i < categoriesArray.size(); i++) {
-                String cat = categoriesArray.get(i).getAsString();
-                if (cat != null && !cat.trim().isEmpty()) {
-                    categories.add(cat.trim());
-                    Log.d(TAG, "  [" + i + "] " + cat.trim());
-                }
-            }
-
-            Log.d(TAG, "📊 Total categories parsed: " + categories.size());
-
-            // Save to storage
-            CategoryStorage.getInstance(context).saveCategories(categories);
-            Log.d(TAG, "✅ Saved to CategoryStorage");
-
-            // Broadcast
-            Intent intent = new Intent("CATEGORIES_RECEIVED");
-            LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
-            Log.d(TAG, "✅ Broadcast sent: CATEGORIES_RECEIVED");
-
-            // Toast
-            new Handler(Looper.getMainLooper()).post(() ->
-                Toast.makeText(context, categories.size() + " categories loaded", Toast.LENGTH_LONG).show()
-            );
-
-            Log.d(TAG, "╔════════════════════════════════════════╗");
-            Log.d(TAG, "║    CATEGORIES HANDLING COMPLETE ✓      ║");
-            Log.d(TAG, "╚════════════════════════════════════════╝");
-
-        } catch (Exception e) {
-            Log.e(TAG, "❌ EXCEPTION in handleCategoriesReceived: " + e.getClass().getName() + " - " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
 
     /**
      * Send scan data to desktop

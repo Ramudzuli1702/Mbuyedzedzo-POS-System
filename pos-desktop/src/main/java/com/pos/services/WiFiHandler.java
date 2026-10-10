@@ -5,7 +5,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.pos.models.Product;
-import com.pos.services.CategoryService;
 import java.io.*;
 import java.math.BigDecimal;
 import java.net.*;
@@ -13,8 +12,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
-import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 
 /**
  * WiFi server for desktop POS system
@@ -136,9 +133,6 @@ public class WiFiHandler {
                 // Send welcome message
                 sendData("{\"type\":\"connected\",\"message\":\"Connected to " + com.pos.Branding.APP_NAME + "\"}");
 
-                // FIXED: Send all categories to the app for dropdown population
-                sendCategoriesToApp();
-
                 System.out.println("🚀 Starting handleClient()...");
                 // Handle this connection
                 handleClient();
@@ -153,47 +147,6 @@ public class WiFiHandler {
             }
         }
         System.out.println("🛑 acceptConnections loop ended");
-    }
-
-    /**
-     * Send all available categories to the connected Android app
-     */
-    private void sendCategoriesToApp() {
-        try {
-            CategoryService categoryService = new CategoryService();
-            ObservableList<String> categories = categoryService.getAllCategories();
-
-            // NEW: Print each category being sent
-            System.out.println("📂 Categories being sent:");
-            for (String category : categories) {
-                System.out.println("   - " + category);
-            }
-
-            JsonObject categoriesJson = new JsonObject();
-            categoriesJson.addProperty("type", "categories");
-
-            JsonArray categoriesArray = new JsonArray();
-            for (String category : categories) {
-                categoriesArray.add(category);
-            }
-            categoriesJson.add("data", categoriesArray);
-
-            String jsonMessage = gson.toJson(categoriesJson);
-
-            // OPTIONAL: Also print the full JSON for debugging
-            System.out.println("📄 Full categories JSON: " + jsonMessage);
-
-            sendData(jsonMessage);
-
-            System.out.println("📂 Sent " + categories.size() + " categories to Android app");
-        } catch (Exception e) {
-            System.err.println("Failed to send categories: " + e.getMessage());
-            // Send error response
-            JsonObject errorJson = new JsonObject();
-            errorJson.addProperty("type", "error");
-            errorJson.addProperty("message", "Failed to fetch categories");
-            sendData(gson.toJson(errorJson));
-        }
     }
 
     /**
@@ -339,12 +292,6 @@ public class WiFiHandler {
                     handleAddProduct(json);
                     break;
 
-                case "request_categories":
-                    // Re-send categories when requested
-                    System.out.println("📂 Categories re-requested by Android");
-                    sendCategoriesToApp();
-                    break;
-
                 default:
                     System.out.println("Unknown message type: " + type);
                     System.out.println("Full JSON: " + gson.toJson(json));
@@ -377,6 +324,23 @@ public class WiFiHandler {
     }
 
     /**
+     * A money field from the phone may arrive as a JSON number (dot decimal)
+     * or, if the phone sent it as a string, with a comma decimal separator —
+     * normalize either to a double.
+     */
+    private double parseAndroidMoney(JsonElement element, double fallback) {
+        if (element == null || element.isJsonNull()) return fallback;
+        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+            return element.getAsDouble();
+        }
+        try {
+            return Double.parseDouble(element.getAsString().replace(",", "."));
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    /**
      * Handle product addition from Android
      */
     private void handleAddProduct(JsonObject json) {
@@ -391,29 +355,22 @@ public class WiFiHandler {
 
             // Extract product fields
             String name = productData.get("name").getAsString();
-            String category = productData.get("category").getAsString();
             String barcode = productData.get("barcode").getAsString();
             int quantity = productData.get("quantity").getAsInt();
 
-            // FIXED: Handle both dot and comma for price by getting as string and
-            // normalizing
-            JsonElement priceElement = productData.get("price");
-            String priceStr;
-            if (priceElement.isJsonPrimitive() && priceElement.getAsJsonPrimitive().isNumber()) {
-                // If it's parsed as number already (dot used), get as double
-                priceStr = String.valueOf(priceElement.getAsDouble());
-            } else {
-                // Otherwise, get as string and normalize comma to dot
-                priceStr = priceElement.getAsString().replace(",", ".");
-            }
-            double price = Double.parseDouble(priceStr);
+            double price = parseAndroidMoney(productData.get("price"), 0.0);
+            // costPrice is a newer field — not every phone build sends it, so
+            // it defaults to 0 like every other no-cost-price entry point
+            // (InventoryView already backfills this the same way on insert).
+            double costPrice = productData.has("costPrice")
+                    ? parseAndroidMoney(productData.get("costPrice"), 0.0) : 0.0;
 
             System.out.println("➕ Product received from Android:");
             System.out.println("   Name: " + name);
-            System.out.println("   Category: " + category);
             System.out.println("   Barcode: " + barcode);
             System.out.println("   Quantity: " + quantity);
-            System.out.println("   Price: R " + price + " (parsed from: '" + priceStr + "')");
+            System.out.println("   Price: R " + price);
+            System.out.println("   Cost Price: R " + costPrice);
 
             // Create Product object
             Product product = new Product();
@@ -421,9 +378,7 @@ public class WiFiHandler {
             product.setBarCode(barcode);
             product.setQuantity(quantity);
             product.setPrice(BigDecimal.valueOf(price));
-
-            // Store category name temporarily (will need to be resolved to ID)
-            product.setCategoryName(category);
+            product.setCostPrice(BigDecimal.valueOf(costPrice));
 
             // Call callback to handle product addition
             if (onProductReceived != null) {
