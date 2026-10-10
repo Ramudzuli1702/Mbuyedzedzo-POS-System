@@ -1139,27 +1139,6 @@ public class SessionView {
         else                  showAlert("Error", "Failed to generate reports", Alert.AlertType.ERROR);
     }
 
-    /**
-     * Opens a just-generated PDF in the OS's own default viewer right away —
-     * so the cashier sees the declaration/statement immediately instead of
-     * having to leave the app and go find it in a folder themselves. Best
-     * effort only: if no PDF viewer is associated or Desktop isn't supported
-     * here, this silently does nothing — the file is still safely on disk
-     * either way, same as before.
-     */
-    private void openFileQuietly(String path) {
-        try {
-            if (java.awt.Desktop.isDesktopSupported()) {
-                java.awt.Desktop desktop = java.awt.Desktop.getDesktop();
-                if (desktop.isSupported(java.awt.Desktop.Action.OPEN)) {
-                    desktop.open(new File(path));
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Could not auto-open " + path + ": " + e.getMessage());
-        }
-    }
-
     private boolean generateDeclarationPDF(int sessionID) {
         try {
             // An absolute, user-writable folder — a relative "reports/..." path
@@ -1261,7 +1240,7 @@ public class SessionView {
                     "===============================================", normalFont));
 
             document.close();
-            openFileQuietly(filename);
+            com.pos.components.PdfViewerDialog.show(null, new File(filename), "Session Declaration");
             return true;
         } catch (Exception e) {
             e.printStackTrace();
@@ -1444,7 +1423,7 @@ public class SessionView {
                     String.format("Total Sales:      R%.2f", session.getTotalSales()), normalFont));
 
             document.close();
-            openFileQuietly(filename);
+            com.pos.components.PdfViewerDialog.show(null, new File(filename), "Session Statement");
             return true;
         } catch (Exception e) {
             e.printStackTrace();
