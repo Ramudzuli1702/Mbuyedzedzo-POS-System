@@ -215,14 +215,22 @@ public class CustomerView {
 
         Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit this customer");
         Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#dc2626", "Deactivate this customer");
+        // Closing a WINDOW_MODAL stage and synchronously opening another
+        // Dialog/Alert in the same callback frame starts the new one on top
+        // of a still-tearing-down nested event loop — the exact cause of the
+        // blank "Authorization Required" dialog bug fixed in Ui.showDetailDialog.
+        // Deferring with Platform.runLater lets the first stage's teardown
+        // finish before the next dialog opens.
         editBtn.setOnAction(e -> {
             stage.close();
-            showEditCustomerDialog(customer);
-            loadCustomers();
+            javafx.application.Platform.runLater(() -> {
+                showEditCustomerDialog(customer);
+                loadCustomers();
+            });
         });
         deleteBtn.setOnAction(e -> {
             stage.close();
-            deleteCustomer(customer);
+            javafx.application.Platform.runLater(() -> deleteCustomer(customer));
         });
         HBox actionBar = new HBox(10, editBtn, deleteBtn);
 

@@ -1124,9 +1124,21 @@ public class SessionView {
 
         Optional<ButtonType> result = alert.showAndWait();
         if (result.isPresent()) {
-            if      (result.get() == declarationBtn) generateDeclarationPDF(session.getSessionID());
-            else if (result.get() == statementBtn)   generateStatementPDF(session.getSessionID());
-            else if (result.get() == bothBtn)        generateSessionPDFs(session.getSessionID());
+            // Each branch must surface failure — the PDF viewer opening IS the
+            // success feedback, but a failed generateDeclarationPDF/
+            // generateStatementPDF used to return false with nobody checking it,
+            // so a failure here looked exactly like the button doing nothing.
+            if (result.get() == declarationBtn) {
+                if (!generateDeclarationPDF(session.getSessionID())) {
+                    showAlert("Error", "Failed to generate the declaration.", Alert.AlertType.ERROR);
+                }
+            } else if (result.get() == statementBtn) {
+                if (!generateStatementPDF(session.getSessionID())) {
+                    showAlert("Error", "Failed to generate the statement.", Alert.AlertType.ERROR);
+                }
+            } else if (result.get() == bothBtn) {
+                generateSessionPDFs(session.getSessionID());
+            }
         }
     }
 
