@@ -12,3 +12,7 @@ Thumbs.db
 
 # Each component also has its own .gitignore for build-tool-specific output
 # (pos-desktop/ — Maven; licensing-server/ — Maven; mobile-scanner/ — Gradle).
+
+release-artifacts/
+release-artifacts-new/
+commit-categories.ps1

@@ -10,10 +10,15 @@ import android.widget.Toast;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.io.*;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * WiFi client for Android scanner app
@@ -25,6 +30,9 @@ public class WiFiCommunication {
     private static final int DEFAULT_PORT = 8888;
     private static final int RECONNECT_DELAY_MS = 2000;
     private static final int MAX_RECONNECT_ATTEMPTS = 5;
+
+    /** Broadcast sent (via LocalBroadcastManager) whenever the desktop's category list arrives. */
+    public static final String ACTION_CATEGORIES_UPDATED = "CATEGORIES_UPDATED";
 
     private static WiFiCommunication instance;
     private final Context context;
@@ -39,6 +47,9 @@ public class WiFiCommunication {
     private String lastAddress; // Saved for auto-reconnect
     private int reconnectAttempts = 0;
     private Gson gson = new Gson();
+
+    /** The desktop's real category list, as last received. Replaced wholesale on every update. */
+    private volatile List<String> categories = Collections.emptyList();
 
     private WiFiCommunication(Context ctx) {
         this.context = ctx.getApplicationContext();
@@ -109,6 +120,10 @@ public class WiFiCommunication {
                 socket = new Socket(serverIP, serverPort);
                 input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 output = new PrintWriter(socket.getOutputStream(), true);
+
+                // A fresh connection may be to a different desktop — drop the old
+                // list; the desktop pushes its current one right after connecting.
+                categories = Collections.emptyList();
 
                 isConnected = true;
                 reconnectAttempts = 0;
@@ -255,10 +270,20 @@ public class WiFiCommunication {
             Log.d(TAG, "✅ JSON parsed. Type: [" + type + "]");
 
             switch (type) {
+                case "categories":
+                    handleCategories(json);
+                    break;
+
                 case "scan_ack":
                 case "product_ack":
                     String ackMsg = json.has("message") ? json.get("message").getAsString() : "no message";
                     Log.d(TAG, "✅ ACK received: " + ackMsg);
+                    break;
+
+                case "product_added":
+                case "product_rejected":
+                    String resultMsg = json.has("message") ? json.get("message").getAsString() : "no message";
+                    Log.d(TAG, "ℹ️ " + type + ": " + resultMsg);
                     break;
 
                 case "error":
@@ -282,6 +307,38 @@ public class WiFiCommunication {
         }
     }
 
+    /**
+     * The desktop pushes {"type":"categories","data":["Dairy","Bakery",...]}
+     * on connect and whenever we send request_categories. Store it and tell
+     * any open screen to refresh its dropdown.
+     */
+    private void handleCategories(JsonObject json) {
+        List<String> list = new ArrayList<>();
+        if (json.has("data") && json.get("data").isJsonArray()) {
+            JsonArray array = json.getAsJsonArray("data");
+            for (JsonElement el : array) {
+                if (el != null && !el.isJsonNull()) {
+                    String name = el.getAsString().trim();
+                    if (!name.isEmpty()) list.add(name);
+                }
+            }
+        }
+        categories = Collections.unmodifiableList(list);
+        Log.d(TAG, "📂 Received " + list.size() + " categories from desktop");
+
+        Intent intent = new Intent(ACTION_CATEGORIES_UPDATED);
+        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+    }
+
+    /** The category names last received from the desktop (never null; empty until received). */
+    public List<String> getCategories() {
+        return categories;
+    }
+
+    /** Ask the desktop to re-send its category list. Safe to call from the UI thread. */
+    public void requestCategories() {
+        new Thread(() -> sendData("{\"type\":\"request_categories\"}"), "WiFi-RequestCategories").start();
+    }
 
     /**
      * Send scan data to desktop
