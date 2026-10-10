@@ -32,7 +32,20 @@ public final class HelpContent {
             "Add new products and keep your stock counts up to date. Each product "
             + "gets a barcode you can print and stick on the shelf. You'll enter both "
             + "a purchase price (what you paid) and a selling price (what the customer "
-            + "pays) so your profit reports are accurate."
+            + "pays) so your profit reports are accurate.\n\n"
+            + "Put every product in a category (Dairy, Bakery, Cleaning...) and use "
+            + "Manage Categories to add, rename or remove them. The category filter at "
+            + "the top narrows the list to one group, and your reports use categories "
+            + "too.\n\n"
+            + "Above the product list, Export to Excel saves your stock list as a "
+            + "spreadsheet, and Import from Excel adds many products at once. Before "
+            + "anything is saved, the app shows you exactly what will be added and "
+            + "asks whether to create any categories it hasn't seen before, so a typo "
+            + "in the sheet won't quietly create a new category. Products whose "
+            + "barcode is already in your inventory are skipped.\n\n"
+            + "You can also add products from the scanner app on your phone: pick a "
+            + "category, scan the barcode, and the product appears here for you to "
+            + "approve."
         ));
         ENTRIES.put("users", new Entry(
             "User Management",
