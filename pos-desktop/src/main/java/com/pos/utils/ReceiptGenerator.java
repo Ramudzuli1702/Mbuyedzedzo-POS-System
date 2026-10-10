@@ -190,15 +190,39 @@ public class ReceiptGenerator {
         return false;
     }
 
+    /**
+     * Fires off the actual print job on a background thread and returns
+     * immediately — {@code job.printPage(...)} (and sometimes even
+     * {@code Printer.getDefaultPrinter()}/{@code createPrinterJob(...)}) talks
+     * synchronously to the Windows print spooler, and every call site invokes
+     * this straight from a button's {@code setOnAction}. Running that on the
+     * JavaFX Application Thread means a slow or wedged printer/spooler blocks
+     * the entire UI — no repaints, no input — which is exactly what Windows
+     * reports as "Not Responding," forcing the user to kill the app. Moving
+     * it off-thread keeps the UI responsive no matter how the OS print
+     * pipeline behaves; {@link Dialogs#error} is already safe to call from
+     * any thread, so success/failure still reaches the user correctly.
+     *
+     * The {@code Text}/{@code TextFlow}/{@code VBox} built here are never
+     * attached to a live Scene — they exist only to hand to
+     * {@code printPage(Node)} — so building them off the FX thread is safe.
+     */
     public static boolean printReceipt(String receiptText) {
         System.out.println(receiptText);
+        Thread printThread = new Thread(() -> doPrint(receiptText), "Receipt-Print");
+        printThread.setDaemon(true);
+        printThread.start();
+        return true; // job dispatched; real success/failure is reported asynchronously via Dialogs.error
+    }
+
+    private static void doPrint(String receiptText) {
         try {
             Printer printer = Printer.getDefaultPrinter();
             if (printer == null) {
                 Dialogs.error("Can't print", "No printer is set up on this computer. "
                         + "Connect/install a printer in Windows and set it as default, "
                         + "then try again. The receipt has still been saved to file.");
-                return false;
+                return;
             }
             if (isVirtualPrinter(printer.getName())) {
                 Dialogs.error("No receipt printer set up", "The default printer on this computer is \""
@@ -206,14 +230,14 @@ public class ReceiptGenerator {
                         + "pop up a hidden Save dialog and make the app look stuck. Connect a real "
                         + "receipt/USB printer, set it as the Windows default, and try again. "
                         + "The receipt has still been saved to file.");
-                return false;
+                return;
             }
             PrinterJob job = PrinterJob.createPrinterJob(printer);
             if (job == null) {
                 Dialogs.error("Can't print", "The default printer (" + printer.getName()
                         + ") could not be reached. Check it's switched on and connected, "
                         + "then try again. The receipt has still been saved to file.");
-                return false;
+                return;
             }
             Text text = new Text(receiptText);
             text.setStyle("-fx-font-family: 'Courier New'; -fx-font-size: 9pt;");
@@ -225,14 +249,12 @@ public class ReceiptGenerator {
 
             if (job.printPage(page)) {
                 job.endJob();
-                return true;
+                return;
             }
             Dialogs.error("Can't print", "Printing to " + printer.getName()
                     + " failed partway through. Check it has paper and is online, then try again.");
-            return false;
         } catch (Exception e) {
             Dialogs.error("Can't print", "Printing failed unexpectedly.", e);
-            return false;
         }
     }
 
