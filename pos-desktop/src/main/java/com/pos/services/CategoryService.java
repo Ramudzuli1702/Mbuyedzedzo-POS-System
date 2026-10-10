@@ -44,16 +44,27 @@ public class CategoryService {
     }
 
     public boolean addCategory(String categoryName) {
+        return addCategoryReturningId(categoryName) > 0;
+    }
+
+    /** Same insert as {@link #addCategory}, but hands back the new row's id —
+     *  needed wherever the caller must immediately use the category (e.g.
+     *  assigning it to a product during an Excel import). */
+    public int addCategoryReturningId(String categoryName) {
         String query = "INSERT INTO Category (CategoryName) VALUES (?)";
 
         try (Connection conn = DatabaseConnection.getConnection();
-                PreparedStatement pstmt = conn.prepareStatement(query)) {
+                PreparedStatement pstmt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS)) {
 
             pstmt.setString(1, categoryName);
-            return pstmt.executeUpdate() > 0;
+            if (pstmt.executeUpdate() == 0) return -1;
+            try (ResultSet keys = pstmt.getGeneratedKeys()) {
+                if (keys.next()) return keys.getInt(1);
+            }
+            return -1;
         } catch (SQLException e) {
             e.printStackTrace();
-            return false;
+            return -1;
         }
     }
 

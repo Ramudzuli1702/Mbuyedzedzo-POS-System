@@ -4,12 +4,15 @@ import com.pos.components.SummaryCards;
 import com.pos.models.Product;
 import com.pos.models.User;
 import com.pos.services.CategoryService;
+import com.pos.services.InventoryExcelService;
 import com.pos.services.ProductService;
 import com.pos.services.ReportService;
 import com.pos.services.WiFiHandler;
 import com.pos.utils.Icons;
 import com.pos.utils.Theme;
 import javafx.application.Platform;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -23,7 +26,12 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class InventoryView {
     private User currentUser;
@@ -31,6 +39,7 @@ public class InventoryView {
     private CategoryService categoryService;
     private TableView<Product> productTable;
     private Button importBtnRef;
+    private ComboBox<String> categoryFilterCombo;
     private ObservableList<Product> products;
     private TextField searchField;
 
@@ -86,6 +95,7 @@ public class InventoryView {
         alert.setHeaderText("New product scanned from mobile device");
         alert.setContentText(
                 "Product: " + product.getProductName() + "\n" +
+                        "Category: " + (product.getCategoryName() != null ? product.getCategoryName() : "(none selected)") + "\n" +
                         "Barcode: " + product.getBarCode() + "\n" +
                         "Quantity: " + product.getQuantity() + "\n" +
                         "Price: R " + String.format("%.2f", product.getPrice()) + "\n\n" +
@@ -102,7 +112,14 @@ public class InventoryView {
     }
 
     private void addProductToDatabase(Product product) {
-        product.setCategoryID(categoryService.getOrCreateDefaultCategoryId());
+        // The phone picks from the real category list now (fed to it over
+        // WiFi), so use whatever name it sent — falling back to the default
+        // only if it's missing or doesn't match anything (e.g. an older
+        // phone build still mid-upgrade).
+        String categoryName = product.getCategoryName();
+        int categoryId = (categoryName != null && !categoryName.isBlank())
+                ? categoryService.getCategoryId(categoryName) : 0;
+        product.setCategoryID(categoryId > 0 ? categoryId : categoryService.getOrCreateDefaultCategoryId());
         product.setStaffID(currentUser.getStaffID());
         // The phone only ever sends a selling price, never a cost price —
         // CostPrice is NOT NULL, so leaving this unset crashed the insert for
@@ -228,6 +245,15 @@ public class InventoryView {
         searchField.setStyle(Theme.input());
         searchField.textProperty().addListener((obs, oldVal, newVal) -> searchProducts(newVal));
 
+        categoryFilterCombo = new ComboBox<>();
+        categoryFilterCombo.setPromptText("All Categories");
+        categoryFilterCombo.setStyle(Theme.input());
+        categoryFilterCombo.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
+
+        Button categoriesBtn = new Button("Manage Categories");
+        Theme.hover(categoriesBtn, Theme.secondaryButton(), Theme.secondaryHover());
+        categoriesBtn.setOnAction(e -> showCategoriesDialog());
+
         Button exportBtn = new Button("Export to Excel");
         Theme.hover(exportBtn, Theme.secondaryButton(), Theme.secondaryHover());
         exportBtn.setOnAction(e -> exportInventory());
@@ -241,8 +267,18 @@ public class InventoryView {
         Theme.hover(addBtn, Theme.primaryButton(), Theme.primaryHover());
         addBtn.setOnAction(e -> showAddProductDialog());
 
-        topBar.getChildren().addAll(title, spacer, searchField, exportBtn, importBtn, addBtn);
+        topBar.getChildren().addAll(title, spacer, searchField, categoryFilterCombo, categoriesBtn, exportBtn, importBtn, addBtn);
+        refreshCategoryFilterItems();
         return topBar;
+    }
+
+    private void refreshCategoryFilterItems() {
+        ObservableList<String> items = FXCollections.observableArrayList();
+        items.add("All Categories");
+        items.addAll(categoryService.getAllCategories());
+        String previous = categoryFilterCombo.getValue();
+        categoryFilterCombo.setItems(items);
+        categoryFilterCombo.setValue(items.contains(previous) ? previous : "All Categories");
     }
 
     // ── Excel export / import ────────────────────────────────────────────────
@@ -261,7 +297,7 @@ public class InventoryView {
 
         new Thread(() -> {
             try {
-                new com.pos.services.InventoryExcelService().exportToExcel(toExport, target);
+                new InventoryExcelService().exportToExcel(toExport, target);
                 Platform.runLater(() -> com.pos.components.Ui.showAlert(productTable,
                         "Exported", "Saved " + toExport.size() + " products to " + target.getName(),
                         Alert.AlertType.INFORMATION));
@@ -272,6 +308,11 @@ public class InventoryView {
         }, "Inventory-Export").start();
     }
 
+    /**
+     * Import is two-phase: the file is analysed read-only first, the user is
+     * asked about any new categories and shown a full review of what will be
+     * added, and only after they confirm is anything written to the database.
+     */
     private void importInventory() {
         javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
         chooser.setTitle("Import inventory from Excel");
@@ -281,30 +322,238 @@ public class InventoryView {
         if (source == null) return;
 
         importBtnRef.setDisable(true);
+        importBtnRef.setText("Reading file…");
+
+        new Thread(() -> {
+            try {
+                InventoryExcelService service = new InventoryExcelService();
+                InventoryExcelService.ImportPlan plan = service.analyze(source); // read-only
+                Platform.runLater(() -> {
+                    resetImportButton();
+                    reviewAndCommitImport(service, plan);
+                });
+            } catch (Exception ex) {
+                Platform.runLater(this::resetImportButton);
+                com.pos.utils.Dialogs.error("Import failed",
+                        "Could not read that file as an Excel inventory sheet: " + ex.getMessage(), ex);
+            }
+        }, "Inventory-Import-Analyze").start();
+    }
+
+    private void resetImportButton() {
+        importBtnRef.setDisable(false);
+        importBtnRef.setText("Import from Excel");
+    }
+
+    private void reviewAndCommitImport(InventoryExcelService service, InventoryExcelService.ImportPlan plan) {
+        // Nothing importable — just report why, don't ask anything.
+        if (plan.toAdd().isEmpty()) {
+            showImportResult(new InventoryExcelService.ImportResult(
+                    List.of(), plan.duplicates(), plan.invalidRows()));
+            return;
+        }
+
+        // Step 1: new categories — ask before anything is created.
+        Set<String> approved = new LinkedHashSet<>();
+        if (!plan.newCategoryNames().isEmpty()) {
+            Optional<Set<String>> choice = askAboutNewCategories(plan);
+            if (choice.isEmpty()) return; // user cancelled the whole import
+            approved = choice.get();
+        }
+        final Set<String> approvedFinal = approved;
+
+        // Step 2: full review of what will be added — nothing is written until OK.
+        if (!confirmImportReview(plan, approvedFinal)) return;
+
+        importBtnRef.setDisable(true);
         importBtnRef.setText("Importing…");
 
         new Thread(() -> {
             try {
-                var result = new com.pos.services.InventoryExcelService()
-                        .importFromExcel(source, currentUser.getStaffID());
+                var result = service.commit(plan, approvedFinal, currentUser.getStaffID());
                 Platform.runLater(() -> {
-                    importBtnRef.setDisable(false);
-                    importBtnRef.setText("Import from Excel");
+                    resetImportButton();
                     loadProducts();
                     showImportResult(result);
                 });
             } catch (Exception ex) {
-                Platform.runLater(() -> {
-                    importBtnRef.setDisable(false);
-                    importBtnRef.setText("Import from Excel");
-                });
+                Platform.runLater(this::resetImportButton);
                 com.pos.utils.Dialogs.error("Import failed",
-                        "Could not read that file as an Excel inventory sheet: " + ex.getMessage(), ex);
+                        "Import stopped part-way: " + ex.getMessage(), ex);
             }
-        }, "Inventory-Import").start();
+        }, "Inventory-Import-Commit").start();
     }
 
-    private void showImportResult(com.pos.services.InventoryExcelService.ImportResult result) {
+    /** One checkbox per distinct new category (case-insensitive), with a
+     *  "did you mean…?" hint when it looks like a typo of an existing one. */
+    private Optional<Set<String>> askAboutNewCategories(InventoryExcelService.ImportPlan plan) {
+        // Collapse "Dairy" / "dairy" into one entry, remembering how many rows use it.
+        Map<String, String> displayByLower = new LinkedHashMap<>();
+        Map<String, Integer> rowCount = new LinkedHashMap<>();
+        for (String name : plan.newCategoryNames()) {
+            displayByLower.putIfAbsent(name.toLowerCase(), name);
+        }
+        for (var row : plan.toAdd()) {
+            String c = row.categoryName();
+            if (c != null && displayByLower.containsKey(c.trim().toLowerCase())) {
+                rowCount.merge(c.trim().toLowerCase(), 1, Integer::sum);
+            }
+        }
+
+        ObservableList<String> existing = categoryService.getAllCategories();
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("New Categories Found");
+        dialog.setHeaderText("This sheet uses categories that don't exist yet");
+
+        VBox box = new VBox(10);
+        box.setPadding(new Insets(16));
+        Label intro = new Label(
+                "Tick the ones you want created. If one is a typo, leave it unticked — "
+              + "those products will go into the default category instead, and you can "
+              + "fix the sheet and re-import if you prefer.");
+        intro.setWrapText(true);
+        intro.setPrefWidth(460);
+        box.getChildren().add(intro);
+
+        Map<CheckBox, String> boxes = new LinkedHashMap<>();
+        for (var e : displayByLower.entrySet()) {
+            String display = e.getValue();
+            int count = rowCount.getOrDefault(e.getKey(), 0);
+            String label = "\"" + display + "\"  —  " + count + " product" + (count == 1 ? "" : "s");
+
+            String similar = null;
+            for (String ex : existing) {
+                if (levenshtein(ex.toLowerCase(), e.getKey()) <= 2) { similar = ex; break; }
+            }
+            if (similar != null) label += "   (did you mean existing \"" + similar + "\"?)";
+
+            CheckBox cb = new CheckBox(label);
+            cb.setSelected(similar == null); // likely typos start unticked
+            boxes.put(cb, display);
+            box.getChildren().add(cb);
+        }
+
+        ButtonType continueType = new ButtonType("Continue", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().setContent(box);
+        dialog.getDialogPane().getButtonTypes().addAll(continueType, ButtonType.CANCEL);
+
+        Optional<ButtonType> result = dialog.showAndWait();
+        if (result.isEmpty() || result.get() != continueType) return Optional.empty();
+
+        Set<String> approved = new LinkedHashSet<>();
+        boxes.forEach((cb, name) -> { if (cb.isSelected()) approved.add(name); });
+        return Optional.of(approved);
+    }
+
+    /** Shows every row that will be inserted (with the category each will land
+     *  in), plus duplicates/invalid rows that will be skipped. True = go ahead. */
+    private boolean confirmImportReview(InventoryExcelService.ImportPlan plan, Set<String> approvedNew) {
+        Set<String> approvedLower = new LinkedHashSet<>();
+        for (String s : approvedNew) approvedLower.add(s.toLowerCase());
+        Set<String> existingLower = new LinkedHashSet<>();
+        for (String s : categoryService.getAllCategories()) existingLower.add(s.trim().toLowerCase());
+
+        TableView<InventoryExcelService.PendingRow> table = new TableView<>();
+        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setPrefSize(720, 300);
+        table.setItems(FXCollections.observableArrayList(plan.toAdd()));
+
+        TableColumn<InventoryExcelService.PendingRow, String> rowCol = new TableColumn<>("Row");
+        rowCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().rowNumber())));
+        rowCol.setMaxWidth(60);
+
+        TableColumn<InventoryExcelService.PendingRow, String> nameCol = new TableColumn<>("Product");
+        nameCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().productName()));
+
+        TableColumn<InventoryExcelService.PendingRow, String> catCol = new TableColumn<>("Category");
+        catCol.setCellValueFactory(c -> {
+            String cat = c.getValue().categoryName();
+            String key = cat == null ? "" : cat.trim().toLowerCase();
+            String shown;
+            if (key.isEmpty())                    shown = "(default)";
+            else if (existingLower.contains(key)) shown = cat;
+            else if (approvedLower.contains(key)) shown = cat + "  (new)";
+            else                                  shown = "(default)  — \"" + cat + "\" not added";
+            return new SimpleStringProperty(shown);
+        });
+
+        TableColumn<InventoryExcelService.PendingRow, String> barcodeCol = new TableColumn<>("Barcode");
+        barcodeCol.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().barcode()));
+
+        TableColumn<InventoryExcelService.PendingRow, String> qtyCol = new TableColumn<>("Qty");
+        qtyCol.setCellValueFactory(c -> new SimpleStringProperty(String.valueOf(c.getValue().quantity())));
+        qtyCol.setMaxWidth(70);
+
+        TableColumn<InventoryExcelService.PendingRow, String> costCol = new TableColumn<>("Cost");
+        costCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("R %.2f", c.getValue().costPrice())));
+
+        TableColumn<InventoryExcelService.PendingRow, String> priceCol = new TableColumn<>("Price");
+        priceCol.setCellValueFactory(c -> new SimpleStringProperty(String.format("R %.2f", c.getValue().price())));
+
+        table.getColumns().addAll(rowCol, nameCol, catCol, barcodeCol, qtyCol, costCol, priceCol);
+
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(16));
+        content.getChildren().add(new Label(plan.toAdd().size() + " product(s) will be added:"));
+        content.getChildren().add(table);
+
+        if (!approvedNew.isEmpty()) {
+            content.getChildren().add(new Label("New categories to be created: " + String.join(", ", approvedNew)));
+        }
+
+        if (!plan.duplicates().isEmpty() || !plan.invalidRows().isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+            if (!plan.duplicates().isEmpty()) {
+                sb.append("DUPLICATE BARCODES (skipped)\n");
+                for (var d : plan.duplicates())
+                    sb.append("  • Row ").append(d.rowNumber()).append(": ")
+                      .append(d.productName()).append(" (").append(d.barcode()).append(")\n");
+                sb.append('\n');
+            }
+            if (!plan.invalidRows().isEmpty()) {
+                sb.append("INVALID ROWS (skipped)\n");
+                for (String line : plan.invalidRows()) sb.append("  • ").append(line).append('\n');
+            }
+            TextArea skipped = new TextArea(sb.toString());
+            skipped.setEditable(false);
+            skipped.setPrefHeight(130);
+            TitledPane pane = new TitledPane(
+                    (plan.duplicates().size() + plan.invalidRows().size()) + " row(s) will be skipped", skipped);
+            pane.setExpanded(true);
+            content.getChildren().add(pane);
+        }
+
+        ButtonType importType = new ButtonType("Import " + plan.toAdd().size() + " product(s)",
+                ButtonBar.ButtonData.OK_DONE);
+
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Review Import");
+        dialog.setHeaderText("Check this is correct — nothing has been added yet");
+        dialog.getDialogPane().setContent(content);
+        dialog.getDialogPane().getButtonTypes().addAll(importType, ButtonType.CANCEL);
+        dialog.setResizable(true);
+
+        Optional<ButtonType> result = dialog.showAndWait();
+        return result.isPresent() && result.get() == importType;
+    }
+
+    private static int levenshtein(String a, String b) {
+        int[] prev = new int[b.length() + 1];
+        int[] cur = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) prev[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            cur[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                cur[j] = Math.min(Math.min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+            }
+            int[] t = prev; prev = cur; cur = t;
+        }
+        return prev[b.length()];
+    }
+
+    private void showImportResult(InventoryExcelService.ImportResult result) {
         StringBuilder sb = new StringBuilder();
         sb.append("Added: ").append(result.added().size()).append('\n');
         sb.append("Duplicates skipped (already in inventory): ").append(result.duplicates().size()).append('\n');
@@ -393,6 +642,10 @@ public class InventoryView {
         nameCol.setCellValueFactory(new PropertyValueFactory<>("productName"));
         nameCol.setPrefWidth(200);
 
+        TableColumn<Product, String> categoryCol = new TableColumn<>("Category");
+        categoryCol.setCellValueFactory(new PropertyValueFactory<>("categoryName"));
+        categoryCol.setPrefWidth(130);
+
         TableColumn<Product, String> barcodeCol = new TableColumn<>("Barcode");
         barcodeCol.setCellValueFactory(new PropertyValueFactory<>("barCode"));
         barcodeCol.setPrefWidth(120);
@@ -457,7 +710,7 @@ public class InventoryView {
         });
 
         productTable.getColumns().addAll(
-            idCol, nameCol, barcodeCol,
+            idCol, nameCol, categoryCol, barcodeCol,
             quantityCol, soldCol, priceCol, actionCol
         );
 
@@ -469,15 +722,34 @@ public class InventoryView {
 
     private void loadProducts() {
         products = productService.getAllProducts();
-        productTable.setItems(products);
+        if (categoryFilterCombo != null) refreshCategoryFilterItems();
+        applyFilters();
     }
 
     private void searchProducts(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
-            loadProducts();
+        applyFilters();
+    }
+
+    /** Combines the free-text search box with the category filter — both
+     *  narrow the same in-memory product list rather than re-querying the
+     *  database for each. */
+    private void applyFilters() {
+        // createTopBar() runs before createProductTable(), and setting the
+        // filter combo's value fires this listener — so bail out until the
+        // table and product list actually exist.
+        if (productTable == null || products == null) return;
+
+        String keyword = searchField == null ? null : searchField.getText();
+        String category = categoryFilterCombo == null ? null : categoryFilterCombo.getValue();
+
+        ObservableList<Product> base = (keyword == null || keyword.trim().isEmpty())
+                ? products
+                : productService.searchProducts(keyword);
+
+        if (category == null || "All Categories".equals(category)) {
+            productTable.setItems(base);
         } else {
-            ObservableList<Product> results = productService.searchProducts(keyword);
-            productTable.setItems(results);
+            productTable.setItems(base.filtered(p -> category.equals(p.getCategoryName())));
         }
     }
 
@@ -489,6 +761,7 @@ public class InventoryView {
     private void showProductDetailsDialog(Product product) {
         VBox summary = new VBox(10);
         summary.getChildren().addAll(
+            com.pos.components.Ui.detailRow("Category:", product.getCategoryName()),
             com.pos.components.Ui.detailRow("Barcode:", product.getBarCode()),
             com.pos.components.Ui.detailRow("Quantity in stock:", String.valueOf(product.getQuantity())
                 + (product.getQuantity() < 10 ? "  (low stock)" : "")),
@@ -549,6 +822,9 @@ public class InventoryView {
         grid.setPadding(new Insets(20));
 
         TextField nameField     = new TextField();
+        ComboBox<String> categoryCombo = new ComboBox<>();
+        categoryCombo.setItems(categoryService.getAllCategories());
+        categoryCombo.setPromptText("Select a category...");
         TextField barcodeField  = new TextField();
         TextField quantityField = new TextField();
         TextField costPriceField = new TextField();
@@ -556,24 +832,30 @@ public class InventoryView {
 
         grid.add(new Label("Product Name:"), 0, 0);
         grid.add(nameField, 1, 0);
-        grid.add(new Label("Barcode:"), 0, 1);
-        grid.add(barcodeField, 1, 1);
-        grid.add(new Label("Quantity:"), 0, 2);
-        grid.add(quantityField, 1, 2);
-        grid.add(new Label("Purchase Price (R):"), 0, 3);
-        grid.add(costPriceField, 1, 3);
-        grid.add(new Label("Selling Price (R):"), 0, 4);
-        grid.add(priceField, 1, 4);
+        grid.add(new Label("Category:"), 0, 1);
+        grid.add(categoryCombo, 1, 1);
+        grid.add(new Label("Barcode:"), 0, 2);
+        grid.add(barcodeField, 1, 2);
+        grid.add(new Label("Quantity:"), 0, 3);
+        grid.add(quantityField, 1, 3);
+        grid.add(new Label("Purchase Price (R):"), 0, 4);
+        grid.add(costPriceField, 1, 4);
+        grid.add(new Label("Selling Price (R):"), 0, 5);
+        grid.add(priceField, 1, 5);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
+                if (categoryCombo.getValue() == null) {
+                    showAlert("Error", "Please select a category.", Alert.AlertType.ERROR);
+                    return null;
+                }
                 try {
                     Product product = new Product();
                     product.setStaffID(currentUser.getStaffID());
                     product.setProductName(nameField.getText());
-                    product.setCategoryID(categoryService.getOrCreateDefaultCategoryId());
+                    product.setCategoryID(categoryService.getCategoryId(categoryCombo.getValue()));
                     product.setBarCode(barcodeField.getText());
                     product.setQuantity(Integer.parseInt(quantityField.getText()));
                     product.setCostPrice(new BigDecimal(costPriceField.getText()));
@@ -612,6 +894,9 @@ public class InventoryView {
         grid.setPadding(new Insets(20));
 
         TextField nameField     = new TextField(product.getProductName());
+        ComboBox<String> categoryCombo = new ComboBox<>();
+        categoryCombo.setItems(categoryService.getAllCategories());
+        categoryCombo.setValue(product.getCategoryName());
         TextField barcodeField  = new TextField(product.getBarCode());
         TextField quantityField = new TextField(String.valueOf(product.getQuantity()));
         TextField costPriceField = new TextField(product.getCostPrice() == null ? "0.00" : product.getCostPrice().toString());
@@ -619,21 +904,28 @@ public class InventoryView {
 
         grid.add(new Label("Product Name:"), 0, 0);
         grid.add(nameField, 1, 0);
-        grid.add(new Label("Barcode:"), 0, 1);
-        grid.add(barcodeField, 1, 1);
-        grid.add(new Label("Quantity:"), 0, 2);
-        grid.add(quantityField, 1, 2);
-        grid.add(new Label("Purchase Price (R):"), 0, 3);
-        grid.add(costPriceField, 1, 3);
-        grid.add(new Label("Selling Price (R):"), 0, 4);
-        grid.add(priceField, 1, 4);
+        grid.add(new Label("Category:"), 0, 1);
+        grid.add(categoryCombo, 1, 1);
+        grid.add(new Label("Barcode:"), 0, 2);
+        grid.add(barcodeField, 1, 2);
+        grid.add(new Label("Quantity:"), 0, 3);
+        grid.add(quantityField, 1, 3);
+        grid.add(new Label("Purchase Price (R):"), 0, 4);
+        grid.add(costPriceField, 1, 4);
+        grid.add(new Label("Selling Price (R):"), 0, 5);
+        grid.add(priceField, 1, 5);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
+                if (categoryCombo.getValue() == null) {
+                    showAlert("Error", "Please select a category.", Alert.AlertType.ERROR);
+                    return null;
+                }
                 try {
                     product.setProductName(nameField.getText());
+                    product.setCategoryID(categoryService.getCategoryId(categoryCombo.getValue()));
                     product.setBarCode(barcodeField.getText());
                     product.setQuantity(Integer.parseInt(quantityField.getText()));
                     product.setCostPrice(new BigDecimal(costPriceField.getText()));
@@ -707,6 +999,162 @@ public class InventoryView {
         // Inventory isn't the active screen (the whole point of a phone as a
         // second scanner). The callback is only ever torn down at actual app
         // shutdown, via MainDashboard's handleCloseRequest -> wifiHandler.cleanup().
+    }
+
+    // ── Category management ──────────────────────────────────────────────────
+
+    private void showCategoriesDialog() {
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.setTitle("Category Management");
+        dialog.setHeaderText(null);
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setPrefWidth(500);
+
+        VBox content = new VBox(15);
+        content.setPadding(new Insets(20));
+
+        Label title = Theme.sectionTitleLabel("Manage Categories");
+
+        HBox addRow = new HBox(10);
+        addRow.setAlignment(Pos.CENTER_LEFT);
+
+        TextField newCategoryField = new TextField();
+        newCategoryField.setPromptText("New category name...");
+        newCategoryField.setPrefWidth(280);
+        newCategoryField.setStyle(Theme.input());
+        HBox.setHgrow(newCategoryField, Priority.ALWAYS);
+
+        Button addCategoryBtn = new Button("+ Add");
+        Theme.hover(addCategoryBtn, Theme.primaryButton(), Theme.primaryHover());
+
+        addRow.getChildren().addAll(newCategoryField, addCategoryBtn);
+
+        ListView<javafx.util.Pair<Integer, String>> categoryListView = new ListView<>();
+        categoryListView.setPrefHeight(300);
+        categoryListView.setStyle("-fx-background-radius: " + Theme.RADIUS_SM + "px; -fx-border-color: " + Theme.BORDER + "; -fx-border-radius: " + Theme.RADIUS_SM + "px;");
+
+        Runnable refreshList = () -> categoryListView.setItems(categoryService.getAllCategoriesWithId());
+        refreshList.run();
+
+        categoryListView.setCellFactory(lv -> new ListCell<>() {
+            private final Label nameLabel = new Label();
+            private final Button editBtn   = new Button("Edit");
+            private final Button deleteBtn = new Button("Delete");
+            private final HBox row = new HBox(10, nameLabel, new Region(), editBtn, deleteBtn);
+
+            {
+                HBox.setHgrow(row.getChildren().get(1), Priority.ALWAYS);
+                row.setAlignment(Pos.CENTER_LEFT);
+                row.setPadding(new Insets(4, 8, 4, 8));
+
+                editBtn.setStyle(
+                        "-fx-background-color: " + Theme.WARNING + "; -fx-text-fill: white;" +
+                        "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
+                deleteBtn.setStyle(
+                        "-fx-background-color: " + Theme.DANGER + "; -fx-text-fill: white;" +
+                        "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
+                nameLabel.setFont(Font.font("System", 13));
+
+                editBtn.setOnAction(e -> {
+                    javafx.util.Pair<Integer, String> item = getItem();
+                    if (item == null) return;
+
+                    TextInputDialog editDialog = new TextInputDialog(item.getValue());
+                    editDialog.setTitle("Edit Category");
+                    editDialog.setHeaderText("Rename category");
+                    editDialog.setContentText("New name:");
+
+                    editDialog.showAndWait().ifPresent(newName -> {
+                        String trimmed = newName.trim();
+                        if (trimmed.isEmpty()) {
+                            showAlert("Error", "Category name cannot be empty.", Alert.AlertType.ERROR);
+                            return;
+                        }
+                        if (categoryService.updateCategory(item.getKey(), trimmed)) {
+                            showAlert("Success", "Category renamed to \"" + trimmed + "\".",
+                                    Alert.AlertType.INFORMATION);
+                            refreshList.run();
+                            loadProducts();
+                            refreshCategoryFilterItems();
+                        } else {
+                            showAlert("Error", "Failed to rename category.", Alert.AlertType.ERROR);
+                        }
+                    });
+                });
+
+                deleteBtn.setOnAction(e -> {
+                    javafx.util.Pair<Integer, String> item = getItem();
+                    if (item == null) return;
+
+                    Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+                    confirm.setTitle("Delete Category");
+                    confirm.setHeaderText("Delete \"" + item.getValue() + "\"?");
+                    confirm.setContentText(
+                            "This will fail if any products are assigned to this category.\n" +
+                            "Reassign or delete those products first.");
+
+                    confirm.showAndWait().ifPresent(response -> {
+                        if (response == ButtonType.OK) {
+                            boolean deleted = categoryService.deleteCategory(item.getKey());
+                            if (deleted) {
+                                showAlert("Success", "Category deleted.", Alert.AlertType.INFORMATION);
+                                refreshList.run();
+                                refreshCategoryFilterItems();
+                            } else {
+                                showAlert("Cannot Delete",
+                                        "\"" + item.getValue() + "\" has products assigned to it.\n" +
+                                        "Please reassign or delete those products first.",
+                                        Alert.AlertType.WARNING);
+                            }
+                        }
+                    });
+                });
+            }
+
+            @Override
+            protected void updateItem(javafx.util.Pair<Integer, String> item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setGraphic(null);
+                } else {
+                    nameLabel.setText(item.getValue());
+                    setGraphic(row);
+                }
+            }
+        });
+
+        addCategoryBtn.setOnAction(e -> {
+            String name = newCategoryField.getText().trim();
+            if (name.isEmpty()) {
+                showAlert("Error", "Please enter a category name.", Alert.AlertType.ERROR);
+                return;
+            }
+            if (categoryService.addCategory(name)) {
+                newCategoryField.clear();
+                refreshList.run();
+                refreshCategoryFilterItems();
+                showAlert("Success", "Category \"" + name + "\" added.", Alert.AlertType.INFORMATION);
+            } else {
+                showAlert("Error", "Failed to add category. It may already exist.", Alert.AlertType.ERROR);
+            }
+        });
+
+        newCategoryField.setOnAction(e -> addCategoryBtn.fire());
+
+        Label countLabel = new Label();
+        countLabel.setFont(Font.font("System", 11));
+        countLabel.setTextFill(Color.web("#64748b"));
+
+        categoryListView.itemsProperty().addListener((obs, o, n) -> {
+            int count = n == null ? 0 : n.size();
+            countLabel.setText(count + " categor" + (count == 1 ? "y" : "ies") + " total");
+        });
+        countLabel.setText(categoryListView.getItems().size() + " categor" +
+                (categoryListView.getItems().size() == 1 ? "y" : "ies") + " total");
+
+        content.getChildren().addAll(title, addRow, categoryListView, countLabel);
+        dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {

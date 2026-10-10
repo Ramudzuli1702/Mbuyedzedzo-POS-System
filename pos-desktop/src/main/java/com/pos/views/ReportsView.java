@@ -660,6 +660,7 @@ public class ReportsView {
 
         table.getColumns().addAll(
             strCol("Product",   "name",      250),
+            strCol("Category",  "category",  120),
             intCol("Units Sold","unitsSold",  90),
             moneyCol("Revenue", "revenue",   110),
             moneyCol("COGS",    "cost",      110),
@@ -674,6 +675,7 @@ public class ReportsView {
         TableView<Map<String, Object>> table = baseTable();
         table.getColumns().addAll(
             strCol("Product",      "name",       250),
+            strCol("Category",     "category",   120),
             intCol("Stock",        "stock",        80),
             intCol("Sold (Period)","unitsSold",    90),
             moneyCol("Revenue",    "revenue",     110),
@@ -738,6 +740,7 @@ public class ReportsView {
 
         table.getColumns().addAll(
             strCol("Product",    "name",      230),
+            strCol("Category",   "category",  120),
             intCol("Stock",      "stock",      70),
             moneyCol("Cost Price","costPrice", 100),
             intCol("Sold",       "unitsSold",  70),
@@ -773,6 +776,7 @@ public class ReportsView {
         table.getColumns().addAll(
             dateCol,
             strCol("Product",      "product",     200),
+            strCol("Category",     "category",    120),
             intCol("Qty Added",    "added",         80),
             intCol("Stock After",  "remaining",     90),
             strCol("Restocked By", "restockedBy",  150)

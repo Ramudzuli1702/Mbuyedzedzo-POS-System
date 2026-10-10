@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.pos.models.Product;
+import javafx.collections.ObservableList;
 import java.io.*;
 import java.math.BigDecimal;
 import java.net.*;
@@ -132,6 +133,10 @@ public class WiFiHandler {
 
                 // Send welcome message
                 sendData("{\"type\":\"connected\",\"message\":\"Connected to " + com.pos.Branding.APP_NAME + "\"}");
+
+                // Send the real category list so the Add Product screen's
+                // dropdown has something to show as soon as it connects.
+                sendCategoriesToApp();
 
                 System.out.println("🚀 Starting handleClient()...");
                 // Handle this connection
@@ -292,6 +297,11 @@ public class WiFiHandler {
                     handleAddProduct(json);
                     break;
 
+                case "request_categories":
+                    System.out.println("📂 Categories re-requested by Android");
+                    sendCategoriesToApp();
+                    break;
+
                 default:
                     System.out.println("Unknown message type: " + type);
                     System.out.println("Full JSON: " + gson.toJson(json));
@@ -300,6 +310,32 @@ public class WiFiHandler {
         } catch (Exception e) {
             System.err.println("Error processing data: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    /**
+     * Send the real category list to the connected Android app, so its Add
+     * Product dropdown reflects whatever categories actually exist on
+     * desktop (created/renamed via Inventory's Manage Categories dialog).
+     */
+    private void sendCategoriesToApp() {
+        try {
+            CategoryService categoryService = new CategoryService();
+            ObservableList<String> categories = categoryService.getAllCategories();
+
+            JsonObject categoriesJson = new JsonObject();
+            categoriesJson.addProperty("type", "categories");
+
+            JsonArray categoriesArray = new JsonArray();
+            for (String category : categories) {
+                categoriesArray.add(category);
+            }
+            categoriesJson.add("data", categoriesArray);
+
+            sendData(gson.toJson(categoriesJson));
+            System.out.println("📂 Sent " + categories.size() + " categories to Android app");
+        } catch (Exception e) {
+            System.err.println("Failed to send categories: " + e.getMessage());
         }
     }
 
@@ -357,6 +393,10 @@ public class WiFiHandler {
             String name = productData.get("name").getAsString();
             String barcode = productData.get("barcode").getAsString();
             int quantity = productData.get("quantity").getAsInt();
+            // Optional, not required — an older phone build mid-upgrade may
+            // not send one; InventoryView falls back to the default category.
+            String category = productData.has("category") && !productData.get("category").isJsonNull()
+                    ? productData.get("category").getAsString() : null;
 
             double price = parseAndroidMoney(productData.get("price"), 0.0);
             // costPrice is a newer field — not every phone build sends it, so
@@ -367,6 +407,7 @@ public class WiFiHandler {
 
             System.out.println("➕ Product received from Android:");
             System.out.println("   Name: " + name);
+            System.out.println("   Category: " + category);
             System.out.println("   Barcode: " + barcode);
             System.out.println("   Quantity: " + quantity);
             System.out.println("   Price: R " + price);
@@ -375,6 +416,7 @@ public class WiFiHandler {
             // Create Product object
             Product product = new Product();
             product.setProductName(name);
+            product.setCategoryName(category);
             product.setBarCode(barcode);
             product.setQuantity(quantity);
             product.setPrice(BigDecimal.valueOf(price));
