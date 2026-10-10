@@ -239,35 +239,34 @@ public class InventoryView {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
+        // The search box is the flexible item: it shrinks first when the window
+        // is narrow, so the buttons beside it always keep their full text.
         searchField = new TextField();
         searchField.setPromptText("Search products...");
-        searchField.setPrefWidth(300);
+        searchField.setPrefWidth(260);
+        searchField.setMinWidth(140);
         searchField.setStyle(Theme.input());
         searchField.textProperty().addListener((obs, oldVal, newVal) -> searchProducts(newVal));
+        HBox.setHgrow(searchField, Priority.SOMETIMES);
 
         categoryFilterCombo = new ComboBox<>();
         categoryFilterCombo.setPromptText("All Categories");
         categoryFilterCombo.setStyle(Theme.input());
+        categoryFilterCombo.setMinWidth(Region.USE_PREF_SIZE);
         categoryFilterCombo.valueProperty().addListener((obs, oldVal, newVal) -> applyFilters());
 
         Button categoriesBtn = new Button("Manage Categories");
         Theme.hover(categoriesBtn, Theme.secondaryButton(), Theme.secondaryHover());
+        categoriesBtn.setMinWidth(Region.USE_PREF_SIZE);
         categoriesBtn.setOnAction(e -> showCategoriesDialog());
-
-        Button exportBtn = new Button("Export to Excel");
-        Theme.hover(exportBtn, Theme.secondaryButton(), Theme.secondaryHover());
-        exportBtn.setOnAction(e -> exportInventory());
-
-        Button importBtn = new Button("Import from Excel");
-        Theme.hover(importBtn, Theme.secondaryButton(), Theme.secondaryHover());
-        importBtn.setOnAction(e -> importInventory());
-        importBtnRef = importBtn;
 
         Button addBtn = new Button("+ Add Product");
         Theme.hover(addBtn, Theme.primaryButton(), Theme.primaryHover());
+        addBtn.setMinWidth(Region.USE_PREF_SIZE);
         addBtn.setOnAction(e -> showAddProductDialog());
 
-        topBar.getChildren().addAll(title, spacer, searchField, categoryFilterCombo, categoriesBtn, exportBtn, importBtn, addBtn);
+        // Import / Export now live in the Product List header (see createProductTable).
+        topBar.getChildren().addAll(title, spacer, searchField, categoryFilterCombo, categoriesBtn, addBtn);
         refreshCategoryFilterItems();
         return topBar;
     }
@@ -630,6 +629,24 @@ public class InventoryView {
 
         Label tableTitle = Theme.sectionTitleLabel("Product List");
 
+        // Excel import/export sit at the top-right of the table they act on.
+        Button exportBtn = new Button("Export to Excel");
+        Theme.hover(exportBtn, Theme.secondaryButton(), Theme.secondaryHover());
+        exportBtn.setMinWidth(Region.USE_PREF_SIZE);
+        exportBtn.setOnAction(e -> exportInventory());
+
+        Button importBtn = new Button("Import from Excel");
+        Theme.hover(importBtn, Theme.secondaryButton(), Theme.secondaryHover());
+        importBtn.setMinWidth(Region.USE_PREF_SIZE);
+        importBtn.setOnAction(e -> importInventory());
+        importBtnRef = importBtn;
+
+        Region headerSpacer = new Region();
+        HBox.setHgrow(headerSpacer, Priority.ALWAYS);
+
+        HBox tableHeader = new HBox(10, tableTitle, headerSpacer, exportBtn, importBtn);
+        tableHeader.setAlignment(Pos.CENTER_LEFT);
+
         productTable = new TableView<>();
         productTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         productTable.setPrefHeight(420);
@@ -716,7 +733,7 @@ public class InventoryView {
 
         loadProducts();
 
-        tableBox.getChildren().addAll(tableTitle, productTable);
+        tableBox.getChildren().addAll(tableHeader, productTable);
         return tableBox;
     }
 
