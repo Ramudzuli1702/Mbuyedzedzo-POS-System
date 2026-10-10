@@ -30,6 +30,7 @@ public class InventoryView {
     private ProductService productService;
     private CategoryService categoryService;
     private TableView<Product> productTable;
+    private Button importBtnRef;
     private ObservableList<Product> products;
     private TextField searchField;
 
@@ -227,12 +228,115 @@ public class InventoryView {
         searchField.setStyle(Theme.input());
         searchField.textProperty().addListener((obs, oldVal, newVal) -> searchProducts(newVal));
 
+        Button exportBtn = new Button("Export to Excel");
+        Theme.hover(exportBtn, Theme.secondaryButton(), Theme.secondaryHover());
+        exportBtn.setOnAction(e -> exportInventory());
+
+        Button importBtn = new Button("Import from Excel");
+        Theme.hover(importBtn, Theme.secondaryButton(), Theme.secondaryHover());
+        importBtn.setOnAction(e -> importInventory());
+        importBtnRef = importBtn;
+
         Button addBtn = new Button("+ Add Product");
         Theme.hover(addBtn, Theme.primaryButton(), Theme.primaryHover());
         addBtn.setOnAction(e -> showAddProductDialog());
 
-        topBar.getChildren().addAll(title, spacer, searchField, addBtn);
+        topBar.getChildren().addAll(title, spacer, searchField, exportBtn, importBtn, addBtn);
         return topBar;
+    }
+
+    // ── Excel export / import ────────────────────────────────────────────────
+
+    private void exportInventory() {
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Export inventory to Excel");
+        chooser.setInitialFileName("Inventory_" +
+                java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_DATE) + ".xlsx");
+        chooser.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter("Excel Workbook", "*.xlsx"));
+        java.io.File target = chooser.showSaveDialog(productTable.getScene().getWindow());
+        if (target == null) return;
+
+        ObservableList<Product> toExport = productTable.getItems();
+
+        new Thread(() -> {
+            try {
+                new com.pos.services.InventoryExcelService().exportToExcel(toExport, target);
+                Platform.runLater(() -> com.pos.components.Ui.showAlert(productTable,
+                        "Exported", "Saved " + toExport.size() + " products to " + target.getName(),
+                        Alert.AlertType.INFORMATION));
+            } catch (Exception ex) {
+                com.pos.utils.Dialogs.error("Export failed",
+                        "Could not export inventory to Excel: " + ex.getMessage(), ex);
+            }
+        }, "Inventory-Export").start();
+    }
+
+    private void importInventory() {
+        javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+        chooser.setTitle("Import inventory from Excel");
+        chooser.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter("Excel Workbook", "*.xlsx", "*.xls"));
+        java.io.File source = chooser.showOpenDialog(productTable.getScene().getWindow());
+        if (source == null) return;
+
+        importBtnRef.setDisable(true);
+        importBtnRef.setText("Importing…");
+
+        new Thread(() -> {
+            try {
+                var result = new com.pos.services.InventoryExcelService()
+                        .importFromExcel(source, currentUser.getStaffID());
+                Platform.runLater(() -> {
+                    importBtnRef.setDisable(false);
+                    importBtnRef.setText("Import from Excel");
+                    loadProducts();
+                    showImportResult(result);
+                });
+            } catch (Exception ex) {
+                Platform.runLater(() -> {
+                    importBtnRef.setDisable(false);
+                    importBtnRef.setText("Import from Excel");
+                });
+                com.pos.utils.Dialogs.error("Import failed",
+                        "Could not read that file as an Excel inventory sheet: " + ex.getMessage(), ex);
+            }
+        }, "Inventory-Import").start();
+    }
+
+    private void showImportResult(com.pos.services.InventoryExcelService.ImportResult result) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Added: ").append(result.added().size()).append('\n');
+        sb.append("Duplicates skipped (already in inventory): ").append(result.duplicates().size()).append('\n');
+        sb.append("Invalid rows skipped: ").append(result.invalidRows().size()).append("\n\n");
+
+        if (!result.added().isEmpty()) {
+            sb.append("ADDED\n");
+            for (var r : result.added()) sb.append("  • ").append(r.productName()).append(" (").append(r.barcode()).append(")\n");
+            sb.append('\n');
+        }
+        if (!result.duplicates().isEmpty()) {
+            sb.append("DUPLICATES (skipped — already in inventory)\n");
+            for (var r : result.duplicates()) sb.append("  • ").append(r.productName()).append(" (").append(r.barcode()).append(")\n");
+            sb.append('\n');
+        }
+        if (!result.invalidRows().isEmpty()) {
+            sb.append("SKIPPED (invalid row)\n");
+            for (String line : result.invalidRows()) sb.append("  • ").append(line).append('\n');
+        }
+
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Import Complete");
+        alert.setHeaderText(result.added().size() + " product(s) added, "
+                + result.duplicates().size() + " duplicate(s) skipped, "
+                + result.invalidRows().size() + " invalid row(s) skipped.");
+
+        TextArea details = new TextArea(sb.toString());
+        details.setEditable(false);
+        details.setWrapText(true);
+        details.setPrefSize(480, 320);
+        alert.getDialogPane().setContent(details);
+        alert.showAndWait();
     }
 
     private HBox createLowStockAlert() {
