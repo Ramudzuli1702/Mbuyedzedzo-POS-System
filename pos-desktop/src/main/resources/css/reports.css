@@ -1,0 +1,24 @@
+/* Reports uses the shared teal/slate palette instead of Modena's chart rainbow. */
+.reports-view { -fx-background-color: #f5f7fa; }
+.reports-view .chart { -fx-padding: 8 0 0 0; -fx-background-color: transparent; }
+.reports-view .chart-plot-background { -fx-background-color: #f8fafc; }
+.reports-view .chart-vertical-grid-lines { -fx-stroke: transparent; }
+.reports-view .chart-horizontal-grid-lines { -fx-stroke: #e2e8f0; }
+.reports-view .chart-alternative-row-fill, .reports-view .chart-alternative-column-fill { -fx-fill: transparent; }
+.reports-view .axis { -fx-tick-label-fill: #64748b; -fx-tick-label-font-size: 11px; }
+.reports-view .axis-label { -fx-text-fill: #64748b; -fx-font-size: 12px; }
+.reports-view .chart-bar { -fx-bar-fill: #0f766e; -fx-background-color: -fx-bar-fill; -fx-background-radius: 4 4 0 0; }
+.reports-view .chart-series-line { -fx-stroke: #0f766e; -fx-stroke-width: 2.5px; }
+.reports-view .chart-line-symbol { -fx-background-color: #0f766e, white; }
+.reports-view .chart-series-area-line { -fx-stroke: #0f766e; -fx-stroke-width: 2.5px; }
+.reports-view .chart-series-area-fill { -fx-fill: rgba(15,118,110,0.12); }
+.reports-view .chart-legend { -fx-background-color: transparent; -fx-padding: 12 4 0 4; }
+.reports-view .chart-legend-item { -fx-text-fill: #475569; }
+.reports-view .default-color0.chart-pie { -fx-pie-color: #0f766e; }
+.reports-view .default-color1.chart-pie { -fx-pie-color: #5eaaa3; }
+.reports-view .default-color2.chart-pie { -fx-pie-color: #94a3b8; }
+.reports-view .default-color3.chart-pie { -fx-pie-color: #334155; }
+.reports-view .default-color4.chart-pie { -fx-pie-color: #b8d8d3; }
+.reports-view .default-color5.chart-pie { -fx-pie-color: #64748b; }
+.reports-view .default-color6.chart-pie { -fx-pie-color: #0c5c57; }
+.reports-view .default-color7.chart-pie { -fx-pie-color: #cbd5e1; }

@@ -1,6 +1,7 @@
 package com.pos.views;
 
 import com.pos.models.User;
+import com.pos.utils.Theme;
 import com.pos.services.ReportService;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -34,25 +35,26 @@ public class ReportsView {
     // built every time the user returns to the Reports tab).
     private static LocalDate sessionStart  = LocalDate.now().withDayOfMonth(1);
     private static LocalDate sessionEnd    = LocalDate.now();
-    private static String    sessionReport = "Executive Dashboard";
+    private static String    sessionReport = "Overview";
 
-    // Palette - Updated to consistent teal theme
-    private static final String C_BLUE   = "#0f766e";
-    private static final String C_GREEN  = "#16a34a";
-    private static final String C_AMBER  = "#d97706";
-    private static final String C_RED    = "#dc2626";
-    private static final String C_PURPLE = "#7c3aed";
-    private static final String C_TEAL   = "#0f766e";
-    private static final String C_SLATE  = "#475569";
+    private static final String C_BLUE = Theme.BRAND, C_GREEN = Theme.SUCCESS,
+        C_AMBER = Theme.WARNING, C_RED = Theme.DANGER, C_PURPLE = Theme.TEXT_MUTED,
+        C_TEAL = Theme.BRAND, C_SLATE = Theme.TEXT_MUTED;
+    private Label rangeSummary;
+    private Button exportBtn;
 
-    public ReportsView(User user) {
+    public ReportsView(User user) { this(user, new ReportService()); }
+
+    public ReportsView(User user, ReportService service) {
         this.currentUser = user;
-        this.svc = new ReportService();
+        this.svc = service;
     }
 
     public BorderPane getView() {
         BorderPane root = new BorderPane();
-        root.setStyle("-fx-background-color: #f1f5f9;");
+        root.setStyle(Theme.page());
+        root.getStyleClass().add("reports-view");
+        root.getStylesheets().add(getClass().getResource("/css/reports.css").toExternalForm());
 
         VBox top = new VBox();
         top.getChildren().addAll(buildHeader(), buildToolbar());
@@ -63,7 +65,7 @@ public class ReportsView {
 
         ScrollPane scroll = new ScrollPane(contentArea);
         scroll.setFitToWidth(true);
-        scroll.setStyle("-fx-background: #f1f5f9; -fx-background-color: #f1f5f9;");
+        scroll.setStyle("-fx-background: " + Theme.BG + "; -fx-background-color: " + Theme.BG + ";");
         root.setCenter(scroll);
 
         render();
@@ -77,10 +79,10 @@ public class ReportsView {
         bar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
 
         VBox titles = new VBox(3);
-        Label h1 = new Label("Business Intelligence");
-        h1.setFont(Font.font("System", FontWeight.BOLD, 26));
+        Label h1 = new Label("Reports");
+        h1.setFont(Font.font("System", FontWeight.BOLD, 24));
         h1.setTextFill(Color.web("#0f766e"));
-        Label h2 = new Label("Comprehensive analytics across sales, inventory, staff, and customers");
+        Label h2 = new Label("Review sales, understand stock and compare performance.");
         h2.setFont(Font.font("System", 13));
         h2.setTextFill(Color.web("#64748b"));
         titles.getChildren().addAll(h1, h2);
@@ -88,10 +90,11 @@ public class ReportsView {
         Region sp = new Region();
         HBox.setHgrow(sp, Priority.ALWAYS);
 
-        Button exportBtn = pill("Export Excel", C_GREEN);
+        exportBtn = pill("Export all reports to Excel", C_BLUE);
         exportBtn.setOnAction(e -> doExport());
 
-        Button refreshBtn = pill("Refresh", C_BLUE);
+        Button refreshBtn = new Button("Refresh");
+        Theme.hover(refreshBtn, Theme.secondaryButton(), Theme.secondaryHover());
         refreshBtn.setOnAction(e -> render());
 
         HBox actions = new HBox(10, exportBtn, refreshBtn);
@@ -101,87 +104,78 @@ public class ReportsView {
         return bar;
     }
 
-    private HBox buildToolbar() {
-        HBox bar = new HBox(16);
-        bar.setPadding(new Insets(14, 28, 14, 28));
-        bar.setAlignment(Pos.CENTER_LEFT);
-        bar.setStyle("-fx-background-color: white; -fx-border-color: #e2e8f0; -fx-border-width: 0 0 1 0;");
-
-        reportCombo = new ComboBox<>();
-        reportCombo.getItems().addAll(
-            "Executive Dashboard",
-            "Sales & Revenue",
-            "Product Performance",
-            "Staff Analytics",
-            "Inventory Health",
-            "Returns & Exchanges",
-            com.pos.Edition.current().hasCustomers() ? "Promotions & Marketing" : "Promotions"
-        );
-        if (com.pos.Edition.current().hasCustomers()) {
-            reportCombo.getItems().add(3, "Customer Insights");
-        }
-        reportCombo.setValue(reportCombo.getItems().contains(sessionReport) ? sessionReport : "Executive Dashboard");
-        reportCombo.setPrefWidth(220);
-        reportCombo.setOnAction(e -> render());
-
-        startPicker = new DatePicker(sessionStart);
-        endPicker   = new DatePicker(sessionEnd);
-
-        Button applyBtn = pill("Apply", C_BLUE);
-        applyBtn.setOnAction(e -> render());
-
-        HBox quick = new HBox(6);
-        quick.setAlignment(Pos.CENTER_LEFT);
-        for (String[] qf : new String[][]{
-            {"Today",     "0",  "0"},
-            {"This Week", "6",  "0"},
-            {"This Month","29", "0"},
-            {"90 Days",   "89", "0"}
-        }) {
-            Button b = chip(qf[0]);
-            int back = Integer.parseInt(qf[1]);
-            b.setOnAction(e -> {
-                startPicker.setValue(LocalDate.now().minusDays(back));
-                endPicker.setValue(LocalDate.now());
-                render();
+    private VBox buildToolbar() {
+        VBox toolbar = new VBox(12);
+        toolbar.setPadding(new Insets(16,24,16,24));
+        toolbar.setStyle(Theme.topBar());
+        reportCombo = new ComboBox<>(); reportCombo.setId("reportSelector");
+        reportCombo.getItems().addAll("Overview", "Sales", "Products", "Staff", "Stock", "Returns & Exchanges",
+            com.pos.Edition.current().hasCustomers() ? "Promotions & marketing" : "Promotions");
+        if(com.pos.Edition.current().hasCustomers()) reportCombo.getItems().add(3,"Customers");
+        reportCombo.setValue(reportCombo.getItems().contains(sessionReport) ? sessionReport : "Overview");
+        reportCombo.setPrefWidth(230);
+        startPicker = new DatePicker(sessionStart); startPicker.setId("reportFrom");
+        endPicker = new DatePicker(sessionEnd); endPicker.setId("reportTo");
+        startPicker.setPrefWidth(165); endPicker.setPrefWidth(165);
+        Button apply = pill("Apply dates", Theme.BRAND); apply.setId("reportApply");
+        apply.setOnAction(e->render());
+        FlowPane fields = new FlowPane(16,12, field("Report",reportCombo),field("From",startPicker),field("To",endPicker),field("",apply));
+        fields.setAlignment(Pos.BOTTOM_LEFT);
+        FlowPane quick = new FlowPane(8,8); quick.setAlignment(Pos.CENTER_LEFT);
+        quick.getChildren().add(label("Quick dates"));
+        for(String name : new String[]{"Today","This week","This month","Last 90 days"}) {
+            Button button = chip(name);
+            button.setOnAction(e->{
+                LocalDate today=LocalDate.now();
+                LocalDate from=switch(name) {
+                    case "Today" -> today;
+                    case "This week" -> today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+                    case "This month" -> today.withDayOfMonth(1);
+                    default -> today.minusDays(89);
+                };
+                startPicker.setValue(from);endPicker.setValue(today);render();
             });
-            quick.getChildren().add(b);
+            quick.getChildren().add(button);
         }
+        reportCombo.setOnAction(e->render());
+        rangeSummary = new Label(); rangeSummary.setId("reportRange");rangeSummary.setWrapText(true);
+        rangeSummary.setFont(Theme.body());rangeSummary.setTextFill(Color.web(Theme.TEXT_MUTED));
+        toolbar.getChildren().addAll(fields,quick,rangeSummary);
+        return toolbar;
+    }
 
-        bar.getChildren().addAll(
-            label("Report:"), reportCombo,
-            sep(),
-            label("From:"), startPicker,
-            label("To:"),   endPicker,
-            applyBtn,
-            sep(),
-            quick
-        );
-        return bar;
+    private VBox field(String title, javafx.scene.Node control) {
+        Label caption=label(title);return new VBox(6,caption,control);
     }
 
     private void render() {
         contentArea.getChildren().clear();
 
-        sessionStart  = start();
-        sessionEnd    = end();
-        sessionReport = reportCombo.getValue();
-
-        if (start() == null || end() == null || end().isBefore(start())) {
-            contentArea.getChildren().add(
-                emptyState("Pick a valid date range — “From” must be on or before “To”."));
+        boolean valid = start()!=null && end()!=null && !end().isBefore(start());
+        exportBtn.setDisable(!valid);
+        if (!valid) {
+            rangeSummary.setText("Choose a From date on or before the To date.");
+            contentArea.getChildren().add(emptyState("Choose valid dates to view your reports."));
             return;
         }
+        sessionStart = start(); sessionEnd = end(); sessionReport = reportCombo.getValue();
+        String dates=start().format(DateTimeFormatter.ofPattern("d MMM yyyy"))+" to "+end().format(DateTimeFormatter.ofPattern("d MMM yyyy"));
+        String scope=switch(sessionReport) {
+            case "Stock", "Products" -> " Stock figures are current; sales and restocks use these dates.";
+            case "Customers" -> " Account totals and ages are current; the registration chart shows the current year.";
+            default -> "";
+        };
+        rangeSummary.setText(sessionReport+" | "+dates+scope);
 
         switch (reportCombo.getValue()) {
-            case "Executive Dashboard"                 -> buildExecutiveDashboard();
-            case "Sales & Revenue"                     -> buildSalesRevenue();
-            case "Product Performance"                 -> buildProductPerformance();
-            case "Customer Insights"                   -> buildCustomerInsights();
-            case "Staff Analytics"                     -> buildStaffAnalytics();
-            case "Inventory Health"                    -> buildInventoryHealth();
+            case "Overview"                 -> buildExecutiveDashboard();
+            case "Sales"                     -> buildSalesRevenue();
+            case "Products"                 -> buildProductPerformance();
+            case "Customers"                   -> buildCustomerInsights();
+            case "Staff"                     -> buildStaffAnalytics();
+            case "Stock"                    -> buildInventoryHealth();
             case "Returns & Exchanges"                 -> buildReturnsExchanges();
-            case "Promotions & Marketing", "Promotions" -> buildPromotionsMarketing();
+            case "Promotions & marketing", "Promotions" -> buildPromotionsMarketing();
         }
     }
 
@@ -206,54 +200,30 @@ public class ReportsView {
         BigDecimal avgSale  = svc.getAverageSaleValue(s, e);
         BigDecimal prevAvg  = svc.getAverageSaleValue(prior[0], prior[1]);
         double     margin   = svc.getGrossProfitMargin(s, e);
-        int        newCust  = svc.getNewCustomers(s, e);
-        int        prevCust = svc.getNewCustomers(prior[0], prior[1]);
-        double     repRate  = svc.getRepeatCustomerRate(s, e);
+        Runnable toSales = goTo("Sales");
+        GridPane metrics = kpiGrid(4);
+        metrics.add(kpiCard("Sales Revenue", fmtR(rev), svc.calculateGrowth(prevRev, rev), C_TEAL, "before refunds", toSales),0,0);
+        metrics.add(kpiCard("Gross Profit", fmtR(profit), svc.calculateGrowth(prevProfit, profit), C_TEAL, fmtPct(margin)+" gross margin", toSales),1,0);
+        metrics.add(kpiCard("Sales", String.valueOf(sales), svc.calculateGrowth(prevSales, sales), C_TEAL, "transactions", toSales),2,0);
+        metrics.add(kpiCard("Average Sale", fmtR(avgSale), svc.calculateGrowth(prevAvg, avgSale), C_TEAL, "per transaction", toSales),3,0);
+        contentArea.getChildren().add(metrics);
 
-        Runnable toSales     = goTo("Sales & Revenue");
-        boolean hasCustomers = com.pos.Edition.current().hasCustomers();
-        Runnable toCustomers = hasCustomers ? goTo("Customer Insights") : toSales;
-
-        GridPane kpi1 = kpiGrid(3);
-        kpi1.add(kpiCard("Gross Revenue",    fmtR(rev),    svc.calculateGrowth(prevRev, rev),    C_GREEN,  "vs prior period", toSales), 0, 0);
-        kpi1.add(kpiCard("Gross Profit",     fmtR(profit), svc.calculateGrowth(prevProfit, profit), C_BLUE, fmtPct(margin) + " margin", toSales), 1, 0);
-        kpi1.add(kpiCard("Total Sales",      String.valueOf(sales), svc.calculateGrowth(prevSales, sales), C_PURPLE, "transactions", toSales), 2, 0);
-        contentArea.getChildren().add(kpi1);
-
-        // Retail edition has no customer metrics to show, so this row is only
-        // ever 2 cards wide there — give it a 2-column grid of its own instead
-        // of leaving a dangling empty third column in a 3-column grid.
-        GridPane kpi2 = kpiGrid(hasCustomers ? 3 : 2);
-        kpi2.add(kpiCard("Avg Sale Value", fmtR(avgSale), svc.calculateGrowth(prevAvg, avgSale), C_TEAL, "per transaction", toSales), 0, 0);
-        if (hasCustomers) {
-            kpi2.add(kpiCard("New Customers", String.valueOf(newCust), svc.calculateGrowth(prevCust, newCust), C_AMBER, "registered", toCustomers), 1, 0);
-            kpi2.add(kpiCard("Repeat Rate",   fmtPct(repRate),         0,                                      C_SLATE, "loyal customers", toCustomers), 2, 0);
-        } else {
-            kpi2.add(kpiCard("Profit Margin", fmtPct(margin), 0, C_AMBER, "gross", toSales), 1, 0);
-        }
-        contentArea.getChildren().add(kpi2);
-
-        Label drillHint = new Label("Tip: click a metric card to open its detailed report.");
+        Label drillHint = new Label("Open a summary card for its detailed report. Comparisons use the previous period of the same length.");
         drillHint.setFont(Font.font("System", 11));
-        drillHint.setTextFill(Color.web("#94a3b8"));
+        drillHint.setTextFill(Color.web(Theme.TEXT_MUTED));
+        drillHint.setWrapText(true);
         contentArea.getChildren().add(drillHint);
 
         contentArea.getChildren().add(sectionLabel("Revenue Overview"));
         GridPane charts1 = chartGrid(2);
         charts1.add(buildDailyRevenueTrend(s, e), 0, 0);
-        charts1.add(buildHourlySalesChart(s, e), 1, 0);
+        charts1.add(buildPaymentMethodChart(s, e), 1, 0);
         contentArea.getChildren().add(charts1);
-
-        GridPane charts2 = chartGrid(2);
-        charts2.add(buildPaymentMethodChart(s, e), 0, 0);
-        charts2.add(buildMonthlyRevenueTrend(), 1, 0);
-        contentArea.getChildren().add(charts2);
 
         contentArea.getChildren().add(sectionLabel("Top Products (Revenue)"));
         contentArea.getChildren().add(buildTopProductsTable(s, e, 10));
 
-        contentArea.getChildren().add(sectionLabel("Staff Performance"));
-        contentArea.getChildren().add(buildStaffPerformanceChart(s, e));
+
     }
 
     private void buildSalesRevenue() {
@@ -299,7 +269,7 @@ public class ReportsView {
 
         GridPane kpi = kpiGrid(4);
         kpi.add(kpiCard("Total Products",  String.valueOf(svc.getTotalProducts()),    0, C_BLUE,   "in catalog"),   0, 0);
-        kpi.add(kpiCard("In Stock",        String.valueOf(svc.getTotalProducts() - svc.getLowStockCount() - svc.getOutOfStockCount()), 0, C_GREEN,  "available"),    1, 0);
+        kpi.add(kpiCard("Healthy Stock",   String.valueOf(svc.getTotalProducts() - svc.getLowStockCount() - svc.getOutOfStockCount()), 0, C_GREEN,  "10+ units"),    1, 0);
         kpi.add(kpiCard("Low Stock",       String.valueOf(svc.getLowStockCount()),    0, C_AMBER,  "< 10 units"),   2, 0);
         kpi.add(kpiCard("Out of Stock",    String.valueOf(svc.getOutOfStockCount()),  0, C_RED,    "zero units"),   3, 0);
         contentArea.getChildren().add(kpi);
@@ -425,7 +395,7 @@ public class ReportsView {
         LocalDate s = start(), e = end();
 
         List<Map<String, Object>> promos   = svc.getPromoPerformance(s, e);
-        List<Map<String, Object>> campaigns= svc.getMarketingCampaigns(s, e);
+        List<Map<String, Object>> campaigns= com.pos.Edition.current().hasCustomers() ? svc.getMarketingCampaigns(s, e) : List.of();
 
         int   promoSalesCount = promos.stream()
                 .filter(r -> !"No Promo".equals(r.get("promoCode")))
@@ -437,11 +407,13 @@ public class ReportsView {
         int campaignCount = campaigns.size();
         int totalRecipients = campaigns.stream().mapToInt(r -> (int) r.get("recipients")).sum();
 
-        GridPane kpi = kpiGrid(4);
+        GridPane kpi = kpiGrid(com.pos.Edition.current().hasCustomers() ? 4 : 2);
         kpi.add(kpiCard("Promo Sales",       String.valueOf(promoSalesCount), 0, C_GREEN,  "with promo code"), 0, 0);
         kpi.add(kpiCard("Promo Revenue",     fmtR(promoRevenue),              0, C_BLUE,   "promo-driven"),    1, 0);
+        if(com.pos.Edition.current().hasCustomers()) {
         kpi.add(kpiCard("Email Campaigns",   String.valueOf(campaignCount),   0, C_PURPLE, "sent"),            2, 0);
         kpi.add(kpiCard("Total Recipients",  String.valueOf(totalRecipients), 0, C_TEAL,   "emails sent"),     3, 0);
+        }
         contentArea.getChildren().add(kpi);
 
         contentArea.getChildren().add(sectionLabel("Promo Code Performance"));
@@ -450,8 +422,10 @@ public class ReportsView {
         contentArea.getChildren().add(sectionLabel("Revenue: Promo vs Non-Promo"));
         contentArea.getChildren().add(buildPromoVsNoPromoChart(promos));
 
-        contentArea.getChildren().add(sectionLabel("Email Marketing Campaigns"));
-        contentArea.getChildren().add(buildMarketingCampaignsTable(campaigns));
+        if(com.pos.Edition.current().hasCustomers()) {
+            contentArea.getChildren().add(sectionLabel("Email Marketing Campaigns"));
+            contentArea.getChildren().add(buildMarketingCampaignsTable(campaigns));
+        }
     }
 
     private VBox buildDailyRevenueTrend(LocalDate s, LocalDate e) {
@@ -483,25 +457,6 @@ public class ReportsView {
             .forEach((method, val) -> series.getData().add(new XYChart.Data<>(method, val.doubleValue())));
         chart.getData().add(series);
         return chartCard("Revenue by Payment Method", chart);
-    }
-
-    private VBox buildMonthlyRevenueTrend() {
-        CategoryAxis xAxis = new CategoryAxis();
-        NumberAxis   yAxis = new NumberAxis();
-        yAxis.setLabel("Revenue (R)");
-        AreaChart<String, Number> chart = new AreaChart<>(xAxis, yAxis);
-        chart.setLegendVisible(false);
-        chart.setCreateSymbols(false);
-
-        XYChart.Series<String, Number> series = new XYChart.Series<>();
-        svc.getMonthlyRevenue(LocalDate.now().getYear()).forEach((ym, val) ->
-            series.getData().add(new XYChart.Data<>(
-                ym.getMonth().toString().substring(0, 3),
-                val.doubleValue()
-            ))
-        );
-        chart.getData().add(series);
-        return chartCard("Monthly Revenue (" + LocalDate.now().getYear() + ")", chart);
     }
 
     private VBox buildHourlySalesChart(LocalDate s, LocalDate e) {
@@ -590,7 +545,7 @@ public class ReportsView {
             series.getData().add(new XYChart.Data<>(age, cnt))
         );
         chart.getData().add(series);
-        return chartCard("Customer Age Groups", chart);
+        return chartCard("Customer Ages (current accounts)", chart);
     }
 
     private VBox buildMonthlyNewCustomersChart() {
@@ -609,15 +564,32 @@ public class ReportsView {
     }
 
     private VBox buildReturnsStatusChart(Map<String, Integer> data) {
-        PieChart chart = new PieChart();
-        data.forEach((k, v) -> { if (v > 0) chart.getData().add(new PieChart.Data(k + " (" + v + ")", v)); });
-        return chartCard("↩️ Returns by Status", chart);
+        return statusChart("Returns by status",data);
     }
 
     private VBox buildExchangeStatusChart(Map<String, Integer> data) {
-        PieChart chart = new PieChart();
-        data.forEach((k, v) -> { if (v > 0) chart.getData().add(new PieChart.Data(k + " (" + v + ")", v)); });
-        return chartCard("Exchanges by Status", chart);
+        return statusChart("Exchanges by status",data);
+    }
+
+    private VBox statusChart(String title, Map<String,Integer> data) {
+        NumberAxis count = new NumberAxis(); count.setLabel("Requests");count.setMinorTickVisible(false);
+        BarChart<Number,String> chart = new BarChart<>(count,new CategoryAxis());
+        chart.setLegendVisible(false);
+        XYChart.Series<Number,String> series = new XYChart.Series<>();
+        data.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry->{
+            if(entry.getValue()<=0)return;
+            var item=new XYChart.Data<Number,String>(entry.getValue(),entry.getKey());
+            String color=switch(entry.getKey().toLowerCase(java.util.Locale.ROOT)) {
+                case "approved" -> Theme.SUCCESS;
+                case "pending" -> Theme.WARNING;
+                case "rejected", "declined" -> Theme.DANGER;
+                default -> Theme.TEXT_MUTED;
+            };
+            item.nodeProperty().addListener((o,a,b)->{if(b!=null)b.setStyle("-fx-bar-fill: "+color+";");});
+            series.getData().add(item);
+        });
+        chart.getData().add(series);
+        return chartCard(title,chart);
     }
 
     private VBox buildReasonsChart(String title, Map<String, Integer> data) {
@@ -663,7 +635,7 @@ public class ReportsView {
             strCol("Category",  "category",  120),
             intCol("Units Sold","unitsSold",  90),
             moneyCol("Revenue", "revenue",   110),
-            moneyCol("COGS",    "cost",      110),
+            moneyCol("Stock Cost",    "cost",      110),
             moneyCol("Profit",  "profit",    110),
             pctCol("Margin",    "margin",     80)
         );
@@ -920,11 +892,11 @@ public class ReportsView {
         bottom.setAlignment(Pos.CENTER_LEFT);
         if (growth != 0) {
             String arrow = growth > 0 ? "↑" : "↓";
-            String gc    = growth > 0 ? C_GREEN : C_RED;
+            String gc = Theme.BRAND;
             Label gl = new Label(arrow + " " + String.format("%.1f%%", Math.abs(growth)));
             gl.setFont(Font.font("System", FontWeight.BOLD, 11));
             gl.setTextFill(Color.web(gc));
-            gl.setStyle("-fx-background-color: " + gc + "18; -fx-padding: 2 7; -fx-background-radius: 4;");
+            gl.setStyle("-fx-background-color: " + Theme.BRAND_TINT + "; -fx-padding: 3 8; -fx-background-radius: 4;");
             bottom.getChildren().add(gl);
         }
         Label sl = new Label(sub);
@@ -935,6 +907,7 @@ public class ReportsView {
         bottom.getChildren().add(sl);
 
         card.getChildren().add(bottom);
+        if(drill!=null){Label link=new Label("View report");link.setFont(Theme.meta());link.setTextFill(Color.web(Theme.BRAND));card.getChildren().add(link);}
         return card;
     }
 
@@ -967,10 +940,8 @@ public class ReportsView {
     private VBox chartCard(String title, Chart chart) {
         VBox c = new VBox(12);
         c.setPadding(new Insets(20));
-        c.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 14;" +
-            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
-        );
+        c.setStyle(Theme.card());
+        c.setMinWidth(0);
         Label lbl = new Label(title);
         lbl.setFont(Font.font("System", FontWeight.BOLD, 14));
         lbl.setTextFill(Color.web("#1e293b"));
@@ -978,8 +949,11 @@ public class ReportsView {
         if (chartIsEmpty(chart)) {
             c.getChildren().addAll(lbl, emptyState("No data in this date range."));
         } else {
+            chart.setAnimated(false);
             instrumentChart(chart);
-            chart.setMinHeight(280);
+            chart.setMinWidth(0);
+            chart.setPrefHeight(300);
+            chart.setMinHeight(260);
             VBox.setVgrow(chart, Priority.ALWAYS);
             c.getChildren().addAll(lbl, chart);
         }
@@ -997,7 +971,10 @@ public class ReportsView {
      *  showing the exact value behind each bar / point / slice. */
     private void instrumentChart(Chart chart) {
         chart.setAnimated(false);
+        chart.getStyleClass().add("report-chart");
+        if (chart instanceof XYChart<?,?> xy) {xy.getXAxis().setAnimated(false);xy.getYAxis().setAnimated(false);}
         if (chart instanceof PieChart pie) {
+            pie.setLabelsVisible(false);pie.setLegendSide(javafx.geometry.Side.BOTTOM);
             double total = pie.getData().stream().mapToDouble(PieChart.Data::getPieValue).sum();
             for (PieChart.Data d : pie.getData()) {
                 double pct = total > 0 ? d.getPieValue() / total * 100 : 0;
@@ -1007,8 +984,8 @@ public class ReportsView {
         } else if (chart instanceof XYChart<?, ?> xy) {
             for (XYChart.Series<?, ?> s : xy.getData()) {
                 for (XYChart.Data<?, ?> d : s.getData()) {
-                    double y = (d.getYValue() instanceof Number n) ? n.doubleValue() : 0;
-                    String x = String.valueOf(d.getXValue());
+                    double y = d.getYValue() instanceof Number n ? n.doubleValue() : d.getXValue() instanceof Number n ? n.doubleValue() : 0;
+                    String x = String.valueOf(d.getYValue() instanceof Number ? d.getXValue() : d.getYValue());
                     tip(d.nodeProperty(), () -> x + "  ·  " + fmtNum(y));
                 }
             }
@@ -1052,10 +1029,8 @@ public class ReportsView {
         VBox c = new VBox(12);
         c.setPadding(new Insets(20));
         c.setMinHeight(minHeight);
-        c.setStyle(
-            "-fx-background-color: white; -fx-background-radius: 14;" +
-            "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);"
-        );
+        c.setStyle(Theme.card());
+        c.setMinWidth(0);
         VBox.setVgrow(content, Priority.ALWAYS);
         c.getChildren().add(content);
         return c;
@@ -1071,31 +1046,13 @@ public class ReportsView {
 
     private Button pill(String text, String color) {
         Button b = new Button(text);
-        b.setStyle(
-            "-fx-background-color: " + color + "; -fx-text-fill: white;" +
-            "-fx-font-weight: bold; -fx-font-size: 13; -fx-padding: 9 18;" +
-            "-fx-background-radius: 8; -fx-cursor: hand;"
-        );
+        Theme.hover(b, Theme.primaryButton(), Theme.primaryHover());
         return b;
     }
 
     private Button chip(String text) {
         Button b = new Button(text);
-        b.setStyle(
-            "-fx-background-color: #f1f5f9; -fx-text-fill: #475569;" +
-            "-fx-font-size: 12; -fx-padding: 5 12; -fx-background-radius: 16;" +
-            "-fx-cursor: hand; -fx-border-color: #cbd5e1; -fx-border-radius: 16;"
-        );
-        b.setOnMouseEntered(ev -> b.setStyle(
-            "-fx-background-color: #e2e8f0; -fx-text-fill: #1e293b;" +
-            "-fx-font-size: 12; -fx-padding: 5 12; -fx-background-radius: 16;" +
-            "-fx-cursor: hand; -fx-border-color: #94a3b8; -fx-border-radius: 16;"
-        ));
-        b.setOnMouseExited(ev -> b.setStyle(
-            "-fx-background-color: #f1f5f9; -fx-text-fill: #475569;" +
-            "-fx-font-size: 12; -fx-padding: 5 12; -fx-background-radius: 16;" +
-            "-fx-cursor: hand; -fx-border-color: #cbd5e1; -fx-border-radius: 16;"
-        ));
+        Theme.hover(b, Theme.ghostButton(), Theme.ghostHover());
         return b;
     }
 
@@ -1120,7 +1077,8 @@ public class ReportsView {
 
     private void doExport() {
         LocalDate s = start(), e = end();
-        String name = com.pos.utils.DocumentNames.name("Report", reportCombo.getValue() + "_" + s + "_to_" + e, "xlsx");
+        if(s==null || e==null || e.isBefore(s)){render();return;}
+        String name = com.pos.utils.DocumentNames.name("Reports", s + "_to_" + e, "xlsx");
         boolean ok = svc.exportToExcel(s, e, name);
         if (ok) {
             String savedTo = new com.pos.services.SettingsService().getReportsSavePath();

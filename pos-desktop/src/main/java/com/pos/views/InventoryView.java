@@ -792,18 +792,13 @@ public class InventoryView {
             catch(Exception ex){image.setImage(null);barcodeError.setText("Enter a valid Code 128 barcode to preview the label.");}};
         barcode.textProperty().addListener((o,a,b)->preview.run());preview.run();
         VBox label=new VBox(12,image,code,barcodeError);label.setAlignment(Pos.CENTER);
-        Button print=new Button("Print barcode");print.setStyle(Theme.secondaryButton());
-        print.setOnAction(e->{
-            if(image.getImage()==null){barcodeError.setText("Enter a valid Code 128 barcode before printing.");return;}
-            print.setDisable(true);barcodeError.setText("");
-            com.pos.utils.BarcodePrinter.print(barcode.getText(),message->{print.setDisable(false);if(message!=null)barcodeError.setText(message);});
-        });
+        Button saveBarcode=barcodeSaveButton(barcode::getText,barcodeError);
         TextField addStock=new TextField();addStock.setPromptText("Quantity to add");addStock.setStyle(Theme.input());
         Button restock=new Button("Add to count");restock.setStyle(Theme.secondaryButton());
         Label restockStatus=new Label();restock.setOnAction(e->{try{int add=Integer.parseInt(addStock.getText());if(add<=0)throw new NumberFormatException();quantity.setText(""+Math.addExact(Integer.parseInt(quantity.getText()),add));addStock.clear();restockStatus.setText("Save changes to apply the new stock quantity.");}catch(Exception ex){restockStatus.setText("Enter a positive whole quantity.");}});
         VBox details=com.pos.components.Ui.section("Product information",grid,com.pos.components.Ui.detailRow("Product ID", ""+product.getProductID()),com.pos.components.Ui.detailRow("Units sold", ""+product.getNoSold()));
         VBox stock=com.pos.components.Ui.section("Restock",new HBox(10,addStock,restock),restockStatus);
-        VBox barcodeSection=com.pos.components.Ui.section("Barcode label",label,print);
+        VBox barcodeSection=com.pos.components.Ui.section("Barcode label",label,saveBarcode);
         VBox side=new VBox(16,barcodeSection,stock);side.setPrefWidth(320);side.setMinWidth(280);
         HBox columns=new HBox(16,details,side);HBox.setHgrow(details,Priority.ALWAYS);
         VBox body=new VBox(16,columns);
@@ -822,6 +817,28 @@ public class InventoryView {
         dialog.showAndWait();
     }
 
+    private Button barcodeSaveButton(java.util.function.Supplier<String> code, Label status) {
+        Button save=new Button("Save barcode");save.setId("saveBarcode");
+        Theme.hover(save,Theme.secondaryButton(),Theme.secondaryHover());
+        save.setOnAction(event->{
+            String value=code.get();
+            if(com.pos.utils.BarcodeUtil.generateBarcode(value)==null){status.setText("Enter a valid Code 128 barcode before saving.");return;}
+            var chooser=new javafx.stage.FileChooser();chooser.setTitle("Save barcode image");
+            chooser.setInitialFileName(com.pos.utils.DocumentNames.name("Barcode",value,"png"));
+            chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("PNG image","*.png"));
+            java.io.File file=chooser.showSaveDialog(save.getScene().getWindow());
+            if(file==null)return;
+            if(!file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".png"))file=new java.io.File(file.getPath()+".png");
+            try {
+                com.pos.utils.BarcodeLabel.save(value,file.toPath());
+                status.setText("Saved to "+file.getAbsolutePath());
+            }catch(java.io.IOException | IllegalArgumentException ex){
+                status.setText("Could not save the barcode. Choose a writable folder and try again.");
+            }
+        });
+        return save;
+    }
+
     private void showBarcode(Product product) {
         Dialog<Void> dialog = new Dialog<>();
         dialog.setTitle("Product Barcode");
@@ -831,7 +848,7 @@ public class InventoryView {
         content.setAlignment(Pos.CENTER);
         content.setPadding(new Insets(20));
 
-        ImageView barcodeImageView = new ImageView(com.pos.utils.BarcodeUtil.getBarcodeImage(product.getQrCode()));
+        ImageView barcodeImageView = new ImageView(com.pos.utils.BarcodeUtil.getBarcodeImage(com.pos.utils.BarcodeUtil.generateBarcode(product.getBarCode())));
         barcodeImageView.setFitWidth(280);
         barcodeImageView.setFitHeight(105);
         barcodeImageView.setPreserveRatio(true);
@@ -839,7 +856,8 @@ public class InventoryView {
         Label barcodeLabel = new Label(product.getBarCode());
         barcodeLabel.setFont(Font.font("Courier New", FontWeight.BOLD, 16));
 
-        content.getChildren().addAll(barcodeImageView, barcodeLabel);
+        Label saveStatus=new Label();saveStatus.setWrapText(true);
+        content.getChildren().addAll(barcodeImageView, barcodeLabel, barcodeSaveButton(product::getBarCode,saveStatus),saveStatus);
 
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);

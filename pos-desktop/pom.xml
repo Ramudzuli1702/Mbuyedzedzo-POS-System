@@ -7,7 +7,7 @@
 
     <groupId>com.pos</groupId>
     <artifactId>point-of-sale-system</artifactId>
-    <version>1.0.7</version>
+    <version>1.0.8</version>
     <packaging>jar</packaging>
 
     <name>Mbuyedzedzo POS System</name>
@@ -321,7 +321,7 @@
                         <phase>package</phase>
                         <goals><goal>copy-resources</goal></goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/package-input</outputDirectory>
+                            <outputDirectory>${project.build.directory}/package-input-${project.version}-${pos.edition}</outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>${project.build.directory}</directory>
@@ -411,7 +411,7 @@
 
                                 <!-- Folder containing the fat JAR -->
                                 <argument>--input</argument>
-                                <argument>${project.build.directory}/package-input</argument>
+                                <argument>${project.build.directory}/package-input-${project.version}-${pos.edition}</argument>
 
                                 <argument>--name</argument>
                                 <argument>${pos.exe.name}</argument>
