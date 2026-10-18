@@ -26,6 +26,7 @@ public final class StocktakeReviewView {
     private final TextArea notes=new TextArea();
     private final Button approve=new Button("Approve stock corrections"), reject=new Button("Reject / request recount"), refresh=new Button("Refresh stocktakes");
     private boolean busy;
+    private final Button export = new Button("Export to Excel");
     public StocktakeReviewView(User user) { this.user=user; }
 
     public BorderPane getView() {
@@ -56,7 +57,9 @@ public final class StocktakeReviewView {
         });
         detail.setWrapText(true);notes.setPromptText("Review notes (required when rejecting; up to 1,000 characters)");notes.setPrefRowCount(2);
         approve.setStyle(Theme.primaryButton());reject.setStyle(Theme.dangerButton());refresh.setStyle(Theme.secondaryButton());
-        HBox actions=new HBox(12,approve,reject);
+        export.setStyle(Theme.secondaryButton());
+        HBox actions=new HBox(12,approve,reject,export);
+        export.setOnAction(e->exportSelected());
         VBox review=new VBox(12,detail,lines,notes,actions);review.setPadding(new Insets(16));review.setStyle(Theme.card());VBox.setVgrow(lines,Priority.ALWAYS);
         SplitPane body=new SplitPane(sheets,review);body.setDividerPositions(.25);root.setCenter(body);
         refresh.setOnAction(e->refresh());approve.setOnAction(e->decide(true));reject.setOnAction(e->decide(false));
@@ -78,6 +81,17 @@ public final class StocktakeReviewView {
         boolean pending=sheet!=null&&"Pending".equals(sheet.status());
         approve.setDisable(busy||!pending||sheet.items().stream().anyMatch(l->l.counted()!=null&&l.conflict()));
         reject.setDisable(busy||!pending);refresh.setDisable(busy);sheets.setDisable(busy);
+        export.setDisable(busy||sheet==null);
+    }
+    private void exportSelected() {
+        CountSheet sheet=sheets.getSelectionModel().getSelectedItem();if(sheet==null||busy)return;
+        javafx.stage.FileChooser chooser=new javafx.stage.FileChooser();chooser.setTitle("Export stocktake to Excel");
+        chooser.setInitialFileName("stocktake-"+sheet.id()+".xlsx");
+        chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Excel Workbook","*.xlsx"));
+        java.io.File file=chooser.showSaveDialog(sheets.getScene().getWindow());if(file==null)return;
+        busy=true;updateButtons();status.setText("Exporting stocktake...");
+        CompletableFuture.runAsync(()->{try{new StocktakeExcelService().exportToExcel(sheet,file);}catch(Exception ex){throw new RuntimeException(ex);}})
+                .whenComplete((ignored,error)->Platform.runLater(()->{busy=false;updateButtons();status.setText(error==null?"Exported "+file.getName():message(error));}));
     }
     private void refresh() {
         busy=true;updateButtons();status.setText("Loading stocktakes…");

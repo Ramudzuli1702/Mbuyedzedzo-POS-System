@@ -1,4 +1,4 @@
-param([string]$MySqlBin='C:\Program Files\MySQL\MySQL Server 8.0\bin',[switch]$Interactive)
+param([string]$MySqlBin='C:\Program Files\MySQL\MySQL Server 8.0\bin',[switch]$Interactive,[switch]$DesktopUi)
 $ErrorActionPreference='Stop'
 $project=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 $work=Join-Path $project ('target\companion-smoke-'+[Guid]::NewGuid().ToString('N'))
@@ -24,7 +24,11 @@ try{
     try{
         $argsForMaven=@('-o','-Dtest=CompanionIT',('-Dpos.companion.it.port='+$port))
         if($Interactive){$argsForMaven+='-Dpos.companion.ui=true'}
-        & mvn @argsForMaven test *> (Join-Path $work 'tests.log')
+        if($DesktopUi){$argsForMaven+='-Dpos.companion.desktop.ui=true'}
+        # Capture native stderr before PowerShell interprets library warnings as errors.
+        $logPath=Join-Path $work 'tests.log'
+        $mavenCommand='mvn '+($argsForMaven -join ' ')+' test > "'+$logPath+'" 2>&1'
+        & $env:ComSpec /d /c $mavenCommand
         $code=$LASTEXITCODE;Get-Content -LiteralPath (Join-Path $work 'tests.log') -Tail 26
         if($code-ne 0){throw ('Companion tests failed. Logs: '+$work)}
         $passed=$true

@@ -84,6 +84,27 @@ class CompanionIT {
         missing.addProperty("token",token);missing.addProperty("staffId",2);
         JsonObject sheet=protocol.handle(missing).getAsJsonObject("data");assertEquals(1,sheet.get("staffId").getAsInt());
     }
+    @Test void desktopDraftsResumeAndExcelImportWaitsForApproval() throws Exception {
+        String id=start();service.saveDraft(id,1,List.of(new StocktakeService.Count(1,0)),"Desktop shelf count");
+        assertEquals(10,quantity(1));assertTrue(service.listOwn(2).isEmpty());
+        assertEquals(id,service.listOwn(1).get(0).id());assertEquals(Integer.valueOf(0),service.resume(id,1).items().get(0).counted());
+        Path file=Files.createTempFile("stocktake-integration-",".xlsx");
+        try {
+            StocktakeExcelService excel=new StocktakeExcelService();excel.exportToExcel(service.resume(id,1),file.toFile());
+            var plan=excel.analyze(file.toFile(),service.resume(id,1));assertTrue(plan.valid());
+            service.saveDraft(id,1,plan.counts(),"Imported count");assertEquals(10,quantity(1));
+            service.submit(id,1,plan.counts(),"Imported count");
+            assertThrows(StocktakeService.Rejected.class,()->service.saveDraft(id,1,List.of(),"Too late"));
+            service.review(id,2,true,"Verified spreadsheet");assertEquals(0,quantity(1));assertEquals(20,quantity(2));
+        }finally{Files.deleteIfExists(file);}
+    }
+    @Test void invalidDraftSaveRollsBackAndEnforcesOwnership() throws Exception {
+        String id=start();service.saveDraft(id,1,List.of(new StocktakeService.Count(1,7)),"Saved");
+        assertThrows(StocktakeService.Rejected.class,()->service.saveDraft(id,2,List.of(),"Not mine"));
+        assertThrows(StocktakeService.Rejected.class,()->service.saveDraft(id,1,List.of(new StocktakeService.Count(999,0)),"Invalid"));
+        assertEquals(Integer.valueOf(7),service.resume(id,1).items().get(0).counted());assertEquals("Saved",service.resume(id,1).notes());
+        service.saveDraft(id,1,List.of(),"Cleared");assertNull(service.resume(id,1).items().get(0).counted());assertEquals(10,quantity(1));
+    }
     JsonObject challenge(){JsonObject j=new JsonObject();j.addProperty("type","stocktake_challenge");j.addProperty("email","stock.cashier@example.test");return j;}
     JsonObject login(JsonObject data) throws Exception {JsonObject j=new JsonObject();j.addProperty("type","stocktake_login");j.add("challengeId",data.get("challengeId"));j.addProperty("proof",Base64.getEncoder().encodeToString(StocktakeProtocol.proof(hash,data.get("nonce").getAsString(),data.get("challengeId").getAsString())));return j;}
     @Test void realSocketPreservesBarcodesAndResendsReceiptsUntilAcknowledged() throws Exception {
@@ -128,5 +149,44 @@ class CompanionIT {
             Files.writeString(Path.of("target/companion-ui-approved.txt"),pending.id());
             until=System.currentTimeMillis()+120000;while(!Files.exists(finish)&&System.currentTimeMillis()<until)Thread.sleep(500);
         } finally {server.stopListening();Files.deleteIfExists(endpoint);}
+    }
+    @Test @EnabledIfSystemProperty(named="pos.companion.desktop.ui",matches="true")
+    void desktopStocktakeViewLoadsSavedCountsAndExportsControls() throws Exception {
+        String id=start();service.saveDraft(id,1,List.of(new StocktakeService.Count(1,7)),"Desktop test count");
+        CompletableFuture<javafx.scene.layout.BorderPane> rendered=new CompletableFuture<>();
+        javafx.application.Platform.startup(()->{});
+        javafx.application.Platform.setImplicitExit(false);
+        try {
+            javafx.application.Platform.runLater(()->{
+                try {
+                    var user=new com.pos.models.User(1,"Test Cashier","stock.cashier@example.test","Cashier","Active");
+                    var root=new com.pos.views.StocktakingView(user,service).getView();
+                    new javafx.scene.Scene(root,1200,800);root.applyCss();root.layout();rendered.complete(root);
+                }catch(Throwable e){rendered.completeExceptionally(e);}
+            });
+            var root=rendered.get(20,TimeUnit.SECONDS);boolean loaded=false;
+            for(int i=0;i<100;i++){
+                CompletableFuture<Boolean> check=new CompletableFuture<>();
+                javafx.application.Platform.runLater(()->{
+                    try {
+                        var table=(javafx.scene.control.TableView<?>)root.lookup("#stocktakeProducts");
+                        check.complete(table.getItems().size()==2&&!root.lookup("#stocktakeSubmit").isDisable());
+                    }catch(Throwable e){check.completeExceptionally(e);}
+                });
+                if(check.get(5,TimeUnit.SECONDS)){loaded=true;break;}Thread.sleep(100);
+            }
+            assertTrue(loaded,"Saved draft did not load into desktop screen");
+            CompletableFuture<Void> captured=new CompletableFuture<>();
+            javafx.application.Platform.runLater(()->{
+                try {
+                    assertFalse(root.lookup("#stocktakeImport").isDisable());assertFalse(root.lookup("#stocktakeExport").isDisable());
+                    assertTrue(((javafx.scene.control.Label)root.lookup("#stocktakeSummary")).getText().startsWith("1 / 2"));
+                    root.applyCss();root.layout();
+                    javax.imageio.ImageIO.write(javafx.embed.swing.SwingFXUtils.fromFXImage(root.snapshot(null,null),null),"png",Path.of("target/desktop-stocktaking.png").toFile());
+                    captured.complete(null);
+                }catch(Throwable e){captured.completeExceptionally(e);}
+            });
+            captured.get(20,TimeUnit.SECONDS);
+        }finally{javafx.application.Platform.exit();}
     }
 }

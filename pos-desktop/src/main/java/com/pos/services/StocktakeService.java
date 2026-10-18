@@ -101,6 +101,46 @@ public final class StocktakeService {
             } catch(SQLException | RuntimeException e) { c.rollback(); throw e; }
         }
     }
+    /** Save physical counts without submitting or changing live inventory. */
+    public CountSheet saveDraft(String id, int staffId, List<Count> counts, String notes) throws SQLException {
+        if (counts == null) throw new Rejected("INVALID", "Counts are required.");
+        if (!counts.isEmpty()) validateCounts(counts);
+        if (notes == null || notes.length() > 1000) throw new Rejected("INVALID", "Notes must be 1,000 characters or fewer.");
+        try (Connection c = connections.open()) {
+            c.setAutoCommit(false);
+            try {
+                requireStaff(c, staffId, false);
+                if (!"Draft".equals(lock(c, id, staffId)))
+                    throw new Rejected("LOCKED", "This stocktake has been submitted. Refresh to see its review status.");
+                try (PreparedStatement clear = c.prepareStatement("UPDATE StocktakeLine SET CountedQuantity=NULL WHERE StocktakeID=?")) {
+                    clear.setString(1, id); clear.executeUpdate();
+                }
+                try (PreparedStatement p = c.prepareStatement("UPDATE StocktakeLine SET CountedQuantity=? WHERE StocktakeID=? AND ProductID=?")) {
+                    for (Count count : counts) {
+                        p.setInt(1, count.quantity()); p.setString(2, id); p.setInt(3, count.productId());
+                        if (p.executeUpdate() != 1) throw new Rejected("INVALID", "A counted product is not in this snapshot.");
+                    }
+                }
+                try (PreparedStatement p = c.prepareStatement("UPDATE Stocktake SET Notes=? WHERE StocktakeID=?")) {
+                    p.setString(1, notes); p.setString(2, id); p.executeUpdate();
+                }
+                CountSheet result = load(c, id); c.commit(); return result;
+            } catch (SQLException | RuntimeException e) { c.rollback(); throw e; }
+        }
+    }
+
+    /** Staff may resume only their own desktop or phone snapshots. */
+    public List<CountSheet> listOwn(int staffId) throws SQLException {
+        try (Connection c = connections.open()) {
+            requireStaff(c, staffId, false);
+            List<CountSheet> result = new ArrayList<>();
+            try (PreparedStatement p = c.prepareStatement("SELECT StocktakeID FROM Stocktake WHERE StaffID=? ORDER BY CreatedAt DESC,StocktakeID LIMIT 100")) {
+                p.setInt(1, staffId);
+                try (ResultSet r = p.executeQuery()) { while (r.next()) result.add(load(c, r.getString(1))); }
+            }
+            return result;
+        }
+    }
     public static void validateCounts(List<Count> counts) {
         if (counts==null || counts.isEmpty() || counts.size()>100000) throw new Rejected("INVALID","Enter at least one physical count.");
         Set<Integer> seen=new HashSet<>();

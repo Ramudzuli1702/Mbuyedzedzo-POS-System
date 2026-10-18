@@ -41,6 +41,7 @@ public class MainDashboard {
     private Button salesBtn;
     private Button salesHistoryBtn;
     private Button inventoryBtn;
+    private Button stocktakingBtn;
     private Button userMgmtBtn;
     private Button customerBtn;
     private Button reportsBtn;
@@ -198,6 +199,12 @@ public class MainDashboard {
             case "inventory" -> {
                 inventoryBtn.setStyle(getActiveButtonStyle());
                 InventoryView view = new InventoryView(currentUser);
+                contentArea.setCenter(view.getView());
+                currentView = view;
+            }
+            case "stocktaking" -> {
+                stocktakingBtn.setStyle(getActiveButtonStyle());
+                StocktakingView view = new StocktakingView(currentUser);
                 contentArea.setCenter(view.getView());
                 currentView = view;
             }
@@ -378,6 +385,7 @@ public class MainDashboard {
         salesBtn     = createMenuButton(Icons.sales(18),        "Sales",           true);
         salesHistoryBtn = createMenuButton(Icons.reports(18),   "Sales History",   true);
         inventoryBtn = createMenuButton(Icons.inventory(18),     "Inventory",       full);
+        stocktakingBtn = createMenuButton(Icons.inventory(18), "Stocktaking", true);
         userMgmtBtn  = createMenuButton(Icons.users(18),         "User Management", full);
         customerBtn  = createMenuButton(Icons.customers(18),     "Customers",       full);
         reportsBtn   = createMenuButton(Icons.reports(18),       "Reports",         full);
@@ -390,6 +398,7 @@ public class MainDashboard {
         salesBtn.setOnAction(e     -> navigateTo("sales"));
         salesHistoryBtn.setOnAction(e -> navigateTo("salesHistory"));
         inventoryBtn.setOnAction(e -> navigateTo("inventory"));
+        stocktakingBtn.setOnAction(e -> navigateTo("stocktaking"));
         userMgmtBtn.setOnAction(e  -> navigateTo("users"));
         customerBtn.setOnAction(e  -> navigateTo("customers"));
         reportsBtn.setOnAction(e   -> navigateTo("reports"));
@@ -405,6 +414,7 @@ public class MainDashboard {
         // every Retail sale books against one shared walk-in account instead.
         if (!com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(salesHistoryBtn);
         menuBox.getChildren().add(inventoryBtn);
+        menuBox.getChildren().add(stocktakingBtn);
         menuBox.getChildren().add(userMgmtBtn);
         if (com.pos.Edition.current().hasCustomers()) menuBox.getChildren().add(customerBtn);
         menuBox.getChildren().add(reportsBtn);
@@ -474,7 +484,7 @@ public class MainDashboard {
 
     private void resetButtonStyles() {
         Button[] buttons = {
-            salesBtn, salesHistoryBtn, inventoryBtn, userMgmtBtn, customerBtn,
+            salesBtn, salesHistoryBtn, inventoryBtn, stocktakingBtn, userMgmtBtn, customerBtn,
             reportsBtn, sessionsBtn, approvalsBtn, marketingBtn, subscriptionBtn, settingsBtn
         };
         for (Button b : buttons) {

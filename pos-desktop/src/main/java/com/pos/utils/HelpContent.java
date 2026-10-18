@@ -47,6 +47,14 @@ public final class HelpContent {
             + "category, scan the barcode, and the product appears here for you to "
             + "approve."
         ));
+        ENTRIES.put("stocktaking", new Entry(
+            "Stocktaking",
+            "Start a stocktake using your signed-in staff account. Enter physical counts here, or export an Excel sheet, "
+            + "fill Physical Count and import it back into the same draft. Counts save without changing inventory. "
+            + "Zero means none remain; blank means not counted. Excel imports show a preview and replace draft counts only after confirmation. "
+            + "Submit when finished. An Admin or Manager verifies the counts under Approvals > Stocktakes before stock changes. "
+            + "If stock moved since the snapshot, start a fresh count. Refresh to check your submitted stocktakes' review status."
+        ));
         ENTRIES.put("users", new Entry(
             "User Management",
             "Add accounts for your staff and decide what each person can see and do. "
@@ -74,7 +82,9 @@ public final class HelpContent {
             "Approvals",
             "Refunds and exchanges over a certain amount need a manager's sign-off. "
             + "Those requests show up here, waiting for someone with the right "
-            + "permissions to approve or decline them."
+            + "permissions to approve or decline them. The Stocktakes tab also shows submitted desktop and phone inventory counts. "
+            + "Compare loaded, physical and current stock, then approve corrections or reject with notes. "
+            + "Export a selected stocktake to Excel for your records. Counts affected by later stock movements require a fresh count."
         ));
         ENTRIES.put("marketing", new Entry(
             "Marketing",
