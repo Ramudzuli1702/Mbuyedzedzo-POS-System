@@ -901,37 +901,20 @@ public class ReportsView {
     }
 
     private VBox kpiCard(String title, String value, double growth, String color, String sub, Runnable drill) {
-        // Padding/spacing/value-font matched to com.pos.components.SummaryCards —
-        // the same "stat card" used on Inventory/Customers/Users — so a KPI card
-        // here and a summary card there read as the same component, not two
-        // different ones that happen to share a background colour.
-        VBox card = new VBox(6);
-        card.setPadding(new Insets(16, 18, 16, 18));
-        // Same statCard() recipe as com.pos.components.SummaryCards — a
-        // permanent colour-coded top accent, not just the growth badge below,
-        // so each card has a visible identity even with zero/flat data
-        // (growth == 0 hides the only other coloured element entirely, which
-        // is what made an empty/fresh database's cards look undesigned: just
-        // a grey label, a black number, a grey caption, no colour anywhere).
-        String base = com.pos.utils.Theme.statCard(color);
-        card.setStyle(base);
-
+        VBox card = com.pos.components.SummaryCards.card(
+            new com.pos.components.SummaryCards.Card(title, value, color));
+        String base = com.pos.utils.Theme.statCard(com.pos.utils.Theme.BRAND);
         if (drill != null) {
+            card.setFocusTraversable(true);
+            card.setAccessibleText(title + ": " + value + ". Open details.");
             card.setStyle(base + "-fx-cursor: hand;");
-            card.setOnMouseEntered(e -> card.setStyle(base +
-                "-fx-cursor: hand; -fx-border-color: " + color + "; -fx-border-radius: 14; -fx-border-width: 1.5;"));
-            card.setOnMouseExited(e -> card.setStyle(base + "-fx-cursor: hand;"));
+            Runnable highlight = () -> card.setStyle(base + "-fx-cursor: hand; -fx-border-color: "
+                + (card.isHover() || card.isFocused() ? com.pos.utils.Theme.BRAND : com.pos.utils.Theme.BORDER) + ";");
+            card.hoverProperty().addListener((o,a,b)->highlight.run());
+            card.focusedProperty().addListener((o,a,b)->highlight.run());
             card.setOnMouseClicked(e -> drill.run());
+            card.setOnKeyPressed(e -> {if(e.getCode()==javafx.scene.input.KeyCode.ENTER || e.getCode()==javafx.scene.input.KeyCode.SPACE){drill.run();e.consume();}});
         }
-
-        Label t = new Label(title);
-        t.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
-        t.setTextFill(Color.web("#64748b"));
-
-        Label v = new Label(value);
-        v.setFont(Font.font("System", FontWeight.BOLD, 24));
-        v.setTextFill(Color.web(color));
-        v.setWrapText(true);
 
         HBox bottom = new HBox(6);
         bottom.setAlignment(Pos.CENTER_LEFT);
@@ -946,10 +929,12 @@ public class ReportsView {
         }
         Label sl = new Label(sub);
         sl.setFont(Font.font("System", 11));
-        sl.setTextFill(Color.web("#94a3b8"));
+        sl.setTextFill(Color.web(com.pos.utils.Theme.TEXT_MUTED));
+        sl.setWrapText(true);
+        HBox.setHgrow(sl, Priority.ALWAYS);
         bottom.getChildren().add(sl);
 
-        card.getChildren().addAll(t, v, bottom);
+        card.getChildren().add(bottom);
         return card;
     }
 
@@ -1135,12 +1120,11 @@ public class ReportsView {
 
     private void doExport() {
         LocalDate s = start(), e = end();
-        String name = reportCombo.getValue().replaceAll("\\s+", "_").toLowerCase()
-                      + "_" + s + "_to_" + e;
+        String name = com.pos.utils.DocumentNames.name("Report", reportCombo.getValue() + "_" + s + "_to_" + e, "xlsx");
         boolean ok = svc.exportToExcel(s, e, name);
         if (ok) {
             String savedTo = new com.pos.services.SettingsService().getReportsSavePath();
-            com.pos.components.Toast.success(reportCombo, "Exported to " + savedTo + name + ".xlsx");
+            com.pos.components.Toast.success(reportCombo, "Exported to " + new java.io.File(savedTo, name));
         } else {
             com.pos.components.Toast.error(reportCombo, "Export failed — check console for details.");
         }

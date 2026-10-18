@@ -15,92 +15,30 @@ public final class HelpContent {
     private static final Map<String, Entry> ENTRIES = new LinkedHashMap<>();
 
     static {
-        ENTRIES.put("sales", new Entry(
-            "Sales",
-            "This is your till. Scan or search for a product, add it to the cart, "
-            + "then take payment by cash or card. You can apply a promo code, give "
-            + "a customer discount, and print or email the receipt when you're done."
-        ));
-        ENTRIES.put("salesHistory", new Entry(
-            "Sales History",
-            "Every till sale, in one place, so you can look one up and process a return or "
-            + "exchange. Retail sales aren't tied to a named customer account, so this is how "
-            + "you find a past sale instead of looking it up under a customer."
-        ));
-        ENTRIES.put("inventory", new Entry(
-            "Inventory",
-            "Add new products and keep your stock counts up to date. Each product "
-            + "gets a barcode you can print and stick on the shelf. You'll enter both "
-            + "a purchase price (what you paid) and a selling price (what the customer "
-            + "pays) so your profit reports are accurate.\n\n"
-            + "Put every product in a category (Dairy, Bakery, Cleaning...) and use "
-            + "Manage Categories to add, rename or remove them. The category filter at "
-            + "the top narrows the list to one group, and your reports use categories "
-            + "too.\n\n"
-            + "Above the product list, Export to Excel saves your stock list as a "
-            + "spreadsheet, and Import from Excel adds many products at once. Before "
-            + "anything is saved, the app shows you exactly what will be added and "
-            + "asks whether to create any categories it hasn't seen before, so a typo "
-            + "in the sheet won't quietly create a new category. Products whose "
-            + "barcode is already in your inventory are skipped.\n\n"
-            + "You can also add products from the scanner app on your phone: pick a "
-            + "category, scan the barcode, and the product appears here for you to "
-            + "approve."
-        ));
-        ENTRIES.put("stocktaking", new Entry(
-            "Stocktaking",
-            "Start a stocktake using your signed-in staff account. Enter physical counts here, or export an Excel sheet, "
-            + "fill Physical Count and import it back into the same draft. Counts save without changing inventory. "
-            + "Zero means none remain; blank means not counted. Excel imports show a preview and replace draft counts only after confirmation. "
-            + "Submit when finished. An Admin or Manager verifies the counts under Approvals > Stocktakes before stock changes. "
-            + "If stock moved since the snapshot, start a fresh count. Refresh to check your submitted stocktakes' review status."
-        ));
-        ENTRIES.put("users", new Entry(
-            "User Management",
-            "Add accounts for your staff and decide what each person can see and do. "
-            + "Cashiers can make sales; managers and admins can also see reports, "
-            + "approve refunds, and change settings."
-        ));
-        ENTRIES.put("customers", new Entry(
-            "Customers",
-            "Keep a record of your regular customers and their contact details. "
-            + "You can look up their purchase history and use it to run targeted "
-            + "promotions."
-        ));
-        ENTRIES.put("reports", new Entry(
-            "Reports",
-            "See how the business is doing: revenue, profit margin, best and worst "
-            + "selling products, staff performance, and stock health. Pick a date "
-            + "range and export any report to Excel to share or keep for your records."
-        ));
-        ENTRIES.put("sessions", new Entry(
-            "Sessions",
-            "A log of every time a staff member logged in and out, and for how long. "
-            + "Handy for checking who worked a shift and when."
-        ));
-        ENTRIES.put("approvals", new Entry(
-            "Approvals",
-            "Refunds and exchanges over a certain amount need a manager's sign-off. "
-            + "Those requests show up here, waiting for someone with the right "
-            + "permissions to approve or decline them. The Stocktakes tab also shows submitted desktop and phone inventory counts. "
-            + "Compare loaded, physical and current stock, then approve corrections or reject with notes. "
-            + "Export a selected stocktake to Excel for your records. Counts affected by later stock movements require a fresh count."
-        ));
-        ENTRIES.put("marketing", new Entry(
-            "Marketing",
-            "Create promo codes and discounts, set when they run, and see how well "
-            + "each one performs once customers start using it."
-        ));
-        ENTRIES.put("subscription", new Entry(
-            "Subscription",
-            "Check your license status and renewal date, and manage your "
-            + "subscription from here."
-        ));
-        ENTRIES.put("settings", new Entry(
-            "Settings",
-            "Set up your business details, receipt layout, tax rate, printer, and "
-            + "other system preferences."
-        ));
+        ENTRIES.put("sales", new Entry("Sales",
+            "Scan a barcode or search for a product to add it to the sale. Check the quantities and any discounts, then take payment. When the sale is complete, you can print or email the receipt."));
+        ENTRIES.put("salesHistory", new Entry("Sales History",
+            "Find a past sale by date or receipt details. Open it to check the items, reprint a receipt, or start a return or exchange."));
+        ENTRIES.put("inventory", new Entry("Inventory",
+            "Add products, update prices and keep track of stock. Open a product to change its details, add stock or print its barcode.\n\nUse categories to group your products. Import from Excel adds products in bulk and shows a preview before saving. Export to Excel saves a copy of your current stock list. You can choose its save folder in Settings.\n\nProducts added from a connected phone appear here for you to review."));
+        ENTRIES.put("stocktaking", new Entry("Stocktaking",
+            "Start a stocktake and enter the quantities you find on the shelf. You can count here, on a connected phone, or export an Excel sheet and import it back into the same draft. Enter 0 when there is no stock; leave a count blank if you have not checked it yet.\n\nSave a draft to continue later. When you submit it, an Admin or Manager checks the counts in Approvals before stock changes. If stock has moved during the count, you will need a fresh stocktake for the affected products."));
+        ENTRIES.put("users", new Entry("User Management",
+            "Add staff accounts and choose each person's role. Open an account to update their details or access. Staff use the same accounts to sign in on a connected phone."));
+        ENTRIES.put("customers", new Entry("Customers",
+            "Save your customers' contact details and find their past purchases. Open a customer to update their details, check their purchase history or manage their marketing preferences."));
+        ENTRIES.put("reports", new Entry("Reports",
+            "Choose a date range to check sales, profit, products and staff performance. Open a summary card for more detail where available. Export to Excel saves the reports to the folder you chose in Settings."));
+        ENTRIES.put("sessions", new Entry("Sessions",
+            "Check when staff signed in and out, along with the activity recorded for each session. Open a session to see its details and generate a declaration or statement."));
+        ENTRIES.put("approvals", new Entry("Approvals",
+            "Review requests that need an Admin or Manager's approval. Open a request, check the details and approve or decline it.\n\nIn Stocktakes, compare the original stock, counted quantities and current stock before approving a change. You can export the count to Excel. If stock has moved since counting began, ask for a fresh count."));
+        ENTRIES.put("marketing", new Entry("Marketing",
+            "Set up promotions and discounts, choose when they run and check how they are being used. Open a promotion to update its details or end it."));
+        ENTRIES.put("subscription", new Entry("Subscription",
+            "Check your license, see when it renews and manage your subscription."));
+        ENTRIES.put("settings", new Entry("Settings",
+            "Update your business details, receipt layout, tax rate and printer preferences. Choose where receipts, reports, inventory sheets, stocktake sheets and backups are saved. Save your changes before leaving the screen."));
     }
 
     private HelpContent() {}

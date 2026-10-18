@@ -1,4 +1,4 @@
-# Mbuyedzedzo Scanner 1.4.0
+# Mbuyedzedzo Scanner 1.4.1
 
 Android companion for the [desktop POS](../pos-desktop), using the existing teal Material theme, outlined inputs and rounded action cards. Requires Android 7.0 or later.
 

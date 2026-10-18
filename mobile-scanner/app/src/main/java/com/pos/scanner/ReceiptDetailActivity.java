@@ -1,65 +1,44 @@
 package com.pos.scanner;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.hardware.usb.UsbAccessory;
-import android.hardware.usb.UsbManager;
-import android.os.ParcelFileDescriptor;
 import android.os.Bundle;
 import android.widget.TextView;
-
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import android.widget.Toast;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.List;
 import java.util.Locale;
 
 public class ReceiptDetailActivity extends AuthenticatedActivity {
-
-    private TextView customerNameText;
-    private TextView customerEmailText;
-    private TextView cashierNameText;
-    private TextView dateText;
-    private RecyclerView itemsRecyclerView;
-    private TextView totalText;
-    private TextView fullReceiptText;
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_receipt_detail);
         findViewById(R.id.receiptBack).setOnClickListener(v -> finish());
+        String id = getIntent().getStringExtra("receiptId");
+        // Only the ID crosses the Activity boundary; long receipts can exceed
+        // Android's Binder transaction limit when passed as a serialized object.
+        new Thread(() -> {
+            Receipt receipt = id == null ? null : ReceiptStorage.getInstance(getApplicationContext()).getReceiptById(id);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (receipt == null) {
+                    Toast.makeText(this, "This receipt is no longer available.", Toast.LENGTH_LONG).show();
+                    finish(); return;
+                }
+                showReceipt(receipt);
+            });
+        }, "receipt-detail").start();
+    }
 
-        customerNameText = findViewById(R.id.customerNameText);
-        customerEmailText = findViewById(R.id.customerEmailText);
-        cashierNameText = findViewById(R.id.cashierNameText);
-        dateText = findViewById(R.id.dateText);
-        itemsRecyclerView = findViewById(R.id.itemsRecyclerView);
-        totalText = findViewById(R.id.totalText);
-        fullReceiptText = findViewById(R.id.fullReceiptText);
-
-        Receipt receipt = (Receipt) getIntent().getSerializableExtra("receipt");
-
-        if (receipt != null) {
-            customerNameText.setText("Customer: " + receipt.getCustomerName());
-            customerEmailText.setText("Email: " + (receipt.getCustomerEmail()==null||receipt.getCustomerEmail().isEmpty()?"Not supplied":receipt.getCustomerEmail()));
-            cashierNameText.setText("Cashier: " + receipt.getCashierName());
-            dateText.setText("Date: " + receipt.getDate());
-
-            itemsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-            ReceiptItemAdapter itemAdapter = new ReceiptItemAdapter(receipt.getItems());
-            itemsRecyclerView.setAdapter(itemAdapter);
-
-            totalText.setText(String.format(Locale.getDefault(), "R %.2f", receipt.getTotal()));
-
-            fullReceiptText.setText(receipt.getFullReceiptText());
-        }
+    private void text(int id, String value) { ((TextView)findViewById(id)).setText(value); }
+    private void showReceipt(Receipt receipt) {
+        text(R.id.customerNameText, "Customer: " + receipt.getCustomerName());
+        String email = receipt.getCustomerEmail();
+        text(R.id.customerEmailText, "Email: " + (email == null || email.isEmpty() ? "Not supplied" : email));
+        text(R.id.cashierNameText, "Cashier: " + receipt.getCashierName());
+        text(R.id.dateText, "Date: " + receipt.getDate());
+        RecyclerView items = findViewById(R.id.itemsRecyclerView);
+        items.setLayoutManager(new LinearLayoutManager(this));
+        items.setAdapter(new ReceiptItemAdapter(receipt.getItems()));
+        text(R.id.totalText, String.format(Locale.getDefault(), "R %.2f", receipt.getTotal()));
+        text(R.id.fullReceiptText, receipt.getFullReceiptText());
     }
 }

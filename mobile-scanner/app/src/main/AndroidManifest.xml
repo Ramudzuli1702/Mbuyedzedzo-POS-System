@@ -58,7 +58,7 @@
     android:name=".ReceiptDetailActivity"
     android:exported="false"
     android:parentActivityName=".ReceiptActivity"
-    android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+    android:theme="@style/Theme.POSScanner" />
 <meta-data
     android:name="android.support.PARENT_ACTIVITY"
     android:value=".ReceiptActivity" />

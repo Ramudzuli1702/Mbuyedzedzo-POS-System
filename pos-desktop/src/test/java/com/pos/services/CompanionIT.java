@@ -214,6 +214,16 @@ class CompanionIT {
                     assertTrue(pane.lookupAll(".label").stream().filter(n->n instanceof javafx.scene.control.Label).map(n->((javafx.scene.control.Label)n).getText()).anyMatch(t->t.equals("Enter a valid quantity.")));
                     javax.imageio.ImageIO.write(javafx.embed.swing.SwingFXUtils.fromFXImage(pane.snapshot(null,null),null),"png",Path.of("target/product-detail-design.png").toFile());
                     editor.close();
+                    var cards=com.pos.components.SummaryCards.row(
+                        new com.pos.components.SummaryCards.Card("Gross Revenue", "R 128,450.00", "#0f766e", "vs prior period"),
+                        new com.pos.components.SummaryCards.Card("Gross Profit", "R 32,112.50", "#2563eb", "25.0% margin"),
+                        new com.pos.components.SummaryCards.Card("Total Sales", "486", "#7c3aed", "transactions"));
+                    var preview=new javafx.scene.layout.VBox(20,com.pos.utils.Theme.pageTitleLabel("Reports"),cards);
+                    preview.setPadding(new javafx.geometry.Insets(24));preview.setStyle(com.pos.utils.Theme.page());
+                    new javafx.scene.Scene(preview,1150,240);preview.applyCss();preview.layout();
+                    double width=cards.getChildren().get(0).getLayoutBounds().getWidth();
+                    for(var child:cards.getChildren())assertEquals(width,child.getLayoutBounds().getWidth(),1);
+                    javax.imageio.ImageIO.write(javafx.embed.swing.SwingFXUtils.fromFXImage(preview.snapshot(null,null),null),"png",Path.of("target/report-cards-design.png").toFile());
                     captured.complete(null);
                 }catch(Throwable e){captured.completeExceptionally(e);}
             });

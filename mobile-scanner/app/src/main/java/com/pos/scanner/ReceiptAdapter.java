@@ -43,7 +43,7 @@ public class ReceiptAdapter extends RecyclerView.Adapter<ReceiptAdapter.ReceiptV
 
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(context, ReceiptDetailActivity.class);
-            intent.putExtra("receipt", receipt);
+            intent.putExtra("receiptId", receipt.getReceiptId());
             context.startActivity(intent);
         });
     }

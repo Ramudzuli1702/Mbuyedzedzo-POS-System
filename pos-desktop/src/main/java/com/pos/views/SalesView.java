@@ -900,7 +900,7 @@ public class SalesView {
                             saleCustomer, cartItems, saleCashier, paymentInfo,
                             salePromo != null ? salePromo.getPromoCode() : null, saleDiscount);
                     savedFile = ReceiptGenerator.saveReceiptToFile(
-                            receipt, "Receipt " + LocalDateTime.now().format(RECEIPT_FILE_FMT));
+                            receipt, null);
 
                     if (com.pos.Edition.current().hasCustomers()) {
                         CommPreferences prefs = commService.getPreferences(saleCustomer.getAccountID());

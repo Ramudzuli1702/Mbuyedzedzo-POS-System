@@ -32,7 +32,7 @@ public class ReceiptStorage {
     
     public synchronized boolean saveReceipt(Receipt receipt) {
         List<Receipt> receipts = getAllReceipts();
-        for (Receipt existing : receipts) if (existing.getReceiptId().equals(receipt.getReceiptId())) return true;
+        for (Receipt existing : receipts) if (existing != null && java.util.Objects.equals(existing.getReceiptId(), receipt.getReceiptId())) return true;
         receipts.add(0, receipt); // Add to beginning
         
         // Keep only last 100 receipts
@@ -64,7 +64,7 @@ public class ReceiptStorage {
     public Receipt getReceiptById(String receiptId) {
         List<Receipt> receipts = getAllReceipts();
         for (Receipt receipt : receipts) {
-            if (receipt.getReceiptId().equals(receiptId)) {
+            if (receipt != null && receiptId != null && receiptId.equals(receipt.getReceiptId())) {
                 return receipt;
             }
         }

@@ -287,8 +287,7 @@ public class InventoryView {
         chooser.setTitle("Export inventory to Excel");
         try { chooser.setInitialDirectory(new com.pos.services.SettingsService().sheetExportDirectory(false)); }
         catch (Exception ex) { showAlert("Export folder", "Check the inventory sheet folder in Settings: " + ex.getMessage(), Alert.AlertType.ERROR); return; }
-        chooser.setInitialFileName("Inventory_" +
-                java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_DATE) + ".xlsx");
+        chooser.setInitialFileName(com.pos.utils.DocumentNames.name("Inventory", null, "xlsx"));
         chooser.getExtensionFilters().add(
                 new javafx.stage.FileChooser.ExtensionFilter("Excel Workbook", "*.xlsx"));
         java.io.File target = chooser.showSaveDialog(productTable.getScene().getWindow());
@@ -789,11 +788,16 @@ public class InventoryView {
         com.pos.components.Ui.formField(grid,4,"Purchase price (R)",cost);com.pos.components.Ui.formField(grid,5,"Selling price (R)",price);
         ImageView image=new ImageView();image.setFitWidth(260);image.setFitHeight(110);image.setPreserveRatio(true);
         Label code=new Label(), barcodeError=new Label();code.setFont(Font.font("Monospaced",16));barcodeError.setWrapText(true);
-        Runnable preview=()->{try{image.setImage(com.pos.utils.BarcodeUtil.getBarcodeImage(com.pos.utils.BarcodeUtil.generateBarcode(barcode.getText())));code.setText(barcode.getText());barcodeError.setText("");}
+        Runnable preview=()->{try{image.setImage(com.pos.utils.BarcodeUtil.getBarcodeImage(com.pos.utils.BarcodeUtil.generateBarcode(barcode.getText())));code.setText(barcode.getText());barcodeError.setText(image.getImage()==null?"Enter a valid Code 128 barcode to preview the label.":"");}
             catch(Exception ex){image.setImage(null);barcodeError.setText("Enter a valid Code 128 barcode to preview the label.");}};
         barcode.textProperty().addListener((o,a,b)->preview.run());preview.run();
         VBox label=new VBox(12,image,code,barcodeError);label.setAlignment(Pos.CENTER);
-        Button print=new Button("Print barcode");print.setStyle(Theme.secondaryButton());print.setOnAction(e->{var job=javafx.print.PrinterJob.createPrinterJob();if(job!=null&&job.showPrintDialog(productTable.getScene().getWindow())&&job.printPage(label))job.endJob();});
+        Button print=new Button("Print barcode");print.setStyle(Theme.secondaryButton());
+        print.setOnAction(e->{
+            if(image.getImage()==null){barcodeError.setText("Enter a valid Code 128 barcode before printing.");return;}
+            print.setDisable(true);barcodeError.setText("");
+            com.pos.utils.BarcodePrinter.print(barcode.getText(),message->{print.setDisable(false);if(message!=null)barcodeError.setText(message);});
+        });
         TextField addStock=new TextField();addStock.setPromptText("Quantity to add");addStock.setStyle(Theme.input());
         Button restock=new Button("Add to count");restock.setStyle(Theme.secondaryButton());
         Label restockStatus=new Label();restock.setOnAction(e->{try{int add=Integer.parseInt(addStock.getText());if(add<=0)throw new NumberFormatException();quantity.setText(""+Math.addExact(Integer.parseInt(quantity.getText()),add));addStock.clear();restockStatus.setText("Save changes to apply the new stock quantity.");}catch(Exception ex){restockStatus.setText("Enter a positive whole quantity.");}});

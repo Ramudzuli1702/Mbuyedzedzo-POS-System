@@ -21,7 +21,7 @@ public class Receipt implements Serializable {
     public String getReceiptId(){return receiptId;} public void setReceiptId(String id){receiptId=id;}
     public String getCustomerName(){return name;} public String getCustomerEmail(){return email;}
     public String getCashierName(){return cashier;} public String getDate(){return date;}
-    public List<ReceiptItem> getItems(){return items;} public double getTotal(){return total;}
+    public List<ReceiptItem> getItems(){return items==null?Collections.emptyList():items;} public double getTotal(){return total;}
     public String getFullReceiptText(){return fullReceiptText;} public void setFullReceiptText(String text){fullReceiptText=text;}
     private static final Pattern META=Pattern.compile("^(Date|Cashier|Customer|Email)\\s*:\\s*(.*)$",Pattern.CASE_INSENSITIVE);
     private static final Pattern TOTAL=Pattern.compile("^(?:NET\\s+)?TOTAL\\s*:?\\s*R?\\s*([\\d.,]+)$",Pattern.CASE_INSENSITIVE);

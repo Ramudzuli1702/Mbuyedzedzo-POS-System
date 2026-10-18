@@ -66,18 +66,10 @@ public final class Theme {
         return "-fx-background-color: " + SURFACE + "; -fx-background-radius: " + RADIUS_MD + "px;" + SHADOW_RAISED;
     }
 
-    /**
-     * A stat/KPI card with a permanent colour-coded top accent bar — not just
-     * a card background. A card that relies only on dynamically-shown content
-     * (a growth badge, a status chip) for its colour can end up looking
-     * completely undesigned the moment that content is absent (e.g. a fresh
-     * database with no growth to show yet); this guarantees every card has a
-     * visible identity regardless of its data.
-     */
+    /** Neutral surface shared by summary cards and report metrics. */
     public static String statCard(String accentColorHex) {
         return "-fx-background-color: " + SURFACE + "; -fx-background-radius: " + RADIUS_MD + "px;"
-            + "-fx-border-color: " + accentColorHex + " transparent transparent transparent;"
-            + "-fx-border-width: 3 0 0 0; -fx-border-radius: " + RADIUS_MD + " " + RADIUS_MD + " 0 0;"
+            + "-fx-border-color: " + BORDER + "; -fx-border-width: 1; -fx-border-radius: " + RADIUS_MD + "px;"
             + SHADOW_CARD;
     }
 

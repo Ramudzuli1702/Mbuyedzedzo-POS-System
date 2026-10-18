@@ -159,7 +159,7 @@ public final class StocktakingView {
         FileChooser chooser = new FileChooser(); chooser.setTitle("Export stocktake to Excel");
         try { chooser.setInitialDirectory(new com.pos.services.SettingsService().sheetExportDirectory(true)); }
         catch (Exception ex) { message("Check the stocktake sheet folder in Settings: " + ex.getMessage(), true); return; }
-        chooser.setInitialFileName("stocktake-" + sheet.id() + ".xlsx"); chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel Workbook", "*.xlsx"));
+        chooser.setInitialFileName(com.pos.utils.DocumentNames.name("Stocktake", sheet.id(), "xlsx")); chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel Workbook", "*.xlsx"));
         File file = chooser.showSaveDialog(root.getScene().getWindow()); if (file == null) return;
         CountSheet snapshot = sheet;
         run(() -> { excel.exportToExcel(snapshot, file); return file; }, saved -> message("Exported " + saved.getName() + ". Fill Physical Count and import into this same draft.", false));

@@ -1040,7 +1040,7 @@ public class ReportService {
             String reportsPath = new com.pos.services.SettingsService().getReportsSavePath();
             File dir = new File(reportsPath);
             if (!dir.exists()) dir.mkdirs();
-            try (FileOutputStream fos = new FileOutputStream(new File(dir, fileName + ".xlsx"))) {
+            try (FileOutputStream fos = new FileOutputStream(new File(dir, fileName.endsWith(".xlsx") ? fileName : fileName + ".xlsx"))) {
                 wb.write(fos);
                 return true;
             }

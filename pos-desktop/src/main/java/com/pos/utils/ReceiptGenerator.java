@@ -275,7 +275,7 @@ public class ReceiptGenerator {
         try {
             Path dir = receiptsDir();
             Files.createDirectories(dir);
-            File out = dir.resolve(sanitize(fileName) + ".txt").toFile();
+            File out = dir.resolve(DocumentNames.name("Receipt", fileName, "txt")).toFile();
             try (FileWriter writer = new FileWriter(out)) {
                 writer.write(receiptText);
             }

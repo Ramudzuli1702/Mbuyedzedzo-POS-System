@@ -88,7 +88,7 @@ public final class StocktakeReviewView {
         javafx.stage.FileChooser chooser=new javafx.stage.FileChooser();chooser.setTitle("Export stocktake to Excel");
         try { chooser.setInitialDirectory(new SettingsService().sheetExportDirectory(true)); }
         catch (Exception ex) { status.setText("Check the stocktake sheet folder in Settings: "+ex.getMessage()); return; }
-        chooser.setInitialFileName("stocktake-"+sheet.id()+".xlsx");
+        chooser.setInitialFileName(com.pos.utils.DocumentNames.name("Stocktake", sheet.id(), "xlsx"));
         chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Excel Workbook","*.xlsx"));
         java.io.File file=chooser.showSaveDialog(sheets.getScene().getWindow());if(file==null)return;
         busy=true;updateButtons();status.setText("Exporting stocktake...");

@@ -13,8 +13,7 @@ import com.pos.utils.Theme;
 
 /**
  * A row of equal-width summary/KPI cards used at the top of the management
- * views. Consistent look everywhere: white card, big value, small caption,
- * a coloured value.
+ * views: a label, slate value, teal accent and optional supporting text.
  */
 public final class SummaryCards {
 
@@ -26,35 +25,42 @@ public final class SummaryCards {
 
     private SummaryCards() {}
 
+    public static VBox card(Card c) {
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(20));
+        card.setMinWidth(0);
+        card.setMaxWidth(Double.MAX_VALUE);
+        card.setStyle(Theme.statCard(Theme.BRAND));
+        Label caption = new Label(c.caption());
+        caption.setFont(Theme.label());
+        caption.setTextFill(Color.web(Theme.TEXT_MUTED));
+        caption.setWrapText(true);
+        Label value = new Label(c.value());
+        value.setFont(Font.font("System", FontWeight.BOLD, 28));
+        value.setTextFill(Color.web(Theme.TEXT));
+        value.setWrapText(true);
+        javafx.scene.layout.Region accent = new javafx.scene.layout.Region();
+        accent.setPrefSize(28, 3); accent.setMaxSize(28, 3);
+        accent.setStyle("-fx-background-color: " + Theme.BRAND + "; -fx-background-radius: 2;");
+        card.getChildren().addAll(caption, value, accent);
+        if (c.sub() != null && !c.sub().isBlank()) {
+            Label sub = new Label(c.sub()); sub.setWrapText(true);
+            sub.setFont(Theme.meta()); sub.setTextFill(Color.web(Theme.TEXT_MUTED));
+            card.getChildren().add(sub);
+        }
+        return card;
+    }
+
     public static HBox row(Card... cards) {
         HBox row = new HBox(16);
         row.setPadding(new Insets(0, 0, 4, 0));
         for (Card c : cards) {
-            VBox card = new VBox(6);
-            card.setPadding(new Insets(16, 18, 16, 18));
-            card.setMaxWidth(Double.MAX_VALUE);
+            VBox card = card(c);
+            card.setPrefWidth(0);
             HBox.setHgrow(card, Priority.ALWAYS);
-            card.setStyle(Theme.statCard(c.colourHex()));
-
-            Label value = new Label(c.value());
-            value.setFont(Font.font("System", FontWeight.BOLD, 24));
-            value.setTextFill(Color.web(c.colourHex()));
-
-            Label caption = new Label(c.caption());
-            caption.setFont(Theme.body());
-            caption.setTextFill(Color.web(Theme.TEXT_MUTED));
-
-            card.getChildren().addAll(value, caption);
-
-            if (c.sub() != null && !c.sub().isBlank()) {
-                Label sub = new Label(c.sub());
-                sub.setFont(Theme.meta());
-                sub.setTextFill(Color.web(Theme.TEXT_FAINT));
-                card.getChildren().add(sub);
-            }
             row.getChildren().add(card);
         }
-        row.setAlignment(Pos.CENTER_LEFT);
+        row.setAlignment(Pos.TOP_LEFT);
         return row;
     }
 }

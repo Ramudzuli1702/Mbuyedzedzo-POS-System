@@ -1159,8 +1159,7 @@ public class SessionView {
             File reportsDir = new File(new com.pos.services.SettingsService().getReportsSavePath());
             if (!reportsDir.exists()) reportsDir.mkdirs();
 
-            String filename = new File(reportsDir, "session_" + sessionID + "_declaration_"
-                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf").getPath();
+            String filename = new File(reportsDir, com.pos.utils.DocumentNames.name("Session-Declaration", sessionID, "pdf")).getPath();
 
             Document document = new Document(PageSize.A4);
             PdfWriter.getInstance(document, new FileOutputStream(filename));
@@ -1265,8 +1264,7 @@ public class SessionView {
             File reportsDir = new File(new com.pos.services.SettingsService().getReportsSavePath());
             if (!reportsDir.exists()) reportsDir.mkdirs();
 
-            String filename = new File(reportsDir, "session_" + sessionID + "_statement_"
-                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".pdf").getPath();
+            String filename = new File(reportsDir, com.pos.utils.DocumentNames.name("Session-Statement", sessionID, "pdf")).getPath();
 
             Document document = new Document(PageSize.A4);
             PdfWriter.getInstance(document, new FileOutputStream(filename));
