@@ -35,10 +35,12 @@ also lives — copy each `.exe` out before building the next one.
 1. **Splash** — the brand mark, shown briefly on every launch.
 2. **Licence agreement** — shown once per machine (a flag file next to
    `db.properties`); declining exits the app.
-3. **MySQL setup** — detects an existing MySQL install or silently installs
-   the bundled one, generates a root password, and writes
-   `%PROGRAMDATA%\POS System\config\db.properties`. Fully automatic; the
-   installer requires admin rights specifically so this step can run.
+3. **Database setup** — choose and confirm a server password in the POS.
+   The app installs/configures MySQL Server 8.0.46 and starts its Windows
+   service automatically. Approve the Windows administrator (UAC) prompt;
+   no MySQL wizard is needed. Internet is required for a new installation.
+   If a server already exists, enter its current root password instead;
+   the app keeps that password and the existing databases.
 4. **Licence activation** — see below.
 5. **Registration** — if the `Staff` table is empty, the first account you
    create becomes the Admin.
@@ -125,21 +127,58 @@ pos-desktop/
 
 **No manual setup is required.** On first launch the application:
 
-1. Detects or silently installs MySQL (`installer/mysql-installer.msi`, bundled by `jpackage`), generating a random root password.
-2. Writes the connection details to `%PROGRAMDATA%\POS System\config\db.properties`.
-3. Creates the `pos_db` schema and every table (`com.pos.database.DatabaseSetup`, idempotent — safe to re-run on every launch).
-4. Runs any pending column migrations.
+1. Detects an existing local server/service. If none exists, asks the user to
+   choose and confirm a password, then elevates only the Windows setup helper.
+2. Uses Oracle's signed `mysql-installer-web-community-8.0.46.0.msi` and
+   **MySQLInstallerConsole** to install **and configure** the server and its
+   automatic Windows service on port 3306. The MSI alone installs the installer,
+   not a configured server. Prerequisites are handled by MySQL Installer.
+3. Sets the chosen root password over JDBC, verifies a fresh connection, and
+   atomically saves connection settings with restricted Windows file permissions.
+   An existing server's password is never replaced. The old
+   `mysql_native_password` override is no longer used.
+4. Creates `pos_db_standard` or `pos_db_retail` and every table
+   (`com.pos.database.DatabaseSetup`, idempotent — safe to re-run on every launch).
+5. Runs any pending column migrations.
 
-For development against an existing local MySQL, create `%PROGRAMDATA%\POS System\config\db.properties` yourself:
+The per-edition connection file is
+`%PROGRAMDATA%\POS System\config\db-standard.properties` or
+`db-retail.properties`. Existing shared `db.properties` files are migrated
+for compatibility. The setup screen offers **Retry setup** after a cancelled
+UAC prompt, unavailable download, or interrupted installation. Temporary
+bootstrap credentials allow an interrupted installation to resume; they are
+removed after the final connection settings have been saved. A stale connection
+configuration also opens the repair screen instead of immediately exiting.
+
+To bundle the web bootstrapper, download it with its **original filename** to
+`installer/mysql-installer-web-community-8.0.46.0.msi` (ignored by Git):
+
+- [Oracle download](https://dev.mysql.com/get/Downloads/MySQLInstaller/mysql-installer-web-community-8.0.46.0.msi)
+- [Oracle CDN fallback](https://cdn.mysql.com/Downloads/MySQLInstaller/mysql-installer-web-community-8.0.46.0.msi)
+
+If it is not bundled, the setup helper downloads it automatically. Both routes
+validate Oracle's digital signature and the MSI's product identity before execution.
+The web bootstrapper still downloads server packages, so a new installation
+requires internet even when it is bundled. Do not rename a server MSI to
+`mysql-installer.msi`; the older bundled 9.7 MSI is deliberately excluded.
+
+The Windows helper is `src/main/resources/setup/provision-mysql.ps1`. It runs
+with UAC elevation, keeps diagnostic logs in the path shown on errors, and
+does not pass the user's chosen password on a process command line. Normal
+POS use runs without elevation. Existing servers on custom ports can still be
+configured manually using the connection properties below.
+
+For development against an existing local MySQL, create the edition's
+`db-standard.properties` or `db-retail.properties` yourself:
 
 ```properties
 db.host=127.0.0.1
 db.port=3306
-db.name=pos_db
+db.name=pos_db_standard
 db.username=root
 db.password=your-password
-# Optional — defaults to Africa/Johannesburg
-db.timezone=Africa/Johannesburg
+# Optional — fixed offset avoids requiring MySQL's named-timezone tables
+db.timezone=+02:00
 ```
 
 `MySQL_Scripts/Tables_creation_script.sql` is a **reference copy** of the schema; the app never reads it.
@@ -177,9 +216,34 @@ create becomes the Admin.
 
 ## Troubleshooting
 
-- **Database connection issues** — confirm the MySQL service is running and check `%PROGRAMDATA%\POS System\config\db.properties`.
+- **Database connection issues** — use **Retry setup** to start the service or
+  reconnect with its current root password. Check the edition's connection file
+  under `%PROGRAMDATA%\POS System\config` and the setup log shown on errors.
+- **New MySQL installation** — requires internet and administrator approval. The
+  setup screen handles the database configuration; no external wizard is needed.
 - **JavaFX runtime errors in dev** — `mvn clean javafx:run`.
 - **Port 8888 in use** — the mobile-scanner bridge auto-increments up to 10 times; check nothing else is bound to that range.
+
+## Verifying database setup
+
+`mvn test` covers fresh setup, existing-server passwords, cancellation, recovery
+after an interrupted install, password verification, and failed configuration saves.
+On a Windows development machine with MySQL binaries already present, run:
+
+```powershell
+.\src\test\powershell\Verify-MySqlSetup.ps1
+# Optional: -MySqlBin 'C:\Program Files\MySQL\MySQL Server 8.0\bin'
+```
+
+This checks the PowerShell helper and bundled MSI, starts a disposable MySQL
+process with a new data directory/random port, and verifies the actual JDBC
+password operation (including punctuation and Unicode). It does not change the
+installed MySQL service. Logs remain under `target/mysql-setup-smoke-*`;
+disposable database files are removed after a successful test.
+A complete fresh-install acceptance check still requires a clean Windows VM:
+run each edition without MySQL, choose a password, approve UAC, complete a sale,
+restart Windows, then verify that both editions reconnect without setup and
+that an existing server's password/data remain intact.
 
 ## License
 

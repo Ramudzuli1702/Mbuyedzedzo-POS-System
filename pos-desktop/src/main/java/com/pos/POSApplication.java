@@ -43,7 +43,7 @@ import java.sql.Statement;
  *   │     NO  → show SetupView
  *   │              → background thread: FirstRunSetup.run()
  *   │                    1. Detect / install MySQL
- *   │                    2. Generate & set root password
+ *   │                    2. Ask the user to choose a server password (or enter the existing one)
  *   │                    3. Write db.properties
  *   │              → on success: continue to DatabaseSetup ↓
  *   │              → on failure: show error in SetupView, stay open
@@ -145,8 +145,13 @@ public class POSApplication extends Application {
             // ── First launch — run setup ────────────────────────────────────────
             SetupView setupView = new SetupView(primaryStage);
             setupView.show();
+            setupView.setOnRetry(() -> runFirstSetup(primaryStage, setupView));
+            runFirstSetup(primaryStage, setupView);
+        }
+    }
 
-            Thread setupThread = new Thread(() -> {
+    private void runFirstSetup(Stage primaryStage, SetupView setupView) {
+        Thread setupThread = new Thread(() -> {
                 try {
                     FirstRunSetup.run(message -> setupView.setStatus(message), setupView.asPasswordPrompter());
 
@@ -156,14 +161,14 @@ public class POSApplication extends Application {
                 } catch (FirstRunSetup.SetupException e) {
                     System.err.println("First-run setup failed: " + e.getMessage());
                     Platform.runLater(() -> setupView.showError(e.getMessage()));
-                    // Leave the SetupView open so the user can read the error.
-                    // They can re-launch after fixing the issue (e.g. running as admin).
+                } catch (RuntimeException e) {
+                    log.error("Unexpected database setup failure", e);
+                    setupView.showError("Database setup could not finish. Select Retry to try again.");
                 }
             });
             setupThread.setName("pos-first-run-setup");
             setupThread.setDaemon(true);
             setupThread.start();
-        }
     }
 
     /**
@@ -186,11 +191,13 @@ public class POSApplication extends Application {
                     "sufficient permissions, then re-launch."
                 );
             } else {
-                showFatalError(
-                    "Database Error",
-                    "Could not connect to the database.\n\n" +
-                    "Please ensure MySQL is running and re-launch the application."
-                );
+                // A stopped service or stale credentials from an older installer can
+                // be repaired through the same first-run screen without deleting data.
+                SetupView repair = new SetupView(primaryStage);
+                repair.show();
+                repair.setOnRetry(() -> runFirstSetup(primaryStage, repair));
+                repair.showError("The database could not be prepared. Select Retry to start the server "
+                        + "or reconnect using its current password. Existing data will be kept.");
             }
             return;
         }

@@ -16,7 +16,8 @@ import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
 import java.io.File;
-import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 /**
  * SetupView — shown while FirstRunSetup runs in a background thread.
@@ -43,16 +44,14 @@ public class SetupView {
     private PasswordField passwordField;
     private TextField   passwordVisible;
     private Label       wrongPasswordHint;
-
-    /**
-     * A SynchronousQueue used to hand the user-entered password back to the
-     * setup thread that is blocking in promptForPassword().
-     * null is placed in the queue when the user cancels.
-     */
-    private final SynchronousQueue<String> passwordQueue = new SynchronousQueue<>();
-
-    // Sentinel object placed in the queue when the user cancels
-    private static final String CANCEL_SENTINEL = "\u0000CANCEL";
+    private Label       passwordHeading;
+    private Label       passwordDescription;
+    private PasswordField confirmPassword;
+    private Button      submitButton;
+    private Button      retryButton;
+    private FirstRunSetup.PasswordRequest passwordRequest;
+    private CompletableFuture<String> passwordAnswer;
+    private Runnable retryAction;
 
     public SetupView(Stage stage) {
         this.stage = stage;
@@ -117,14 +116,28 @@ public class SetupView {
             "-fx-background-radius: 8;"
         );
 
+        retryButton = new Button("Retry setup");
+        retryButton.setVisible(false);
+        retryButton.setManaged(false);
+        retryButton.setOnAction(e -> {
+            if (retryAction != null) {
+                resetForRetry();
+                retryAction.run();
+            }
+        });
+
         root.getChildren().addAll(
             appName, tagLine, progressBar, statusLabel,
-            restorePanel, promptPanel, errorLabel
+            restorePanel, promptPanel, errorLabel, retryButton
         );
 
-        Scene scene = new Scene(root); // no explicit size — see LoginView
-        root.prefWidthProperty().bind(scene.widthProperty());
-        root.prefHeightProperty().bind(scene.heightProperty());
+        // Password confirmation and diagnostic text must remain reachable on small screens.
+        ScrollPane scroll = new ScrollPane(root);
+        scroll.setFitToWidth(true);
+        scroll.setFitToHeight(true);
+        scroll.setStyle("-fx-background: #0f766e; -fx-background-color: #0f766e;");
+        root.setMinHeight(Region.USE_PREF_SIZE);
+        Scene scene = new Scene(scroll);
         stage.setScene(scene);
         stage.show();
     }
@@ -195,14 +208,15 @@ public class SetupView {
             "-fx-background-radius: 10;"
         );
 
-        Label heading = new Label("MySQL Root Password Required");
+        Label heading = new Label("Server password");
+        passwordHeading = heading;
         heading.setFont(Font.font("System", FontWeight.BOLD, 16));
         heading.setTextFill(Color.WHITE);
 
         Label sub = new Label(
-            "MySQL is already installed on this machine with a password you set.\n" +
-            "Enter it below so the POS system can create its database."
+            "Choose a server password. We will handle the installation and configuration."
         );
+        passwordDescription = sub;
         sub.setFont(Font.font("System", 13));
         sub.setTextFill(Color.web("#ccfbf1"));
         sub.setWrapText(true);
@@ -217,11 +231,15 @@ public class SetupView {
 
         // Password field row
         passwordField   = new PasswordField();
+        passwordField.setPromptText("Server password");
         passwordVisible = new TextField();
+        passwordVisible.setPromptText("Server password");
+        confirmPassword = new PasswordField();
+        confirmPassword.setPromptText("Confirm server password");
         passwordVisible.setVisible(false);
         passwordVisible.setManaged(false);
 
-        for (Control f : new Control[]{ passwordField, passwordVisible }) {
+        for (Control f : new Control[]{ passwordField, passwordVisible, confirmPassword }) {
             ((Region) f).setPrefWidth(300);
             f.setStyle(
                 "-fx-background-color: rgba(255,255,255,0.9);" +
@@ -252,6 +270,7 @@ public class SetupView {
 
         // Buttons
         Button connectBtn = new Button("Connect");
+        submitButton = connectBtn;
         connectBtn.setFont(Font.font("System", FontWeight.BOLD, 14));
         connectBtn.setStyle(
             "-fx-background-color: #0d9488;" +
@@ -280,7 +299,7 @@ public class SetupView {
 
         panel.getChildren().addAll(heading, sub, wrongPasswordHint,
                                    passwordField, passwordVisible,
-                                   showPwd, buttons);
+                                   confirmPassword, showPwd, buttons);
         return panel;
     }
 
@@ -308,7 +327,20 @@ public class SetupView {
             // Hide the prompt panel if it was showing
             promptPanel.setVisible(false);
             promptPanel.setManaged(false);
+            retryButton.setVisible(true);
+            retryButton.setManaged(true);
         });
+    }
+
+    public void setOnRetry(Runnable action) { retryAction = action; }
+
+    private void resetForRetry() {
+        errorLabel.setVisible(false);
+        errorLabel.setManaged(false);
+        retryButton.setVisible(false);
+        retryButton.setManaged(false);
+        statusLabel.setTextFill(Color.web("#ccfbf1"));
+        progressBar.setProgress(-1);
     }
 
     // ── Password prompting (called from setup thread, blocks until answered) ───
@@ -317,27 +349,39 @@ public class SetupView {
      * Shows the password-prompt panel and blocks the calling (setup) thread
      * until the user submits a password or cancels.
      *
-     * @param wrongPassword if true, shows the "incorrect password" hint
+     * @param request whether to choose a new password or enter an existing one
      * @return the password entered, or {@code null} if the user cancelled
      */
-    public String promptForPassword(boolean wrongPassword) {
+    public String promptForPassword(FirstRunSetup.PasswordRequest request) {
+        CompletableFuture<String> answer = new CompletableFuture<>();
         Platform.runLater(() -> {
-            wrongPasswordHint.setVisible(wrongPassword);
-            wrongPasswordHint.setManaged(wrongPassword);
+            passwordRequest = request;
+            passwordAnswer = answer;
+            passwordHeading.setText(request.newPassword() ? "Choose your server password" : "Connect to your existing server");
+            passwordDescription.setText(request.newPassword()
+                    ? "Choose and confirm a password of at least 8 characters. Keep it safe. We will install and configure your database automatically."
+                    : "Enter the MySQL root password already used on this computer. Your existing password and databases will be kept.");
+            submitButton.setText(request.newPassword() ? "Set up database" : "Connect");
+            confirmPassword.setVisible(request.newPassword());
+            confirmPassword.setManaged(request.newPassword());
+            confirmPassword.clear();
+            wrongPasswordHint.setText("Incorrect password. Please try again.");
+            wrongPasswordHint.setVisible(request.wrongPassword());
+            wrongPasswordHint.setManaged(request.wrongPassword());
             passwordField.clear();
             passwordVisible.clear();
-            progressBar.setProgress(-1); // keep it spinning
+            progressBar.setProgress(0); // waiting for the user
             promptPanel.setVisible(true);
             promptPanel.setManaged(true);
             passwordField.requestFocus();
         });
 
         try {
-            String result = passwordQueue.take(); // blocks until submitPassword/cancelPassword
-            if (CANCEL_SENTINEL.equals(result)) return null;
-            return result;
+            return answer.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return null;
+        } catch (ExecutionException e) {
             return null;
         }
     }
@@ -353,21 +397,35 @@ public class SetupView {
     // ── Private button handlers (run on FX thread) ────────────────────────────
 
     private void submitPassword() {
+        if (passwordAnswer == null || passwordAnswer.isDone()) return;
         String pwd = passwordField.isVisible()
             ? passwordField.getText()
             : passwordVisible.getText();
+        if (passwordRequest.newPassword()) {
+            String problem = FirstRunSetup.passwordProblem(pwd);
+            if (problem == null && !pwd.equals(confirmPassword.getText())) problem = "The passwords do not match.";
+            if (problem != null) {
+                wrongPasswordHint.setText(problem);
+                wrongPasswordHint.setVisible(true);
+                wrongPasswordHint.setManaged(true);
+                return;
+            }
+        }
         promptPanel.setVisible(false);
         promptPanel.setManaged(false);
-        try { passwordQueue.put(pwd); } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        passwordField.clear();
+        passwordVisible.clear();
+        confirmPassword.clear();
+        progressBar.setProgress(-1);
+        passwordAnswer.complete(pwd);
     }
 
     private void cancelPassword() {
         promptPanel.setVisible(false);
         promptPanel.setManaged(false);
-        try { passwordQueue.put(CANCEL_SENTINEL); } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        passwordField.clear();
+        passwordVisible.clear();
+        confirmPassword.clear();
+        if (passwordAnswer != null) passwordAnswer.complete(null);
     }
 }

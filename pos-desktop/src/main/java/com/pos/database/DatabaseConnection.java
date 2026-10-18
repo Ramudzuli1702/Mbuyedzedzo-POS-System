@@ -17,7 +17,7 @@ import java.util.Properties;
  * DatabaseConnection — a HikariCP connection pool over MySQL.
  *
  * On startup it reads connection details from:
- *   %PROGRAMDATA%\POS System\config\db.properties
+ *   %PROGRAMDATA%\POS System\config\db-standard.properties (or db-retail.properties)
  *
  * That file is written by FirstRunSetup on the very first launch.
  * If the file doesn't exist yet (e.g. during development) the hardcoded

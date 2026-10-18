@@ -31,14 +31,11 @@
         <app.icon>src/main/images/app_icon.ico</app.icon>
 
         <!--
-            MySQL 8.4 MSI — place this file in the project root before building.
-            jpackage will bundle it inside the installed app directory so
-            FirstRunSetup can find and run it silently on first launch.
-
-            Download from: https://dev.mysql.com/downloads/mysql/
-            Choose: Windows (x86, 64-bit), MSI Installer
+            Optional MySQL Installer web bootstrapper (not a renamed server MSI).
+            First-run setup downloads it from Oracle if it is not bundled.
+            The web bootstrapper still needs internet to download the server.
         -->
-        <mysql.msi.path>${project.basedir}/installer/mysql-installer.msi</mysql.msi.path>
+        <mysql.installer.name>mysql-installer-web-community-8.0.46.0.msi</mysql.installer.name>
 
         <!-- Fat-JAR name produced by the Shade plugin (no extension) -->
         <shaded.jar.name>point-of-sale-system-${project.version}</shaded.jar.name>
@@ -51,6 +48,8 @@
         -->
         <pos.edition>STANDARD</pos.edition>
         <pos.exe.name>POS</pos.exe.name>
+        <pos.runtime.path>${project.build.directory}/runtime</pos.runtime.path>
+        <pos.dist.path>${project.build.directory}/dist</pos.dist.path>
 
         <!-- Integration-test DB (empty = ITs skip themselves). Override on the CLI. -->
         <pos.it.jdbcUrl></pos.it.jdbcUrl>
@@ -290,7 +289,9 @@
             <!--
                 jpackage's -app-content flag copies extra files into the
                 installed app directory alongside the JAR and JRE.
-                We point it at target/app-content/ which this plugin populates.
+                Only the pinned web MSI goes into target/mysql-setup/.
+                A separate launcher input prevents stale server MSIs and old
+                runtime/build output from being swept into the installed app.
             -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -302,13 +303,29 @@
                         <phase>prepare-package</phase>
                         <goals><goal>copy-resources</goal></goals>
                         <configuration>
-                            <outputDirectory>${project.build.directory}/app-content</outputDirectory>
+                            <outputDirectory>${project.build.directory}/mysql-setup</outputDirectory>
                             <resources>
                                 <resource>
                                     <directory>${project.basedir}/installer</directory>
                                     <includes>
-                                        <include>mysql-installer.msi</include>
+                                        <include>${mysql.installer.name}</include>
+                                        <include>license.rtf</include>
                                     </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>stage-launcher-jar</id>
+                        <phase>package</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/package-input</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes><include>${shaded.jar.name}.jar</include></includes>
                                     <filtering>false</filtering>
                                 </resource>
                             </resources>
@@ -328,7 +345,7 @@
                   • JavaFX jmods unzipped at <javafx.jmods.path>
                   • WiX Toolset v3 on PATH for .exe output
                     Install: https://github.com/wixtoolset/wix3/releases
-                  • installer/mysql-installer.msi present before running verify
+                  • Optional: installer/${mysql.installer.name} (downloaded on first run if absent)
             -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -342,7 +359,7 @@
                         <phase>verify</phase>
                         <goals><goal>exec</goal></goals>
                         <configuration>
-                            <executable>jlink</executable>
+                            <executable>${java.home}/bin/jlink.exe</executable>
                             <arguments>
                                 <argument>--module-path</argument>
                                 <!--
@@ -365,7 +382,7 @@
                                 <argument>javafx.controls,javafx.fxml,javafx.swing,java.base,java.logging,java.management,java.sql,java.desktop,java.xml,java.naming,jdk.crypto.ec,jdk.httpserver,java.net.http,jdk.charsets</argument>
 
                                 <argument>--output</argument>
-                                <argument>${project.build.directory}/runtime</argument>
+                                <argument>${pos.runtime.path}</argument>
 
                                 <!--
                                     -compress in JDK 21+ uses zip-N notation.
@@ -386,15 +403,15 @@
                         <phase>verify</phase>
                         <goals><goal>exec</goal></goals>
                         <configuration>
-                            <executable>jpackage</executable>
+                            <executable>${java.home}/bin/jpackage.exe</executable>
                             <arguments>
                                 <!-- Custom JRE built by jlink above -->
                                 <argument>--runtime-image</argument>
-                                <argument>${project.build.directory}/runtime</argument>
+                                <argument>${pos.runtime.path}</argument>
 
                                 <!-- Folder containing the fat JAR -->
                                 <argument>--input</argument>
-                                <argument>${project.build.directory}</argument>
+                                <argument>${project.build.directory}/package-input</argument>
 
                                 <argument>--name</argument>
                                 <argument>${pos.exe.name}</argument>
@@ -410,17 +427,17 @@
                                 <argument>exe</argument>
 
                                 <argument>--dest</argument>
-                                <argument>${project.build.directory}/dist</argument>
+                                <argument>${pos.dist.path}</argument>
 
                                 <!-- ── Extra files bundled inside the installed app dir ── -->
                                 <!--
-                                    jpackage installs the app-content/ folder itself as a sibling
-                                    of the main .exe — i.e. <installdir>/app-content/mysql-installer.msi,
+                                    jpackage installs the mysql-setup/ folder itself as a sibling
+                                    of the main .exe — i.e. <installdir>/mysql-setup/mysql-installer-web-community-8.0.46.0.msi,
                                     NOT flattened into the install root and NOT inside the "app"
-                                    subfolder. FirstRunSetup.getMysqlMsiPath() looks there.
+                                    subfolder. WindowsMySqlProvisioner looks there.
                                 -->
                                 <argument>--app-content</argument>
-                                <argument>${project.build.directory}/app-content</argument>
+                                <argument>${project.build.directory}/mysql-setup</argument>
 
                                 <!-- ── Branding ───────────────────────────────────── -->
                                 <argument>--app-version</argument>
@@ -445,11 +462,9 @@
                                 <argument>--win-menu</argument>
                                 <!--
                                     -win-per-user-install is REMOVED here intentionally.
-                                    Installing MySQL silently requires admin rights (UAC).
-                                    A per-machine install (the default without this flag)
-                                    correctly triggers the UAC elevation prompt.
-                                    If you add -win-per-user-install back, MySQL's MSI
-                                    will fail silently because it can't write to Program Files.
+                                    Per-machine application installation goes in Program Files.
+                                    First-run MySQL setup separately elevates its helper through
+                                    UAC; the POS itself runs normally without administrator rights.
                                 -->
 
                                 <!-- ── JVM flags forwarded to the launched app ───── -->
@@ -463,11 +478,8 @@
                                 <argument>--add-opens=javafx.base/com.sun.javafx.reflect=ALL-UNNAMED</argument>
 
                                 <!--
-                                    No -Djpackage.app-path/$APPDIR here any more — that macro
-                                    never actually resolved at runtime (FirstRunSetup.getMysqlMsiPath()
-                                    always fell through to its fallback instead), so it was dead
-                                    weight. FirstRunSetup now finds the install directory via
-                                    ProcessHandle.current() instead, which needs no help from here.
+                                    WindowsMySqlProvisioner finds the install directory through
+                                    ProcessHandle.current(); no launcher path macro is needed.
                                 -->
 
                             </arguments>

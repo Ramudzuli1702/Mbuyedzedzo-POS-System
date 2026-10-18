@@ -2,7 +2,7 @@
 ;  POS System — Inno Setup Installer Script
 ;  Produces a single .exe that installs:
 ;    1. Java 22 Runtime (bundled — no internet needed)
-;    2. MySQL 8.4 Community (silent install)
+;    2. MySQL Installer web bootstrapper (server setup runs inside the POS)
 ;    3. The POS application JAR
 ;    4. A desktop shortcut and Start Menu entry
 ;
@@ -10,9 +10,9 @@
 ;    1. Download Inno Setup: https://jrsoftware.org/isdl.php
 ;    2. Download Java 22 JRE: https://adoptium.net (get the .zip, not installer)
 ;        → Extract to: installer/jre/
-;    3. Download MySQL 8.4 MSI installer:
-;        https://dev.mysql.com/downloads/mysql/
-;        → Save as: installer/mysql-installer.msi
+;    3. Download mysql-installer-web-community-8.0.46.0.msi from Oracle.
+;        Save under installer/ with its original filename.
+;        The POS performs server installation/configuration on first launch.
 ;    4. Build your POS JAR: mvn clean package
 ;        → Copy target/point-of-sale-system-1.0.0.jar to installer/
 ;    5. Open this file in Inno Setup → Compile
@@ -68,7 +68,7 @@ Name: "{commonappdata}\POS System\config"
 Source: "installer\jre\*"; DestDir: "{app}\jre"; Flags: recursesubdirs createallsubdirs
 
 ; ── MySQL Installer ───────────────────────────────────────────────────────────
-Source: "installer\mysql-installer.msi"; DestDir: "{tmp}"; Flags: deleteafterinstall
+Source: "installer\mysql-installer-web-community-8.0.46.0.msi"; DestDir: "{app}\mysql-setup"
 
 ; ── Application JAR ───────────────────────────────────────────────────────────
 Source: "installer\{#JarName}"; DestDir: "{app}"
@@ -81,20 +81,7 @@ Source: "installer\launch.bat"; DestDir: "{app}"
 Source: "installer\pos-icon.ico"; DestDir: "{app}"
 
 [Run]
-; ── Step 1: Install MySQL silently ───────────────────────────────────────────
-; /quiet = no UI, /norestart = don't reboot mid-install
-; MYSQL_ROOT_PASSWORD sets the root password (change this before distributing)
-Filename: "msiexec.exe";
-Parameters: "/i ""{tmp}\mysql-installer.msi"" /quiet /norestart MYSQL_ROOT_PASSWORD=pos_root_2025 ADDLOCAL=ALL";
-StatusMsg: "Installing MySQL (this may take a minute)...";
-Flags: waituntilterminated runhidden;
-
-; ── Step 2: Start MySQL service ───────────────────────────────────────────────
-Filename: "net"; Parameters: "start MySQL84";
-StatusMsg: "Starting MySQL service...";
-Flags: waituntilterminated runhidden shellexec;
-
-; ── Step 3: Launch the POS (optional — show after install) ───────────────────
+; Launch normally: the POS asks for a password and elevates only its setup helper.
 Filename: "{app}\launch.bat";
 Description: "Launch POS System now";
 Flags: postinstall nowait skipifsilent shellexec;
@@ -112,54 +99,5 @@ IconFilename: "{app}\pos-icon.ico"
 Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\launch.bat";
 IconFilename: "{app}\pos-icon.ico"; Tasks: startupicon
 
-[UninstallRun]
-; Stop MySQL before uninstalling (don't uninstall MySQL — customer may use it elsewhere)
-Filename: "net"; Parameters: "stop MySQL84";
-Flags: runhidden shellexec; RunOnceId: "StopMySQL"
-
-[Code]
-// ── Custom installer code ─────────────────────────────────────────────────────
-
-// Check if MySQL is already installed — skip MSI if so
-function IsMySQLInstalled(): Boolean;
-var
-  version: String;
-begin
-  Result := RegQueryStringValue(HKLM,
-    'SOFTWARE\MySQL AB\MySQL Server 8.4',
-    'Version', version);
-  if not Result then
-    Result := RegQueryStringValue(HKLM,
-      'SOFTWARE\WOW6432Node\MySQL AB\MySQL Server 8.4',
-      'Version', version);
-end;
-
-// Show message if MySQL is already present
-procedure InitializeWizard();
-begin
-  if IsMySQLInstalled() then
-    MsgBox('MySQL 8.4 is already installed on this machine. ' +
-           'The installer will skip MySQL setup and use the existing installation.',
-           mbInformation, MB_OK);
-end;
-
-// Write the database connection config with the correct password
-// This runs after all files are copied
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  configContent: String;
-  configPath: String;
-begin
-  if CurStep = ssPostInstall then begin
-    // Write a properties file the app reads on startup
-    // The app reads this to override the hardcoded DatabaseConnection constants
-    configPath := ExpandConstant('{commonappdata}\POS System\config\db.properties');
-    configContent :=
-      'db.host=127.0.0.1' + #13#10 +
-      'db.port=3306' + #13#10 +
-      'db.name=pos_db' + #13#10 +
-      'db.username=root' + #13#10 +
-      'db.password=pos_root_2025' + #13#10;
-    SaveStringToFile(configPath, configContent, False);
-  end;
-end;
+; Do not write db.properties, set a shared root password, or stop a shared
+; MySQL service here. FirstRunSetup owns database setup for both editions.
