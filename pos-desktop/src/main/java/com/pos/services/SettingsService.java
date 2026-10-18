@@ -41,6 +41,18 @@ public class SettingsService {
     private static final String CONFIG_DIR  = "config";
     private static final String CONFIG_FILE = CONFIG_DIR + "/app.config";
     private static final String SALT        = "AFMVFCC_POS_SALT_2025"; // fixed salt, not a secret
+    private final Path localConfigFile;
+    private final Path legacyConfigFile;
+
+    public SettingsService() { this(defaultLocalConfigFile(), Paths.get(CONFIG_FILE)); }
+    SettingsService(Path localConfigFile,Path legacyConfigFile) {
+        this.localConfigFile=localConfigFile.toAbsolutePath();this.legacyConfigFile=legacyConfigFile.toAbsolutePath();
+    }
+    private static Path defaultLocalConfigFile() {
+        String appData=System.getenv("LOCALAPPDATA");
+        Path base=appData==null||appData.isBlank()?Paths.get(System.getProperty("user.home"),".mbuyedzedzo"):Paths.get(appData,"Mbuyedzedzo");
+        return base.resolve(com.pos.Edition.current().name().toLowerCase(java.util.Locale.ROOT)).resolve("app.config");
+    }
 
     // ── Business Profile (Database) ────────────────────────────────────────────
 
@@ -123,6 +135,16 @@ public class SettingsService {
      */
     public String getReportsSavePath() { return absoluteOrDefault("reports.savePath", "Reports"); }
     public String getBackupSavePath()  { return absoluteOrDefault("backup.savePath",  "Backups"); }
+    public String getInventorySavePath() { return localSheetPath("inventory.savePath", "Inventory"); }
+    public String getStocktakeSavePath() { return localSheetPath("stocktaking.savePath", "Stocktaking"); }
+    private String localSheetPath(String key,String folder) {
+        String path=getLocalSetting(key).trim();return !path.isEmpty()&&new File(path).isAbsolute()?path:defaultDesktopFolder(folder);
+    }
+    public File sheetExportDirectory(boolean stocktaking) throws IOException {
+        Path directory = Paths.get(stocktaking ? getStocktakeSavePath() : getInventorySavePath());
+        Files.createDirectories(directory);
+        return directory.toFile();
+    }
 
     private String absoluteOrDefault(String key, String subfolder) {
         String configured = getBusinessSetting(key, "").trim();
@@ -139,7 +161,7 @@ public class SettingsService {
 
     private Properties loadLocalConfig() {
         Properties props = new Properties();
-        File file = new File(CONFIG_FILE);
+        File file = (Files.isRegularFile(localConfigFile)?localConfigFile:legacyConfigFile).toFile();
         if (!file.exists()) return props;
 
         try {
@@ -153,16 +175,22 @@ public class SettingsService {
     }
 
     private boolean saveLocalConfig(Properties props) {
+        Path temporary=null;
         try {
-            Files.createDirectories(Paths.get(CONFIG_DIR));
+            Files.createDirectories(localConfigFile.getParent());
             StringWriter sw = new StringWriter();
             props.store(sw, "POS Local Config — do not edit manually");
             String encrypted = encrypt(sw.toString());
-            Files.writeString(Paths.get(CONFIG_FILE), encrypted);
+            temporary=Files.createTempFile(localConfigFile.getParent(),"app-",".tmp");
+            Files.writeString(temporary, encrypted);
+            try { Files.move(temporary,localConfigFile,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING); }
+            catch(AtomicMoveNotSupportedException ex){Files.move(temporary,localConfigFile,StandardCopyOption.REPLACE_EXISTING);}
             return true;
         } catch (Exception e) {
             System.err.println("Could not save local config: " + e.getMessage());
             return false;
+        } finally {
+            if(temporary!=null)try{Files.deleteIfExists(temporary);}catch(IOException ignored){}
         }
     }
 

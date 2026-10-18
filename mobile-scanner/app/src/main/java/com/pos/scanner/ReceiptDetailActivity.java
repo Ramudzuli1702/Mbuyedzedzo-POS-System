@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 
-public class ReceiptDetailActivity extends AppCompatActivity {
+public class ReceiptDetailActivity extends AuthenticatedActivity {
 
     private TextView customerNameText;
     private TextView customerEmailText;
@@ -35,6 +35,7 @@ public class ReceiptDetailActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_receipt_detail);
+        findViewById(R.id.receiptBack).setOnClickListener(v -> finish());
 
         customerNameText = findViewById(R.id.customerNameText);
         customerEmailText = findViewById(R.id.customerEmailText);
@@ -47,10 +48,10 @@ public class ReceiptDetailActivity extends AppCompatActivity {
         Receipt receipt = (Receipt) getIntent().getSerializableExtra("receipt");
 
         if (receipt != null) {
-            customerNameText.setText(receipt.getCustomerName());
-            customerEmailText.setText(receipt.getCustomerEmail());
+            customerNameText.setText("Customer: " + receipt.getCustomerName());
+            customerEmailText.setText("Email: " + (receipt.getCustomerEmail()==null||receipt.getCustomerEmail().isEmpty()?"Not supplied":receipt.getCustomerEmail()));
             cashierNameText.setText("Cashier: " + receipt.getCashierName());
-            dateText.setText(receipt.getDate());
+            dateText.setText("Date: " + receipt.getDate());
 
             itemsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
             ReceiptItemAdapter itemAdapter = new ReceiptItemAdapter(receipt.getItems());

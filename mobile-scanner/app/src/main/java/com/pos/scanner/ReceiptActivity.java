@@ -22,12 +22,12 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ReceiptActivity extends AppCompatActivity {
+public class ReceiptActivity extends AuthenticatedActivity {
     
     private RecyclerView receiptsRecyclerView;
     private TextView emptyStateText;
     private ProgressBar progressBar;
-    private FloatingActionButton refreshFab;
+    private android.widget.Button refreshFab;
     
     private ReceiptAdapter receiptAdapter;
     private List<Receipt> receipts;
@@ -73,6 +73,7 @@ public class ReceiptActivity extends AppCompatActivity {
         emptyStateText = findViewById(R.id.emptyStateText);
         progressBar = findViewById(R.id.progressBar);
         refreshFab = findViewById(R.id.refreshFab);
+        findViewById(R.id.receiptsBack).setOnClickListener(v -> finish());
         
         handler = new Handler(Looper.getMainLooper());
     }

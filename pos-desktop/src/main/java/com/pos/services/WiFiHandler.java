@@ -35,6 +35,7 @@ public class WiFiHandler {
     private volatile Consumer<String> onScanReceived;
     private volatile Consumer<Product> onProductReceived;
     private int actualPort=-1;
+    private volatile StocktakeProtocol activeSession;
 
     public synchronized boolean startListening(Consumer<String> scan,Consumer<Product> product) {
         onScanReceived=scan;onProductReceived=product;
@@ -56,9 +57,9 @@ public class WiFiHandler {
                 output=new PrintWriter(new OutputStreamWriter(socket.getOutputStream(),StandardCharsets.UTF_8),true);
                 connected=true;receiptsInFlight.clear();
                 StocktakeProtocol stocktake=new StocktakeProtocol(stocktakes); // Auth never survives a new socket.
-                JsonObject hello=new JsonObject();hello.addProperty("type","connected");hello.addProperty("protocolVersion",2);
+                activeSession=stocktake;
+                JsonObject hello=new JsonObject();hello.addProperty("type","connected");hello.addProperty("protocolVersion",3);hello.addProperty("requiresLogin",true);
                 hello.addProperty("message","Connected to "+com.pos.Branding.APP_NAME);sendData(gson.toJson(hello));
-                sendCategories();drainReceipts();
                 try(BufferedReader input=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8))) {
                     String line;
                     while(connected && (line=readFrame(input,8*1024*1024))!=null) {
@@ -67,8 +68,13 @@ public class WiFiHandler {
                             if(parsed.isJsonArray())parsed=parsed.getAsJsonArray().get(0); // Legacy phone wrapper.
                             JsonObject message=parsed.getAsJsonObject();
                             String type=message.get("type").getAsString();
-                            if(type.startsWith("stocktake_")) sendData(gson.toJson(stocktake.handle(message)));
-                            else switch(type) {
+                            if(type.startsWith("stocktake_") || type.startsWith("auth_")) {
+                                JsonObject response=stocktake.handle(message);sendData(gson.toJson(response));
+                                if(type.equals("auth_logout") || type.equals("stocktake_logout"))receiptsInFlight.clear();
+                                if((type.equals("auth_login") || type.equals("stocktake_login")) && response.get("ok").getAsBoolean()) { sendCategories();drainReceipts(); }
+                            } else {
+                            stocktake.requireSession(message);
+                            switch(type) {
                                 case "request_categories" -> sendCategories();
                                 case "scan" -> {
                                     String code=message.get("data").getAsString();
@@ -84,6 +90,9 @@ public class WiFiHandler {
                                 }
                                 default -> reply("error","Unsupported scanner request. Update the desktop and phone together.");
                             }
+                            }
+                        } catch(StocktakeService.Rejected e) {
+                            JsonObject error=new JsonObject();error.addProperty("type","error");error.addProperty("code",e.code);error.addProperty("message",e.getMessage());sendData(error.toString());
                         } catch(Exception e) { reply("error","The desktop could not process this request. Please retry."); }
                     }
                 }
@@ -126,7 +135,7 @@ public class WiFiHandler {
         catch(Exception e) { log.warn("Phone receipt could not be queued; the saved desktop receipt is still available",e); }
     }
     private synchronized void drainReceipts() {
-        if(!connected)return;
+        if(!connected || activeSession==null || !activeSession.isAuthenticated())return;
         try {
             for(JsonObject message:receipts.pending()) {
                 String id=message.get("id").getAsString();
@@ -135,12 +144,14 @@ public class WiFiHandler {
         } catch(Exception e) { log.warn("Pending phone receipts could not be loaded",e); }
     }
     public synchronized void sendData(String data) {
+        if(data.contains("\"stocktake_status\"") && (activeSession==null || !activeSession.isAuthenticated()))return;
         PrintWriter writer=output;
         if(!connected || writer==null)return;
         writer.println(data);writer.flush();
         if(writer.checkError())closeConnection();
     }
     public void closeConnection() {
+        activeSession=null;
         connected=false;Socket socket=clientSocket;clientSocket=null;
         try { if(socket!=null)socket.close(); } catch(IOException ignored) {}
         output=null;receiptsInFlight.clear();

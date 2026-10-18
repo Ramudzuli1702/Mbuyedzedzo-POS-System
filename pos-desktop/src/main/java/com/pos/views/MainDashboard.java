@@ -385,7 +385,7 @@ public class MainDashboard {
         salesBtn     = createMenuButton(Icons.sales(18),        "Sales",           true);
         salesHistoryBtn = createMenuButton(Icons.reports(18),   "Sales History",   true);
         inventoryBtn = createMenuButton(Icons.inventory(18),     "Inventory",       full);
-        stocktakingBtn = createMenuButton(Icons.inventory(18), "Stocktaking", true);
+        stocktakingBtn = createMenuButton(Icons.stocktaking(18), "Stocktaking", true);
         userMgmtBtn  = createMenuButton(Icons.users(18),         "User Management", full);
         customerBtn  = createMenuButton(Icons.customers(18),     "Customers",       full);
         reportsBtn   = createMenuButton(Icons.reports(18),       "Reports",         full);

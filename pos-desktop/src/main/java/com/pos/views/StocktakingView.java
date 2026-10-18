@@ -41,10 +41,11 @@ public final class StocktakingView {
     public StocktakingView(User user, StocktakeService service) { this.user = user; this.service = service; }
 
     public BorderPane getView() {
-        root.setStyle(Theme.page()); root.setPadding(new Insets(20));
+        root.setStyle(Theme.page());
         table.setId("stocktakeProducts"); submit.setId("stocktakeSubmit");
         importCounts.setId("stocktakeImport"); export.setId("stocktakeExport"); summary.setId("stocktakeSummary");
-        Label title = new Label("Stocktaking"); title.setFont(Theme.sectionTitle());
+        Label title = new Label("Stocktaking"); title.setFont(javafx.scene.text.Font.font("System", javafx.scene.text.FontWeight.BOLD, 24));
+        title.setStyle("-fx-text-fill: " + Theme.BRAND + ";");
         Label description = new Label("Count inventory here or in Excel. An Admin or Manager approves corrections before stock changes.");
         description.setWrapText(true); description.setStyle("-fx-text-fill: " + Theme.TEXT_MUTED + ";");
         status.setWrapText(true); notes.setWrapText(true);
@@ -55,7 +56,8 @@ public final class StocktakingView {
         });
         drafts.setOnAction(e -> { if (!binding && drafts.getValue() != null) load(drafts.getValue().id()); });
         HBox actions = new HBox(10, drafts, refresh, start);
-        VBox top = new VBox(10, title, description, actions, status); top.setPadding(new Insets(0, 0, 16, 0)); root.setTop(top);
+        VBox top = new VBox(6, title, description); top.setPadding(new Insets(20)); top.setStyle(Theme.topBar()); root.setTop(top);
+        drafts.setStyle(Theme.input());
         search.setPromptText("Search products or scan a barcode and press Enter"); search.setStyle(Theme.input());
         search.textProperty().addListener((o, a, b) -> filter()); HBox.setHgrow(search, Priority.ALWAYS);
         search.setOnAction(e -> {
@@ -81,10 +83,12 @@ public final class StocktakingView {
         table.setPlaceholder(new Label("Start a new stocktake or select a saved one."));
         HBox toolbar = new HBox(10, search, export, importCounts);
         VBox body = new VBox(12, toolbar, table); body.setPadding(new Insets(16)); body.setStyle(Theme.card());
-        VBox.setVgrow(table, Priority.ALWAYS); root.setCenter(body);
+        VBox.setVgrow(table, Priority.ALWAYS);
         Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox footer = new HBox(12, editNotes, spacer, submit);
-        VBox bottom = new VBox(10, summary, notes, footer); bottom.setPadding(new Insets(16, 0, 0, 0)); root.setBottom(bottom);
+        VBox bottom = new VBox(10, summary, notes, footer);
+        VBox page = new VBox(16, actions, status, body, bottom); page.setPadding(new Insets(20));
+        VBox.setVgrow(body, Priority.ALWAYS); root.setCenter(page);
         for (Button button : List.of(refresh, export, importCounts, editNotes)) Theme.hover(button, Theme.secondaryButton(), Theme.secondaryHover());
         for (Button button : List.of(start, submit)) Theme.hover(button, Theme.primaryButton(), Theme.primaryHover());
         start.setOnAction(e -> run(() -> service.start(UUID.randomUUID().toString(), user.getStaffID()), this::show));
@@ -153,6 +157,8 @@ public final class StocktakingView {
     }
     private void export() {
         FileChooser chooser = new FileChooser(); chooser.setTitle("Export stocktake to Excel");
+        try { chooser.setInitialDirectory(new com.pos.services.SettingsService().sheetExportDirectory(true)); }
+        catch (Exception ex) { message("Check the stocktake sheet folder in Settings: " + ex.getMessage(), true); return; }
         chooser.setInitialFileName("stocktake-" + sheet.id() + ".xlsx"); chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel Workbook", "*.xlsx"));
         File file = chooser.showSaveDialog(root.getScene().getWindow()); if (file == null) return;
         CountSheet snapshot = sheet;

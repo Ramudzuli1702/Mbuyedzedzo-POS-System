@@ -44,6 +44,9 @@ public class MainActivity extends AppCompatActivity {
     private WiFiCommunication wifiComm;
     private boolean isConnected = false;
     private String savedServerIP = "";
+    private boolean loginOpening;
+    private boolean resumed;
+    private Button signOut;
 
     // WiFi connection broadcast receiver
     private final BroadcastReceiver connectionReceiver = new BroadcastReceiver() {
@@ -52,7 +55,9 @@ public class MainActivity extends AppCompatActivity {
             if ("WIFI_CONNECTED".equals(intent.getAction())) {
                 boolean connected = intent.getBooleanExtra("connected", false);
                 updateConnectionStatus(connected);
+                ensureSignedIn();
             }
+            if(WiFiCommunication.ACTION_AUTH_CHANGED.equals(intent.getAction())){updateConnectionStatus(wifiComm.isConnected());ensureSignedIn();}
         }
     };
 
@@ -85,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         // Register broadcast receivers
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 connectionReceiver, new IntentFilter("WIFI_CONNECTED"));
+        LocalBroadcastManager.getInstance(this).registerReceiver(connectionReceiver,new IntentFilter(WiFiCommunication.ACTION_AUTH_CHANGED));
         LocalBroadcastManager.getInstance(this).registerReceiver(
                 receiptReceiver, new IntentFilter("RECEIPT_RECEIVED"));
     }
@@ -99,6 +105,8 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.stocktakeButton).setOnClickListener(v -> startActivity(new Intent(this, StocktakeActivity.class)));
         connectionCard = findViewById(R.id.connectionCard);
         connectButton = findViewById(R.id.connectButton);
+        signOut = findViewById(R.id.signOutButton);
+        signOut.setOnClickListener(v -> {wifiComm.logout();ensureSignedIn();});
     }
 
     private void loadSavedIP() {
@@ -277,11 +285,14 @@ public class MainActivity extends AppCompatActivity {
         isConnected = connected;
 
         runOnUiThread(() -> {
+            boolean signedIn=wifiComm!=null&&wifiComm.isSignedIn();
+            for(View action:new View[]{scanButton,addProductButton,viewReceiptsButton,findViewById(R.id.stocktakeButton)}) { action.setEnabled(signedIn);action.setAlpha(signedIn?1f:0.5f); }
+            signOut.setVisibility(signedIn?View.VISIBLE:View.GONE);
             if (connected) {
                 connectionStatus.setText("Connected to POS System");
                 connectionStatus.setTextColor(getResources().getColor(R.color.status_success));
                 connectionCard.setCardBackgroundColor(getResources().getColor(R.color.status_success_bg));
-                statusText.setText("Ready to scan");
+                statusText.setText(signedIn?"Signed in as "+wifiComm.getStaffName():"Sign in to continue");
                 connectButton.setText("Disconnect");
                 connectButton.setBackgroundTintList(getResources().getColorStateList(R.color.status_error));
 
@@ -333,8 +344,17 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        resumed=true;
+        loginOpening=false;
         if (wifiComm != null) {
             updateConnectionStatus(wifiComm.isConnected());
+            ensureSignedIn();
         }
     }
+    private void ensureSignedIn(){
+        if(resumed&&wifiComm!=null&&wifiComm.isConnected()&&!wifiComm.isSignedIn()&&!loginOpening&&!isFinishing()){
+            loginOpening=true;startActivity(new Intent(this,LoginActivity.class));
+        }
+    }
+    @Override protected void onPause(){resumed=false;super.onPause();}
 }

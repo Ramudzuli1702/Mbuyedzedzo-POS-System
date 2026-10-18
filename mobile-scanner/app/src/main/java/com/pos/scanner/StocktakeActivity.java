@@ -21,17 +21,17 @@ import com.google.gson.*;
 import java.util.*;
 
 /** Staff sign-in -> immutable inventory snapshot -> local physical counts -> desktop approval. */
-public final class StocktakeActivity extends AppCompatActivity {
+public final class StocktakeActivity extends AuthenticatedActivity {
     private WiFiCommunication wifi;
     private final Gson gson=new Gson();
     private StocktakeDraft draft;
     private SharedPreferences drafts;
     private String draftKey;
-    private boolean busy,binding,showLogin=true;
+    private boolean busy,binding;
     private TextView status,summary,empty;
-    private TextInputEditText email,password,search,notes;
-    private View loginPanel,countPanel,progress;
-    private Button login,submit,scan,newCount,logout;
+    private TextInputEditText search,notes;
+    private View countPanel,progress;
+    private Button submit,scan,newCount;
     private final Items adapter=new Items();
     private final BroadcastReceiver events=new BroadcastReceiver(){
         @Override public void onReceive(Context context,Intent event){
@@ -46,31 +46,21 @@ public final class StocktakeActivity extends AppCompatActivity {
         super.onCreate(state);setContentView(R.layout.activity_stocktake);
         wifi=WiFiCommunication.getInstance(this);drafts=getSharedPreferences("stocktake_drafts",MODE_PRIVATE);
         status=findViewById(R.id.stocktakeStatus);summary=findViewById(R.id.stocktakeSummary);empty=findViewById(R.id.stocktakeEmpty);
-        email=findViewById(R.id.stocktakeEmail);password=findViewById(R.id.stocktakePassword);search=findViewById(R.id.stocktakeSearch);notes=findViewById(R.id.stocktakeNotes);
-        loginPanel=findViewById(R.id.stocktakeLoginPanel);countPanel=findViewById(R.id.stocktakeCountPanel);progress=findViewById(R.id.stocktakeProgress);
-        login=findViewById(R.id.stocktakeLogin);submit=findViewById(R.id.stocktakeSubmit);scan=findViewById(R.id.stocktakeScan);newCount=findViewById(R.id.stocktakeNew);logout=findViewById(R.id.stocktakeLogout);
+        search=findViewById(R.id.stocktakeSearch);notes=findViewById(R.id.stocktakeNotes);
+        countPanel=findViewById(R.id.stocktakeCountPanel);progress=findViewById(R.id.stocktakeProgress);
+        submit=findViewById(R.id.stocktakeSubmit);scan=findViewById(R.id.stocktakeScan);newCount=findViewById(R.id.stocktakeNew);
         RecyclerView list=findViewById(R.id.stocktakeItems);list.setLayoutManager(new LinearLayoutManager(this));list.setAdapter(adapter);
         findViewById(R.id.stocktakeBack).setOnClickListener(v->finish());
-        login.setOnClickListener(v->signIn());submit.setOnClickListener(v->confirmSubmit());scan.setOnClickListener(v->scan());newCount.setOnClickListener(v->fresh());
-        logout.setOnClickListener(v->{persist();wifi.logout();showLogin=true;render();});
+        submit.setOnClickListener(v->confirmSubmit());scan.setOnClickListener(v->scan());newCount.setOnClickListener(v->fresh());
         search.addTextChangedListener(watcher(()->adapter.filter(search.getText().toString())));
         notes.addTextChangedListener(watcher(()->{if(!binding&&draft!=null&&"Draft".equals(draft.status)){draft.notes=notes.getText().toString();persist();}}));
         IntentFilter filter=new IntentFilter("WIFI_CONNECTED");filter.addAction(WiFiCommunication.ACTION_STOCKTAKE_STATUS);
         LocalBroadcastManager.getInstance(this).registerReceiver(events,filter);
-        if(wifi.isSignedIn()){showLogin=false;load(false);}else render();
+        if(wifi.isSignedIn())load(false);
     }
     private TextWatcher watcher(Runnable action){return new TextWatcher(){public void beforeTextChanged(CharSequence s,int st,int count,int after){}public void onTextChanged(CharSequence s,int st,int before,int count){}public void afterTextChanged(Editable s){action.run();}};}
-    private void signIn(){
-        if(busy)return;
-        if(!wifi.isConnected()){message("Connect to the desktop from the home screen first.",true);return;}
-        String address=email.getText().toString().trim();char[] secret=password.getText().toString().toCharArray();
-        if(address.isEmpty()||secret.length==0){Arrays.fill(secret,'\0');message("Enter your staff email and password.",true);return;}
-        password.setText("");setBusy(true);message("Signing in…",false);
-        ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(password.getWindowToken(),0);
-        wifi.login(address,secret,response->{if(isDestroyed())return;setBusy(false);if(ok(response)){showLogin=false;load(false);}else failure(response);});
-    }
     private void load(boolean fresh){
-        if(!wifi.isSignedIn()){showLogin=true;render();return;}
+        if(!wifi.isSignedIn()){requireLogin();return;}
         draftKey="draft:"+wifi.getServerAddress()+":"+wifi.getStaffId();
         StocktakeDraft local=null;
         if(!fresh)try{local=gson.fromJson(drafts.getString(draftKey,null),StocktakeDraft.class);}catch(RuntimeException ignored){}
@@ -87,19 +77,18 @@ public final class StocktakeActivity extends AppCompatActivity {
                 if(response.has("code")&&"NOT_FOUND".equals(response.get("code").getAsString())&&draft.counted()==0){load(true);return;}
                 failure(response);return;
             }
-            draft=gson.fromJson(response.get("data"),StocktakeDraft.class);draft.restoreLocalCounts(saved);showLogin=false;persist();render();
+            draft=gson.fromJson(response.get("data"),StocktakeDraft.class);draft.restoreLocalCounts(saved);persist();render();
         });
     }
     private boolean ok(JsonObject response){return response.has("ok")&&response.get("ok").getAsBoolean();}
     private void failure(JsonObject response){
-        if(response.has("code")&&"AUTH_REQUIRED".equals(response.get("code").getAsString()))showLogin=true;
+        if(response.has("code")&&"AUTH_REQUIRED".equals(response.get("code").getAsString())){requireLogin();return;}
         render();message(response.has("message")?response.get("message").getAsString():"Please retry.",true);
     }
     private boolean editable(){return draft!=null&&"Draft".equals(draft.status)&&!busy;}
     private void render(){
-        loginPanel.setVisibility(showLogin?View.VISIBLE:View.GONE);countPanel.setVisibility(showLogin?View.GONE:View.VISIBLE);
-        logout.setVisibility(wifi.isSignedIn()?View.VISIBLE:View.GONE);logout.setEnabled(!busy);
-        login.setEnabled(!busy&&wifi.isConnected());email.setEnabled(!busy);password.setEnabled(!busy);progress.setVisibility(busy?View.VISIBLE:View.GONE);
+        countPanel.setVisibility(View.VISIBLE);
+        progress.setVisibility(busy?View.VISIBLE:View.GONE);
         if(draft==null)return;
         summary.setText(getString(R.string.count_progress,draft.counted(),draft.items.size(),draft.status));
         binding=true;if(!notes.getText().toString().equals(draft.notes))notes.setText(draft.notes);binding=false;
@@ -146,7 +135,7 @@ public final class StocktakeActivity extends AppCompatActivity {
         if(matches.size()==1)count(matches.get(0));else message(matches.isEmpty()?"Barcode not found in this inventory. Search by product name.":"More than one product uses this barcode. Select the product by name.",true);
     }
     private void confirmSubmit(){
-        if(!wifi.isSignedIn()){showLogin=true;render();return;}
+        if(!wifi.isSignedIn()){requireLogin();return;}
         if(draft==null||busy||draft.counted()==0)return;
         new MaterialAlertDialogBuilder(this).setTitle(R.string.submit_for_approval)
                 .setMessage(getString(R.string.submit_counted_products,draft.counted(),draft.items.size()-draft.counted()))

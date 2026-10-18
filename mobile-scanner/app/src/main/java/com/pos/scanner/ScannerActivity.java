@@ -51,6 +51,9 @@ public class ScannerActivity extends AppCompatActivity {
     private final BroadcastReceiver wifiStatusReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if(WiFiCommunication.ACTION_AUTH_CHANGED.equals(intent.getAction())&&!"connect".equals(getIntent().getStringExtra("mode"))&&!WiFiCommunication.getInstance(ScannerActivity.this).isSignedIn()){
+                if(!isFinishing()){startActivity(new Intent(ScannerActivity.this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));finish();}return;
+            }
             boolean connected = intent.getBooleanExtra("connected", false);
             updateConnectionUI(connected);
         }
@@ -226,7 +229,11 @@ public class ScannerActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if(!"connect".equals(getIntent().getStringExtra("mode"))&&!WiFiCommunication.getInstance(this).isSignedIn()){
+            startActivity(new Intent(this,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));finish();return;
+        }
         cameraActive = true;
+        LocalBroadcastManager.getInstance(this).registerReceiver(wifiStatusReceiver,new IntentFilter(WiFiCommunication.ACTION_AUTH_CHANGED));
         barcodeView.resume();
     }
 
@@ -234,6 +241,7 @@ public class ScannerActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         cameraActive = false;
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(wifiStatusReceiver);
         barcodeView.pause();
     }
 

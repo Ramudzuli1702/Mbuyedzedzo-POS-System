@@ -24,6 +24,48 @@ public final class Ui {
 
     private Ui() {}
 
+    public static javafx.scene.layout.GridPane formGrid() {
+        var grid=new javafx.scene.layout.GridPane();grid.setHgap(20);grid.setVgap(14);
+        var label=new javafx.scene.layout.ColumnConstraints();label.setMinWidth(150);
+        var value=new javafx.scene.layout.ColumnConstraints();value.setHgrow(Priority.ALWAYS);
+        grid.getColumnConstraints().addAll(label,value);return grid;
+    }
+    public static void formField(javafx.scene.layout.GridPane grid,int row,String label,Node control) {
+        Label caption=new Label(label);caption.setFont(Theme.label());caption.setTextFill(Color.web(Theme.TEXT_MUTED));
+        if(control instanceof javafx.scene.layout.Region region)region.setMaxWidth(Double.MAX_VALUE);
+        if(control instanceof javafx.scene.control.Control)control.setStyle(Theme.input());
+        grid.add(caption,0,row);grid.add(control,1,row);
+    }
+    public static VBox section(String title,Node... children) {
+        Label heading=new Label(title);heading.setFont(Theme.sectionTitle());heading.setTextFill(Color.web(Theme.TEXT));
+        VBox box=new VBox(14,heading);box.getChildren().addAll(children);box.setPadding(new Insets(20));box.setStyle(Theme.card());return box;
+    }
+    /** Details and editable fields share one scrollable, labeled display. Save never dismisses validation errors. */
+    public static Dialog<Void> editor(String title,String heading,Node content,java.util.function.BooleanSupplier save) {
+        Dialog<Void> dialog=new Dialog<>();dialog.setTitle(title);dialog.setResizable(true);
+        Label recordHeading=new Label(heading);recordHeading.setFont(Font.font("System",FontWeight.BOLD,24));recordHeading.setTextFill(Color.web(Theme.BRAND));recordHeading.setWrapText(true);
+        Label caption=new Label(title);caption.setFont(Theme.body());caption.setTextFill(Color.web(Theme.TEXT_MUTED));
+        VBox header=new VBox(6,recordHeading,caption);header.setPadding(new Insets(20));header.setStyle(Theme.topBar());dialog.getDialogPane().setHeader(header);
+        dialog.getDialogPane().setStyle(Theme.page());dialog.getDialogPane().setPrefSize(900,680);
+        Label feedback=new Label();feedback.setWrapText(true);
+        VBox body=new VBox(16,content,feedback);body.setPadding(new Insets(16));
+        javafx.scene.control.ScrollPane scroll=new javafx.scene.control.ScrollPane(body);scroll.setFitToWidth(true);scroll.setStyle(Theme.page());
+        dialog.getDialogPane().setContent(scroll);
+        if(save!=null){
+            ButtonType saveType=new ButtonType("Save changes",javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+            dialog.getDialogPane().getButtonTypes().add(saveType);
+            Node button=dialog.getDialogPane().lookupButton(saveType);button.setStyle(Theme.primaryButton());
+            button.addEventFilter(javafx.event.ActionEvent.ACTION,e->{
+                e.consume();
+                try { boolean saved=save.getAsBoolean();feedback.setText(saved?"Changes saved.":"Could not save these changes. Please retry.");feedback.setTextFill(Color.web(saved?Theme.SUCCESS:Theme.DANGER)); }
+                catch(IllegalArgumentException ex){feedback.setText(ex.getMessage());feedback.setTextFill(Color.web(Theme.DANGER));}
+            });
+        }
+        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().lookupButton(ButtonType.CLOSE).setStyle(Theme.secondaryButton());
+        return dialog;
+    }
+
     /**
      * A compact, readable table-row action button: a short text label plus a
      * tooltip. Replaces bare emoji icons that are hard to identify.
@@ -103,54 +145,16 @@ public final class Ui {
     }
 
     public static void showDetailDialog(String title, String header, Node summary, Button... actions) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle(title);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setStyle("-fx-background-color: " + Theme.SURFACE + ";");
-        dialog.getDialogPane().setPrefWidth(460);
-
-        VBox content = new VBox(18);
-        content.setPadding(new Insets(4, 4, 4, 4));
-
-        if (header != null && !header.isBlank()) {
-            Label headerLabel = new Label(header);
-            headerLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
-            headerLabel.setTextFill(Color.web(Theme.TEXT));
-            content.getChildren().add(headerLabel);
-        }
-
-        content.getChildren().add(summary);
-
-        if (actions != null && actions.length > 0) {
-            HBox actionBar = new HBox(10);
-            actionBar.setAlignment(Pos.CENTER_LEFT);
-            Region spacer = new Region();
-            HBox.setHgrow(spacer, Priority.ALWAYS);
-            actionBar.getChildren().add(spacer);
-            for (Button a : actions) {
-                // Closing the dialog before the action runs matches how every
-                // existing action already behaves: it shows its own result
-                // alert and refreshes the table itself. The original handler
-                // must NOT run synchronously in this same callback though —
-                // dialog.close() only requests the outer showAndWait() nested
-                // event loop to unwind, it doesn't unwind it immediately, so
-                // an action that opens a second Dialog/TextInputDialog right
-                // here starts it reentrant on top of a loop still mid-
-                // teardown: the new window gets a title bar but never a real
-                // layout/paint pass (blank content) and can misroute input.
-                // Deferring with runLater lets the outer dialog actually
-                // finish closing first.
-                var original = a.getOnAction();
-                a.setOnAction(e -> {
-                    dialog.close();
-                    if (original != null) Platform.runLater(() -> original.handle(e));
-                });
-                actionBar.getChildren().add(a);
+        VBox body=new VBox(16,section("Record information",summary));
+        Dialog<Void> dialog=editor(title,header,body,null);
+        if(actions!=null&&actions.length>0){
+            javafx.scene.layout.FlowPane bar=new javafx.scene.layout.FlowPane(12,12);
+            for(Button action:actions){
+                var original=action.getOnAction();
+                action.setOnAction(e->{dialog.close();if(original!=null)Platform.runLater(()->original.handle(e));});bar.getChildren().add(action);
             }
-            content.getChildren().add(actionBar);
+            body.getChildren().add(section("Available actions",bar));
         }
-
-        dialog.getDialogPane().setContent(content);
         dialog.showAndWait();
     }
 }

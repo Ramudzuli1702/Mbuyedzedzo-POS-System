@@ -15,6 +15,7 @@ import java.util.concurrent.*;
 public final class WiFiCommunication {
     public static final String ACTION_CATEGORIES_UPDATED="CATEGORIES_UPDATED";
     public static final String ACTION_STOCKTAKE_STATUS="STOCKTAKE_STATUS";
+    public static final String ACTION_AUTH_CHANGED="AUTH_CHANGED";
     private static WiFiCommunication instance;
     private final Context context;
     private final Handler main=new Handler(Looper.getMainLooper());
@@ -28,6 +29,7 @@ public final class WiFiCommunication {
     private volatile int generation,attempts;
     private String host,address;private int port;
     private volatile String token,staffName;
+    private volatile long authenticatedUntil;
     private volatile int staffId;
     private volatile List<String> categories=Collections.emptyList();
     public interface Callback { void complete(JsonObject response); }
@@ -90,6 +92,10 @@ public final class WiFiCommunication {
                 case "response": {
                     if(json.has("code")&&"AUTH_REQUIRED".equals(json.get("code").getAsString()))clearAuth();
                     String id=json.get("requestId").getAsString();Callback callback=requests.remove(id);
+                    if(callback!=null&&json.has("ok")&&json.get("ok").getAsBoolean()&&json.has("data")&&json.get("data").isJsonObject()){
+                        JsonObject account=json.getAsJsonObject("data");
+                        if(account.has("token")){token=account.get("token").getAsString();authenticatedUntil=SystemClock.elapsedRealtime()+30*60*1000;staffId=account.get("staffId").getAsInt();staffName=account.get("name").getAsString();}
+                    }
                     if(callback!=null)main.post(()->callback.complete(json));break;
                 }
                 case "categories": {
@@ -101,6 +107,9 @@ public final class WiFiCommunication {
                 }
                 case "stocktake_status": {
                     Intent event=new Intent(ACTION_STOCKTAKE_STATUS);event.putExtra("message",json.toString());broadcast(event);break;
+                }
+                case "error": {
+                    if(json.has("code")&&"AUTH_REQUIRED".equals(json.get("code").getAsString()))clearAuth();break;
                 }
                 default: break;
             }
@@ -114,20 +123,22 @@ public final class WiFiCommunication {
     }
     private void broadcast(Intent intent){LocalBroadcastManager.getInstance(context).sendBroadcast(intent);}
     private void notifyConnection(boolean connected){Intent event=new Intent("WIFI_CONNECTED");event.putExtra("connected",connected);broadcast(event);}
-    private void clearAuth(){token=null;staffId=0;staffName=null;}
-    public boolean isSignedIn(){return token!=null;}
+    private void clearAuth(){token=null;authenticatedUntil=0;staffId=0;staffName=null;broadcast(new Intent(ACTION_AUTH_CHANGED));}
+    public boolean isSignedIn(){if(token!=null&&SystemClock.elapsedRealtime()>=authenticatedUntil)clearAuth();return connected&&token!=null;}
     public int getStaffId(){return staffId;}
     public String getStaffName(){return staffName==null?"Staff":staffName;}
     public boolean isConnected(){return connected;}
     public String getServerAddress(){return address;}
     public List<String> getCategories(){return categories;}
     public void requestCategories(){JsonObject j=new JsonObject();j.addProperty("type","request_categories");sendData(j.toString());}
-    public boolean sendScan(String code){JsonObject j=new JsonObject();j.addProperty("type","scan");j.addProperty("data",code);return sendNow(j.toString());}
+    public boolean sendScan(String code){if(!isSignedIn())return false;JsonObject j=new JsonObject();j.addProperty("type","scan");j.addProperty("data",code);return sendNow(j.toString());}
     public void sendData(String text){sender.execute(()->sendNow(text));}
     private boolean sendNow(String text) {
+        try{JsonObject payload=JsonParser.parseString(text).getAsJsonObject();if(token!=null)payload.addProperty("token",token);text=payload.toString();}catch(RuntimeException ignored){}
         synchronized(writeLock) {
             PrintWriter writer=output;if(!connected||writer==null)return false;
             writer.println(text);writer.flush();
+            if(token!=null)authenticatedUntil=SystemClock.elapsedRealtime()+30*60*1000;
             if(writer.checkError()){Socket old=socket;try{if(old!=null)old.close();}catch(IOException ignored){}return false;}
             return true;
         }
@@ -140,23 +151,25 @@ public final class WiFiCommunication {
         sender.execute(()-> {if(!sendNow(request.toString())){Callback waiting=requests.remove(id);if(waiting!=null)main.post(()->waiting.complete(error("DISCONNECTED","Connect to the desktop to continue.")));}});
     }
     public void login(String email,char[] password,Callback callback) {
-        clearAuth();JsonObject challenge=new JsonObject();challenge.addProperty("type","stocktake_challenge");challenge.addProperty("email",email);
+        final int loginGeneration=generation;
+        clearAuth();JsonObject challenge=new JsonObject();challenge.addProperty("type","auth_challenge");challenge.addProperty("email",email);
         request(challenge,response-> {
             if(!response.get("ok").getAsBoolean()){Arrays.fill(password,'\0');callback.complete(response);return;}
             sender.execute(()-> {
                 try {
                     JsonObject data=response.getAsJsonObject("data");
                     byte[] proof=PasswordProof.create(password,data.get("algorithm").getAsString(),data.get("iterations").getAsInt(),Base64.decode(data.get("salt").getAsString(),Base64.DEFAULT),data.get("nonce").getAsString(),data.get("challengeId").getAsString());
-                    JsonObject login=new JsonObject();login.addProperty("type","stocktake_login");login.add("challengeId",data.get("challengeId"));login.addProperty("proof",Base64.encodeToString(proof,Base64.NO_WRAP));Arrays.fill(proof,(byte)0);
+                    JsonObject login=new JsonObject();login.addProperty("type","auth_login");login.add("challengeId",data.get("challengeId"));login.addProperty("proof",Base64.encodeToString(proof,Base64.NO_WRAP));Arrays.fill(proof,(byte)0);
                     request(login,result-> {
-                        if(result.get("ok").getAsBoolean()){JsonObject account=result.getAsJsonObject("data");token=account.get("token").getAsString();staffId=account.get("staffId").getAsInt();staffName=account.get("name").getAsString();}
+                        if(loginGeneration!=generation||!connected){callback.complete(error("DISCONNECTED","Connection changed. Sign in again."));return;}
+                        if(result.get("ok").getAsBoolean()){JsonObject account=result.getAsJsonObject("data");token=account.get("token").getAsString();staffId=account.get("staffId").getAsInt();staffName=account.get("name").getAsString();broadcast(new Intent(ACTION_AUTH_CHANGED));}
                         callback.complete(result);
                     });
                 } catch(Exception e){Arrays.fill(password,'\0');main.post(()->callback.complete(error("AUTH_FAILED","Could not complete sign-in. Check your password and update the desktop.")));}
             });
         });
     }
-    public void logout(){if(token!=null){JsonObject j=new JsonObject();j.addProperty("type","stocktake_logout");request(j,r->{});}clearAuth();}
+    public void logout(){if(token!=null){JsonObject j=new JsonObject();j.addProperty("type","auth_logout");request(j,r->{});}clearAuth();}
     public void closeConnection() {
         reconnect=false;++generation;connected=false;clearAuth();
         Socket old=socket;socket=null;output=null;try{if(old!=null)old.close();}catch(IOException ignored){}

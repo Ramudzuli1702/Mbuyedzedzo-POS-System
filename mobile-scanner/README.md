@@ -1,4 +1,4 @@
-﻿# Mbuyedzedzo Scanner 1.3.0
+# Mbuyedzedzo Scanner 1.4.0
 
 Android companion for the [desktop POS](../pos-desktop), using the existing teal Material theme, outlined inputs and rounded action cards. Requires Android 7.0 or later.
 
@@ -6,14 +6,16 @@ Android companion for the [desktop POS](../pos-desktop), using the existing teal
 
 Connect both devices to the same trusted local network. Enter the desktop's displayed IP address and port, or scan its connection QR (`POS:<ip>:<port>`). The default port is 8888; the desktop tries the next nine ports if necessary. Navigation between phone screens keeps the connection alive.
 
+After connecting, sign in with an existing active desktop staff account. One app-wide session covers scanning, product submissions, receipts and stocktaking. Sign out from the home screen. Reconnecting requires sign-in again; sessions expire after 30 minutes of inactivity. The desktop enforces authentication before accepting scans/products or sending categories/receipts. Use the matching updated desktop; the original v1.0.0 installers cannot authenticate this version.
+
 Product scanning reads Code 128 (including desktop labels), Code 39/93, EAN-13/8, UPC-A/E, ITF and Codabar. QR scanning is reserved for pairing. Leading zeroes are preserved; equivalent UPC-A and zero-prefixed EAN-13 forms also match. In Add Product and Stocktaking, scanning fills/selects a product instead of adding it to a sale.
 
 ## Stocktaking
 
 1. Connect and open **Stocktaking**.
-2. Sign in with an active desktop staff account's email and password. Inventory loads into a fixed snapshot.
+2. Inventory loads into a fixed snapshot using the staff account already signed into the app.
 3. Search by name, barcode or category, or scan. Enter physical quantities, including zero. Blank means **not counted**; those products stay unchanged.
-4. Counts and notes save on the phone after each edit. The current screen can count offline. Reconnect and sign in again before submitting. After restarting the app, sign in to resume that staff member's saved snapshot for this server.
+4. Counts and notes save on the phone after each edit. If disconnected, reconnect and sign in to resume that staff member's saved snapshot for this server.
 5. Submit counted products. Submission freezes the sheet and leaves live stock unchanged.
 6. An **Admin or Manager** opens desktop **Supervisor Approvals > Stocktakes**, compares loaded, physical and current quantities, and approves or rejects. Rejection requires notes. Approval applies all counted corrections in one transaction and records the reviewer. Products whose stock changed since the snapshot require a fresh count, even if their quantity returned to its original value. Deleted counted products also block approval.
 
@@ -29,7 +31,7 @@ Legacy multiline receipts ending with `===END_RECEIPT===` are supported. Reliabl
 
 ## Protocol
 
-UTF-8 newline-delimited JSON uses Gson and bounded frames. Existing `scan`, `add_product` and `request_categories` messages remain. Added messages: `receipt`/`receipt_ack`, `stocktake_challenge`, `stocktake_login`, `stocktake_start`, `stocktake_resume`, `stocktake_submit`, `stocktake_logout`, `stocktake_status`. Stocktake responses correlate by `requestId`; authenticated requests carry a socket-bound token. The server checks ownership and roles independently of client fields. UUID snapshot IDs make retries safe after lost responses.
+UTF-8 newline-delimited JSON uses Gson and bounded frames. `auth_challenge`, `auth_login` and `auth_logout` manage the shared session; older stocktake authentication aliases remain supported. All scan, product, category, receipt-acknowledgement and stocktake requests carry a socket-bound token. Responses correlate by `requestId`. The server checks ownership and roles independently of client fields. UUID snapshot IDs make retries safe after lost responses. Protocol version 3 advertises `requiresLogin` in the connection handshake.
 
 ## Build and verification
 

@@ -183,7 +183,7 @@ public class SettingsView {
         VBox card = card();
 
         Label heading = cardHeading("File Save Locations");
-        Label sub = new Label("Where receipts, reports, and backups are saved on this machine.");
+        Label sub = new Label("Choose save folders for receipts, reports, inventory sheets, stocktake sheets and backups.");
         sub.setFont(Font.font("System", 12));
         sub.setTextFill(Color.web("#64748b"));
         sub.setWrapText(true);
@@ -195,20 +195,29 @@ public class SettingsView {
         TextField receiptPath = field(settings.getReceiptSavePath());
         TextField reportPath  = field(settings.getReportsSavePath());
         TextField backupPath  = field(settings.getBackupSavePath());
+        TextField inventoryPath = field(settings.getInventorySavePath());
+        TextField stocktakePath = field(settings.getStocktakeSavePath());
 
         addRowWithBrowse(grid, 0, "Receipts Folder", receiptPath);
         addRowWithBrowse(grid, 1, "Reports Folder",  reportPath);
         addRowWithBrowse(grid, 2, "Backups Folder",  backupPath);
+        addRowWithBrowse(grid, 3, "Inventory Sheets", inventoryPath);
+        addRowWithBrowse(grid, 4, "Stocktake Sheets", stocktakePath);
 
         Label status = statusLabel();
 
         Button saveBtn = saveButton();
         saveBtn.setMaxWidth(Double.MAX_VALUE);
         saveBtn.setOnAction(e -> {
-            settings.saveBusinessSetting("receipt.savePath", ensureTrailingSlash(receiptPath.getText()));
-            settings.saveBusinessSetting("reports.savePath", ensureTrailingSlash(reportPath.getText()));
-            settings.saveBusinessSetting("backup.savePath",  ensureTrailingSlash(backupPath.getText()));
-            status("File paths saved.", status, true);
+            if(!new File(inventoryPath.getText().trim()).isAbsolute()||!new File(stocktakePath.getText().trim()).isAbsolute()){
+                status("Choose absolute folders for inventory and stocktake sheets.",status,false);return;
+            }
+            boolean saved=settings.saveBusinessSetting("receipt.savePath", ensureTrailingSlash(receiptPath.getText()));
+            saved=settings.saveBusinessSetting("reports.savePath", ensureTrailingSlash(reportPath.getText()))&&saved;
+            saved=settings.saveBusinessSetting("backup.savePath", ensureTrailingSlash(backupPath.getText()))&&saved;
+            saved=settings.saveLocalSetting("inventory.savePath", ensureTrailingSlash(inventoryPath.getText()))&&saved;
+            saved=settings.saveLocalSetting("stocktaking.savePath", ensureTrailingSlash(stocktakePath.getText()))&&saved;
+            status(saved?"File paths saved.":"Some paths could not be saved. Check access permissions and retry.", status, saved);
         });
 
         card.getChildren().addAll(heading, sub, new Separator(), grid, saveBtn, status);

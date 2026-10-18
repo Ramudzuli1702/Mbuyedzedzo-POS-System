@@ -192,50 +192,7 @@ public class PromoView {
         return box;
     }
 
-    private void showPromoDetailsDialog(Promo p) {
-        String limit = p.getUsageLimit() != null ? String.valueOf(p.getUsageLimit()) : "∞";
-        BigDecimal min = p.getMinimumPurchase();
-
-        VBox summary = new VBox(10);
-        summary.getChildren().addAll(
-            com.pos.components.Ui.detailRow("Discount:", p.getDiscountDisplay()),
-            com.pos.components.Ui.detailRow("Minimum purchase:",
-                min == null || min.compareTo(BigDecimal.ZERO) == 0 ? "None" : "R" + String.format("%.2f", min)),
-            com.pos.components.Ui.detailRow("Usage:", p.getUsageCount() + " / " + limit),
-            com.pos.components.Ui.detailRow("Valid until:",
-                p.getValidTill() != null ? p.getValidTill().toLocalDate().toString() : "No expiry"),
-            com.pos.components.Ui.detailRow("Status:", p.getStatusDisplay())
-        );
-
-        if (!currentUser.hasFullAccess()) {
-            com.pos.components.Ui.showDetailDialog("Promo Code", p.getPromoCode() + " — " + p.getPromoName(), summary);
-            return;
-        }
-
-        Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit this promo");
-        Button toggleBtn = com.pos.components.Ui.actionButton(p.isActive() ? "Pause" : "Enable",
-            p.isActive() ? "#64748b" : "#16a34a", "Pause / enable this promo");
-        Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#dc2626", "Delete this promo");
-
-        editBtn.setOnAction(e -> showPromoDialog(p));
-        toggleBtn.setOnAction(e -> {
-            promoService.toggleActive(p.getPromoID(), !p.isActive());
-            loadTable();
-        });
-        deleteBtn.setOnAction(e -> {
-            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
-                "Delete promo \"" + p.getPromoCode() + "\"?", ButtonType.YES, ButtonType.NO);
-            confirm.showAndWait().ifPresent(r -> {
-                if (r == ButtonType.YES) {
-                    promoService.deletePromo(p.getPromoID());
-                    loadTable();
-                }
-            });
-        });
-
-        com.pos.components.Ui.showDetailDialog("Promo Code", p.getPromoCode() + " — " + p.getPromoName(), summary,
-            editBtn, toggleBtn, deleteBtn);
-    }
+    private void showPromoDetailsDialog(Promo p) { showPromoDialog(p); }
 
     private void loadTable() {
         ObservableList<Promo> promos = promoService.getAllPromos();
@@ -245,99 +202,34 @@ public class PromoView {
     // ── Add / Edit dialog ─────────────────────────────────────────────────────
 
     private void showPromoDialog(Promo existing) {
-        boolean isEdit = existing != null;
-        Dialog<Promo> dialog = new Dialog<>();
-        dialog.setTitle(isEdit ? "Edit Promo" : "New Promo Code");
-        dialog.setHeaderText(null);
-        dialog.getDialogPane().setPrefWidth(480);
-
-        ButtonType saveBtn = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveBtn, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(14);
-        grid.setVgap(12);
-        grid.setPadding(new Insets(20));
-
-        TextField codeField  = tf(isEdit ? existing.getPromoCode() : "", "e.g. SUMMER20");
-        TextField nameField  = tf(isEdit ? existing.getPromoName()  : "", "e.g. Summer Sale 2025");
-        codeField.setDisable(isEdit); // code cannot change after creation
-
-        ToggleGroup typeGroup = new ToggleGroup();
-        RadioButton percentRb = new RadioButton("Percentage (%)");
-        RadioButton fixedRb   = new RadioButton("Fixed amount (R)");
-        percentRb.setToggleGroup(typeGroup);
-        fixedRb.setToggleGroup(typeGroup);
-
-        if (!isEdit || "PERCENT".equals(existing.getDiscountType())) percentRb.setSelected(true);
-        else fixedRb.setSelected(true);
-
-        TextField valueField = tf(isEdit ? existing.getDiscountValue().toPlainString() : "", "e.g. 20");
-        TextField minField   = tf(isEdit && existing.getMinimumPurchase() != null
-                ? existing.getMinimumPurchase().toPlainString() : "0", "0 = no minimum");
-
-        DatePicker fromPicker = new DatePicker(isEdit && existing.getValidFrom() != null
-                ? existing.getValidFrom().toLocalDate() : null);
-        DatePicker tillPicker = new DatePicker(isEdit && existing.getValidTill() != null
-                ? existing.getValidTill().toLocalDate() : null);
-
-        TextField limitField = tf(isEdit && existing.getUsageLimit() != null
-                ? String.valueOf(existing.getUsageLimit()) : "", "Leave empty = unlimited");
-
-        CheckBox activeCheck = new CheckBox("Active");
-        activeCheck.setSelected(!isEdit || existing.isActive());
-
-        int row = 0;
-        addRow(grid, row++, "Promo Code *",   codeField);
-        addRow(grid, row++, "Name",           nameField);
-        addRow(grid, row++, "Discount Type",  new HBox(14, percentRb, fixedRb));
-        addRow(grid, row++, "Discount Value *", valueField);
-        addRow(grid, row++, "Min Purchase (R)", minField);
-        addRow(grid, row++, "Valid From",     fromPicker);
-        addRow(grid, row++, "Valid Until",    tillPicker);
-        addRow(grid, row++, "Usage Limit",    limitField);
-        grid.add(activeCheck, 1, row);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(btn -> {
-            if (btn != saveBtn) return null;
-            String code = codeField.getText().trim().toUpperCase();
-            String valStr = valueField.getText().trim();
-            if (code.isEmpty() || valStr.isEmpty()) {
-                showAlert("Code and discount value are required.");
-                return null;
-            }
-            BigDecimal val;
-            try { val = new BigDecimal(valStr); } catch (NumberFormatException e) {
-                showAlert("Discount value must be a number.");
-                return null;
-            }
-
-            Promo p = isEdit ? existing : new Promo();
-            p.setPromoCode(code);
-            p.setPromoName(nameField.getText().trim());
-            p.setDiscountType(percentRb.isSelected() ? "PERCENT" : "FIXED");
-            p.setDiscountValue(val);
-            BigDecimal min = BigDecimal.ZERO;
-            try { min = new BigDecimal(minField.getText().trim()); } catch (Exception ignored) {}
-            p.setMinimumPurchase(min);
-            p.setValidFrom(fromPicker.getValue() != null
-                ? LocalDateTime.of(fromPicker.getValue(), LocalTime.MIDNIGHT) : null);
-            p.setValidTill(tillPicker.getValue() != null
-                ? LocalDateTime.of(tillPicker.getValue(), LocalTime.of(23, 59)) : null);
-            String limitStr = limitField.getText().trim();
-            p.setUsageLimit(limitStr.isEmpty() ? null : Integer.parseInt(limitStr));
-            p.setActive(activeCheck.isSelected());
-            return p;
-        });
-
-        Optional<Promo> result = dialog.showAndWait();
-        result.ifPresent(p -> {
-            boolean ok = isEdit ? promoService.updatePromo(p) : promoService.addPromo(p);
-            if (ok) loadTable();
-            else showAlert("Failed to save promo. Code may already exist.");
-        });
+        boolean edit=existing!=null,allowed=currentUser.hasFullAccess();
+        var grid=com.pos.components.Ui.formGrid();
+        TextField code=new TextField(edit?existing.getPromoCode():""),name=new TextField(edit?existing.getPromoName():"");code.setDisable(edit);
+        ComboBox<String> type=new ComboBox<>();type.getItems().addAll("PERCENT","FIXED");type.setValue(edit?existing.getDiscountType():"PERCENT");
+        TextField value=new TextField(edit?existing.getDiscountValue().toPlainString():""),minimum=new TextField(edit&&existing.getMinimumPurchase()!=null?existing.getMinimumPurchase().toPlainString():"0");
+        DatePicker from=new DatePicker(edit&&existing.getValidFrom()!=null?existing.getValidFrom().toLocalDate():null),until=new DatePicker(edit&&existing.getValidTill()!=null?existing.getValidTill().toLocalDate():null);
+        TextField limit=new TextField(edit&&existing.getUsageLimit()!=null?existing.getUsageLimit().toString():"");limit.setPromptText("Blank means unlimited");
+        CheckBox active=new CheckBox("Active");active.setSelected(!edit||existing.isActive());
+        com.pos.components.Ui.formField(grid,0,"Promo code",code);com.pos.components.Ui.formField(grid,1,"Name",name);
+        com.pos.components.Ui.formField(grid,2,"Discount type",type);com.pos.components.Ui.formField(grid,3,"Discount value",value);
+        com.pos.components.Ui.formField(grid,4,"Minimum purchase (R)",minimum);com.pos.components.Ui.formField(grid,5,"Valid from",from);
+        com.pos.components.Ui.formField(grid,6,"Valid until",until);com.pos.components.Ui.formField(grid,7,"Usage limit",limit);grid.add(active,1,8);grid.setDisable(!allowed);
+        VBox content=new VBox(16,com.pos.components.Ui.section("Promotion information",grid));
+        if(edit)content.getChildren().add(com.pos.components.Ui.section("Usage",com.pos.components.Ui.detailRow("Uses", ""+existing.getUsageCount()),com.pos.components.Ui.detailRow("Status",existing.getStatusDisplay())));
+        Dialog<Void> dialog=com.pos.components.Ui.editor(edit?"Promo details":"New promo",edit?existing.getPromoCode():"New promotion",content,allowed?()->{
+            try{
+                BigDecimal discount=new BigDecimal(value.getText()),min=new BigDecimal(minimum.getText());
+                Integer max=limit.getText().isBlank()?null:Integer.valueOf(limit.getText());
+                if(code.getText().isBlank()||discount.signum()<=0||min.signum()<0||("PERCENT".equals(type.getValue())&&discount.compareTo(BigDecimal.valueOf(100))>0)||max!=null&&max<1)throw new IllegalArgumentException("Enter a code, positive discount, nonnegative minimum and positive usage limit.");
+                if(from.getValue()!=null&&until.getValue()!=null&&until.getValue().isBefore(from.getValue()))throw new IllegalArgumentException("The end date must be on or after the start date.");
+                Promo updated=new Promo();if(edit)updated.setPromoID(existing.getPromoID());updated.setPromoCode(code.getText().trim().toUpperCase());updated.setPromoName(name.getText().trim());
+                updated.setDiscountType(type.getValue());updated.setDiscountValue(discount);updated.setMinimumPurchase(min);updated.setUsageLimit(max);updated.setActive(active.isSelected());
+                updated.setValidFrom(from.getValue()==null?null:LocalDateTime.of(from.getValue(),LocalTime.MIDNIGHT));updated.setValidTill(until.getValue()==null?null:LocalDateTime.of(until.getValue(),LocalTime.of(23,59)));
+                boolean saved=edit?promoService.updatePromo(updated):promoService.addPromo(updated);if(saved)loadTable();return saved;
+            }catch(NumberFormatException ex){throw new IllegalArgumentException("Enter valid amounts and a whole usage limit.");}
+        }:null);
+        if(edit&&allowed){Button delete=new Button("Delete promo");delete.setStyle(com.pos.utils.Theme.dangerButton());delete.setOnAction(e->{Alert confirm=new Alert(Alert.AlertType.CONFIRMATION,"Delete this promo?",ButtonType.YES,ButtonType.NO);if(confirm.showAndWait().orElse(ButtonType.NO)==ButtonType.YES){promoService.deletePromo(existing.getPromoID());loadTable();dialog.close();}});content.getChildren().add(com.pos.components.Ui.section("Promotion actions",delete));}
+        dialog.showAndWait();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

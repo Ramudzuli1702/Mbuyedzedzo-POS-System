@@ -87,6 +87,14 @@ public final class Icons {
         return frame(size, box, mid, mid2, vert);
     }
 
+    /** Clipboard and checked rows distinguish physical counts from catalogue inventory. */
+    public static Node stocktaking(double size) {
+        Rectangle board = new Rectangle(3, 3, 12, 14); board.setArcWidth(2); board.setArcHeight(2);
+        Rectangle clip = new Rectangle(6, 1, 6, 4); clip.setArcWidth(2); clip.setArcHeight(2);
+        return frame(size, board, clip, new Polyline(5, 8, 6, 9, 8, 7), new Line(10, 8, 13, 8),
+                new Polyline(5, 12, 6, 13, 8, 11), new Line(10, 12, 13, 12));
+    }
+
     public static Node users(double size) {
         Circle head = new Circle(7, 6, 2.6);
         Arc body = new Arc(7, 17, 6.5, 6.5, 0, 180);

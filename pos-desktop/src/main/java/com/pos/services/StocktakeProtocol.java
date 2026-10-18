@@ -11,9 +11,11 @@ import java.util.*;
 public final class StocktakeProtocol {
     private final StocktakeService service;
     private final Gson gson=new Gson();
-    private StocktakeService.Account challengeAccount, signedIn;
+    private StocktakeService.Account challengeAccount;
+    private volatile StocktakeService.Account signedIn;
     private String nonce, challengeId, token;
-    private long challengeUntil, sessionUntil, blockedUntil;
+    private long challengeUntil, blockedUntil;
+    private volatile long sessionUntil;
     private int attempts;
     public StocktakeProtocol() { this(new StocktakeService()); }
     public StocktakeProtocol(StocktakeService service) { this.service=service; }
@@ -24,11 +26,11 @@ public final class StocktakeProtocol {
         try {
             String type=string(request,"type",50);
             Object data;
-            if(type.equals("stocktake_challenge")) data=challenge(string(request,"email",254));
-            else if(type.equals("stocktake_login")) data=login(request);
+            if(type.equals("stocktake_challenge") || type.equals("auth_challenge")) data=challenge(string(request,"email",254));
+            else if(type.equals("stocktake_login") || type.equals("auth_login")) data=login(request);
             else {
                 requireSession(request);
-                String id=type.equals("stocktake_logout")?"":string(request,"stocktakeId",36);
+                String id=type.equals("stocktake_logout") || type.equals("auth_logout")?"":string(request,"stocktakeId",36);
                 data=switch(type) {
                     case "stocktake_start" -> service.start(id,signedIn.id());
                     case "stocktake_resume" -> service.resume(id,signedIn.id());
@@ -42,7 +44,7 @@ public final class StocktakeProtocol {
                         }
                         yield service.submit(id,signedIn.id(),counts,request.has("notes")?string(request,"notes",1000):"");
                     }
-                    case "stocktake_logout" -> { signedIn=null;token=null;yield Map.of("signedOut",true); }
+                    case "stocktake_logout", "auth_logout" -> { signedIn=null;token=null;yield Map.of("signedOut",true); }
                     default -> throw new StocktakeService.Rejected("UNSUPPORTED","Update the desktop to use stocktaking.");
                 };
             }
@@ -89,15 +91,21 @@ public final class StocktakeProtocol {
         signedIn=current;token=random();sessionUntil=System.currentTimeMillis()+30*60*1000;attempts=0;
         return Map.of("token",token,"staffId",current.id(),"name",current.name(),"role",current.role());
     }
-    private void requireSession(JsonObject request) throws Exception {
+    public void requireSession(JsonObject request) throws Exception {
         if(signedIn==null || System.currentTimeMillis()>sessionUntil || !MessageDigest.isEqual(
-                string(request,"token",128).getBytes(StandardCharsets.UTF_8),token.getBytes(StandardCharsets.UTF_8)))
+                (request.has("token") && !request.get("token").isJsonNull()?request.get("token").getAsString():"").getBytes(StandardCharsets.UTF_8),token.getBytes(StandardCharsets.UTF_8)))
             throw new StocktakeService.Rejected("AUTH_REQUIRED","Your sign-in expired. Sign in again; your saved counts will be kept.");
         StocktakeService.Account current=service.requireStaff(signedIn.id(),false);
         if(!current.passwordHash().equals(signedIn.passwordHash())) {
             signedIn=null;token=null;throw new StocktakeService.Rejected("AUTH_REQUIRED","Your account changed. Sign in again.");
         }
         sessionUntil=System.currentTimeMillis()+30*60*1000;
+    }
+    public boolean isAuthenticated() {
+        StocktakeService.Account account=signedIn;
+        if(account==null || System.currentTimeMillis()>sessionUntil)return false;
+        try { return service.requireStaff(account.id(),false).passwordHash().equals(account.passwordHash()); }
+        catch(Exception e) { return false; }
     }
     public static byte[] proof(String hash,String nonce,String id) throws Exception {
         String key=hash.startsWith("pbkdf2:sha256:")?hash.split(":")[4]:hash;

@@ -285,6 +285,8 @@ public class InventoryView {
     private void exportInventory() {
         javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
         chooser.setTitle("Export inventory to Excel");
+        try { chooser.setInitialDirectory(new com.pos.services.SettingsService().sheetExportDirectory(false)); }
+        catch (Exception ex) { showAlert("Export folder", "Check the inventory sheet folder in Settings: " + ex.getMessage(), Alert.AlertType.ERROR); return; }
         chooser.setInitialFileName("Inventory_" +
                 java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ISO_DATE) + ".xlsx");
         chooser.getExtensionFilters().add(
@@ -776,29 +778,44 @@ public class InventoryView {
     }
 
     private void showProductDetailsDialog(Product product) {
-        VBox summary = new VBox(10);
-        summary.getChildren().addAll(
-            com.pos.components.Ui.detailRow("Category:", product.getCategoryName()),
-            com.pos.components.Ui.detailRow("Barcode:", product.getBarCode()),
-            com.pos.components.Ui.detailRow("Quantity in stock:", String.valueOf(product.getQuantity())
-                + (product.getQuantity() < 10 ? "  (low stock)" : "")),
-            com.pos.components.Ui.detailRow("Units sold:", String.valueOf(product.getNoSold())),
-            com.pos.components.Ui.detailRow("Selling price:", "R " + String.format("%.2f", product.getPrice())),
-            com.pos.components.Ui.detailRow("Purchase price:", "R " + String.format("%.2f", product.getCostPrice()))
-        );
-
-        Button viewBarcodeBtn = com.pos.components.Ui.actionButton("Show Barcode", Theme.INFO, "Show / print the product barcode");
-        Button editBtn    = com.pos.components.Ui.actionButton("Edit", Theme.WARNING, "Edit product details");
-        Button restockBtn = com.pos.components.Ui.actionButton("Restock", Theme.SUCCESS, "Add stock for this product");
-        Button deleteBtn  = com.pos.components.Ui.actionButton("Delete", Theme.DANGER, "Delete this product");
-
-        viewBarcodeBtn.setOnAction(e -> showBarcode(product));
-        editBtn.setOnAction(e -> showEditProductDialog(product));
-        restockBtn.setOnAction(e -> showRestockDialog(product));
-        deleteBtn.setOnAction(e -> deleteProduct(product));
-
-        com.pos.components.Ui.showDetailDialog("Product Details", product.getProductName(), summary,
-            viewBarcodeBtn, editBtn, restockBtn, deleteBtn);
+        var grid=com.pos.components.Ui.formGrid();
+        TextField name=new TextField(product.getProductName()), barcode=new TextField(product.getBarCode());
+        ComboBox<String> category=new ComboBox<>(categoryService.getAllCategories()); category.setValue(product.getCategoryName());
+        TextField quantity=new TextField(""+product.getQuantity());
+        TextField cost=new TextField(product.getCostPrice()==null?"0.00":product.getCostPrice().toPlainString());
+        TextField price=new TextField(product.getPrice().toPlainString());
+        com.pos.components.Ui.formField(grid,0,"Product name",name); com.pos.components.Ui.formField(grid,1,"Category",category);
+        com.pos.components.Ui.formField(grid,2,"Barcode",barcode);com.pos.components.Ui.formField(grid,3,"Quantity in stock",quantity);
+        com.pos.components.Ui.formField(grid,4,"Purchase price (R)",cost);com.pos.components.Ui.formField(grid,5,"Selling price (R)",price);
+        ImageView image=new ImageView();image.setFitWidth(260);image.setFitHeight(110);image.setPreserveRatio(true);
+        Label code=new Label(), barcodeError=new Label();code.setFont(Font.font("Monospaced",16));barcodeError.setWrapText(true);
+        Runnable preview=()->{try{image.setImage(com.pos.utils.BarcodeUtil.getBarcodeImage(com.pos.utils.BarcodeUtil.generateBarcode(barcode.getText())));code.setText(barcode.getText());barcodeError.setText("");}
+            catch(Exception ex){image.setImage(null);barcodeError.setText("Enter a valid Code 128 barcode to preview the label.");}};
+        barcode.textProperty().addListener((o,a,b)->preview.run());preview.run();
+        VBox label=new VBox(12,image,code,barcodeError);label.setAlignment(Pos.CENTER);
+        Button print=new Button("Print barcode");print.setStyle(Theme.secondaryButton());print.setOnAction(e->{var job=javafx.print.PrinterJob.createPrinterJob();if(job!=null&&job.showPrintDialog(productTable.getScene().getWindow())&&job.printPage(label))job.endJob();});
+        TextField addStock=new TextField();addStock.setPromptText("Quantity to add");addStock.setStyle(Theme.input());
+        Button restock=new Button("Add to count");restock.setStyle(Theme.secondaryButton());
+        Label restockStatus=new Label();restock.setOnAction(e->{try{int add=Integer.parseInt(addStock.getText());if(add<=0)throw new NumberFormatException();quantity.setText(""+Math.addExact(Integer.parseInt(quantity.getText()),add));addStock.clear();restockStatus.setText("Save changes to apply the new stock quantity.");}catch(Exception ex){restockStatus.setText("Enter a positive whole quantity.");}});
+        VBox details=com.pos.components.Ui.section("Product information",grid,com.pos.components.Ui.detailRow("Product ID", ""+product.getProductID()),com.pos.components.Ui.detailRow("Units sold", ""+product.getNoSold()));
+        VBox stock=com.pos.components.Ui.section("Restock",new HBox(10,addStock,restock),restockStatus);
+        VBox barcodeSection=com.pos.components.Ui.section("Barcode label",label,print);
+        VBox side=new VBox(16,barcodeSection,stock);side.setPrefWidth(320);side.setMinWidth(280);
+        HBox columns=new HBox(16,details,side);HBox.setHgrow(details,Priority.ALWAYS);
+        VBox body=new VBox(16,columns);
+        boolean editable=currentUser.hasFullAccess();grid.setDisable(!editable);stock.setDisable(!editable);
+        Dialog<Void> dialog=com.pos.components.Ui.editor("Product details",product.getProductName(),body,editable?()->{
+            if(name.getText().isBlank()||barcode.getText().isBlank()||category.getValue()==null||image.getImage()==null)throw new IllegalArgumentException("Name, category and barcode are required.");
+            try{
+                int qty=Integer.parseInt(quantity.getText());BigDecimal purchase=new BigDecimal(cost.getText()),selling=new BigDecimal(price.getText());
+                if(qty<0||purchase.signum()<0||selling.signum()<0)throw new IllegalArgumentException("Quantity and prices cannot be negative.");
+                Product updated=new Product(product.getProductID(),name.getText().trim(),barcode.getText().trim(),qty,selling);
+                updated.setStaffID(product.getStaffID());updated.setCategoryID(categoryService.getCategoryId(category.getValue()));updated.setCategoryName(category.getValue());updated.setCostPrice(purchase);
+                boolean ok=productService.updateProduct(updated);if(ok)loadProducts();return ok;
+            }catch(NumberFormatException ex){throw new IllegalArgumentException("Enter a whole quantity and valid purchase/selling prices.");}
+        }:null);
+        if(editable){Button delete=new Button("Delete product");delete.setStyle(Theme.dangerButton());delete.setOnAction(e->{dialog.close();Platform.runLater(()->deleteProduct(product));});body.getChildren().add(com.pos.components.Ui.section("Product actions",delete));}
+        dialog.showAndWait();
     }
 
     private void showBarcode(Product product) {
@@ -897,75 +914,7 @@ public class InventoryView {
         });
     }
 
-    private void showEditProductDialog(Product product) {
-        Dialog<Product> dialog = new Dialog<>();
-        dialog.setTitle("Edit Product");
-        dialog.setHeaderText("Modify product details");
 
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField     = new TextField(product.getProductName());
-        ComboBox<String> categoryCombo = new ComboBox<>();
-        categoryCombo.setItems(categoryService.getAllCategories());
-        categoryCombo.setValue(product.getCategoryName());
-        TextField barcodeField  = new TextField(product.getBarCode());
-        TextField quantityField = new TextField(String.valueOf(product.getQuantity()));
-        TextField costPriceField = new TextField(product.getCostPrice() == null ? "0.00" : product.getCostPrice().toString());
-        TextField priceField    = new TextField(product.getPrice().toString());
-
-        grid.add(new Label("Product Name:"), 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(new Label("Category:"), 0, 1);
-        grid.add(categoryCombo, 1, 1);
-        grid.add(new Label("Barcode:"), 0, 2);
-        grid.add(barcodeField, 1, 2);
-        grid.add(new Label("Quantity:"), 0, 3);
-        grid.add(quantityField, 1, 3);
-        grid.add(new Label("Purchase Price (R):"), 0, 4);
-        grid.add(costPriceField, 1, 4);
-        grid.add(new Label("Selling Price (R):"), 0, 5);
-        grid.add(priceField, 1, 5);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                if (categoryCombo.getValue() == null) {
-                    showAlert("Error", "Please select a category.", Alert.AlertType.ERROR);
-                    return null;
-                }
-                try {
-                    product.setProductName(nameField.getText());
-                    product.setCategoryID(categoryService.getCategoryId(categoryCombo.getValue()));
-                    product.setBarCode(barcodeField.getText());
-                    product.setQuantity(Integer.parseInt(quantityField.getText()));
-                    product.setCostPrice(new BigDecimal(costPriceField.getText()));
-                    product.setPrice(new BigDecimal(priceField.getText()));
-                    return product;
-                } catch (NumberFormatException e) {
-                    showAlert("Error", "Invalid number format", Alert.AlertType.ERROR);
-                    return null;
-                }
-            }
-            return null;
-        });
-
-        Optional<Product> result = dialog.showAndWait();
-        result.ifPresent(p -> {
-            if (productService.updateProduct(p)) {
-                showAlert("Success", "Product updated successfully", Alert.AlertType.INFORMATION);
-                loadProducts();
-            } else {
-                showAlert("Error", "Failed to update product", Alert.AlertType.ERROR);
-            }
-        });
-    }
 
     private void showRestockDialog(Product product) {
         TextInputDialog dialog = new TextInputDialog();

@@ -486,12 +486,6 @@ public class MarketingView {
     }
 
     private void showPreviewDialog(MarketingCampaign campaign) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Campaign Preview");
-        dialog.setHeaderText(null);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setPrefWidth(520);
-
         VBox content = new VBox(12);
         content.setPadding(new Insets(20));
 
@@ -519,7 +513,6 @@ public class MarketingView {
         bodyArea.setStyle("-fx-font-family: monospace; -fx-font-size: 11;");
 
         content.getChildren().addAll(subjectLbl, metaLbl, new Separator(), bodyTitle, bodyArea);
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
+        com.pos.components.Ui.editor("Campaign preview",campaign.getSubject(),com.pos.components.Ui.section("Campaign information",content),null).showAndWait();
     }
 }

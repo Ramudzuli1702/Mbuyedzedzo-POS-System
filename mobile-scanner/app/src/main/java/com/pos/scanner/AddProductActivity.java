@@ -27,7 +27,7 @@ import com.google.gson.JsonObject;
 
 import java.util.List;
 
-public class AddProductActivity extends AppCompatActivity {
+public class AddProductActivity extends AuthenticatedActivity {
     private static final String TAG = "AddProductActivity";
     private static final int CAMERA_PERMISSION_CODE = 100;
     private static final int SCAN_BARCODE_REQUEST = 101;
@@ -71,6 +71,7 @@ public class AddProductActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         handler = new Handler(Looper.getMainLooper());
         setContentView(R.layout.activity_add_product);
+        findViewById(R.id.addProductBack).setOnClickListener(v -> finish());
         initializeViews();
         setupWiFi();
         setupClickListeners();

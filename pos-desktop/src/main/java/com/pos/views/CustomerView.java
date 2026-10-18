@@ -204,49 +204,31 @@ public class CustomerView {
 
         BorderPane root = new BorderPane();
         root.setStyle("-fx-background-color: #f5f7fa;");
+        Label profileHeading=new Label(customer.getFullNames());profileHeading.setFont(Font.font("System",FontWeight.BOLD,24));profileHeading.setTextFill(Color.web(com.pos.utils.Theme.BRAND));
+        VBox profileHeader=new VBox(6,profileHeading,new Label("Customer profile and purchase history"));profileHeader.setPadding(new Insets(20));profileHeader.setStyle(com.pos.utils.Theme.topBar());root.setTop(profileHeader);
 
-        // Info box
-        VBox infoBox = new VBox(10);
-        infoBox.setPadding(new Insets(20));
-        infoBox.setStyle(
-                "-fx-background-color: white; -fx-background-radius: 14;" +
-                "-fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
-        String signupStaff = customerService.getStaffName(customer.getStaffID());
-
-        Button editBtn   = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit this customer");
-        Button deleteBtn = com.pos.components.Ui.actionButton("Delete", "#dc2626", "Deactivate this customer");
-        // Closing a WINDOW_MODAL stage and synchronously opening another
-        // Dialog/Alert in the same callback frame starts the new one on top
-        // of a still-tearing-down nested event loop — the exact cause of the
-        // blank "Authorization Required" dialog bug fixed in Ui.showDetailDialog.
-        // Deferring with Platform.runLater lets the first stage's teardown
-        // finish before the next dialog opens.
-        editBtn.setOnAction(e -> {
-            stage.close();
-            javafx.application.Platform.runLater(() -> {
-                showEditCustomerDialog(customer);
-                loadCustomers();
-            });
+        var grid=com.pos.components.Ui.formGrid();
+        TextField name=new TextField(customer.getFullNames()),email=new TextField(customer.getEmailAddress()),phone=new TextField(customer.getContactNo());
+        DatePicker birth=new DatePicker(customer.getDateOfBirth());
+        com.pos.components.Ui.formField(grid,0,"Full name",name);com.pos.components.Ui.formField(grid,1,"Email address",email);
+        com.pos.components.Ui.formField(grid,2,"Phone number",phone);com.pos.components.Ui.formField(grid,3,"Date of birth",birth);
+        Label feedback=new Label();feedback.setWrapText(true);
+        Button save=new Button("Save changes"),delete=new Button("Deactivate customer");save.setStyle(com.pos.utils.Theme.primaryButton());delete.setStyle(com.pos.utils.Theme.dangerButton());
+        grid.setDisable(!currentUser.hasFullAccess());save.setDisable(!currentUser.hasFullAccess());delete.setDisable(!currentUser.hasFullAccess());
+        save.setOnAction(e->{
+            if(name.getText().isBlank()||!email.getText().contains("@")||birth.getValue()==null||birth.getValue().isAfter(java.time.LocalDate.now())){feedback.setText("Enter a name, email address and valid date of birth.");return;}
+            Customer updated=new Customer(customer.getAccountID(),name.getText().trim(),email.getText().trim(),phone.getText().trim());updated.setDateOfBirth(birth.getValue());
+            if(customerService.updateCustomer(updated)){customer.setFullNames(updated.getFullNames());customer.setEmailAddress(updated.getEmailAddress());customer.setContactNo(updated.getContactNo());customer.setDateOfBirth(updated.getDateOfBirth());loadCustomers();feedback.setText("Changes saved.");}
+            else feedback.setText("Could not save these changes. Please retry.");
         });
-        deleteBtn.setOnAction(e -> {
-            stage.close();
-            javafx.application.Platform.runLater(() -> deleteCustomer(customer));
-        });
-        HBox actionBar = new HBox(10, editBtn, deleteBtn);
-
-        infoBox.getChildren().addAll(
-                createLabeledField("Customer ID",      String.valueOf(customer.getAccountID())),
-                createLabeledField("Full Name",        customer.getFullNames()),
-                createLabeledField("Email",            customer.getEmailAddress()),
-                createLabeledField("Phone",            customer.getContactNo()),
-                createLabeledField("Date of Birth",    customer.getDateOfBirth().toString()),
-                createLabeledField("Signed Up By",     signupStaff),
-                createLabeledField("Member Since",     customer.getTimeStamp().toLocalDate().toString()),
-                createLabeledField("Total Net Purchases",
-                        customerService.getCustomerNetPurchaseQuantity(customer.getAccountID()) + " items"),
-                createMarketingToggleRow(customer),
-                actionBar);
-        root.setTop(infoBox);
+        delete.setOnAction(e->{stage.close();javafx.application.Platform.runLater(()->deleteCustomer(customer));});
+        VBox infoBox=com.pos.components.Ui.section("Customer information",grid,
+            com.pos.components.Ui.detailRow("Customer ID",""+customer.getAccountID()),
+            com.pos.components.Ui.detailRow("Signed up by",customerService.getStaffName(customer.getStaffID())),
+            com.pos.components.Ui.detailRow("Member since",customer.getTimeStamp()==null?"":customer.getTimeStamp().toLocalDate().toString()),
+            com.pos.components.Ui.detailRow("Net purchases",customerService.getCustomerNetPurchaseQuantity(customer.getAccountID())+" items"),
+            createMarketingToggleRow(customer),feedback,new HBox(12,save,delete));
+        ScrollPane informationScroll=new ScrollPane(infoBox);informationScroll.setFitToWidth(true);informationScroll.setPrefWidth(470);informationScroll.setStyle(com.pos.utils.Theme.page());root.setLeft(informationScroll);BorderPane.setMargin(informationScroll,new Insets(20,0,20,20));
 
         // Purchases table
         VBox tableBox = new VBox(15);
@@ -264,7 +246,7 @@ public class CustomerView {
 
         root.setCenter(tableBox);
 
-        stage.setScene(new Scene(root, 800, 700));
+        stage.setScene(new Scene(root, 1200, 760));
         stage.showAndWait();
     }
 
@@ -602,49 +584,7 @@ public class CustomerView {
 
     // ── Edit customer ─────────────────────────────────────────────────────────
 
-    private void showEditCustomerDialog(Customer customer) {
-        Dialog<Customer> dialog = new Dialog<>();
-        dialog.setTitle("Edit Customer");
-        dialog.setHeaderText("Modify customer details");
 
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10); grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField  = new TextField(customer.getFullNames());
-        TextField emailField = new TextField(customer.getEmailAddress());
-        TextField phoneField = new TextField(customer.getContactNo());
-        DatePicker dobPicker = new DatePicker(customer.getDateOfBirth());
-
-        grid.add(new Label("Full Name:"),    0, 0); grid.add(nameField,  1, 0);
-        grid.add(new Label("Email:"),        0, 1); grid.add(emailField, 1, 1);
-        grid.add(new Label("Phone:"),        0, 2); grid.add(phoneField, 1, 2);
-        grid.add(new Label("Date of Birth:"),0, 3); grid.add(dobPicker,  1, 3);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(btn -> {
-            if (btn == saveButtonType) {
-                customer.setFullNames(nameField.getText());
-                customer.setEmailAddress(emailField.getText());
-                customer.setContactNo(phoneField.getText());
-                customer.setDateOfBirth(dobPicker.getValue());
-                return customer;
-            }
-            return null;
-        });
-
-        dialog.showAndWait().ifPresent(c -> {
-            if (customerService.updateCustomer(c)) {
-                showAlert("Success", "Customer updated successfully", Alert.AlertType.INFORMATION);
-                loadCustomers();
-            } else {
-                showAlert("Error", "Failed to update customer", Alert.AlertType.ERROR);
-            }
-        });
-    }
 
     // ── Handle return ─────────────────────────────────────────────────────────
 

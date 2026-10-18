@@ -10,7 +10,7 @@
     <string name="no_receipts">No receipts yet</string>
     <string name="receipt_details">Receipt Details</string>
     <string name="stocktaking">Stocktaking</string>
-    <string name="stocktake_home_hint">Sign in, count stock and submit for approval</string>
+    <string name="stocktake_home_hint">Count inventory and submit for approval</string>
     <string name="stocktake_login_hint">Connect to your desktop and sign in with your staff account. Counts are verified by an Admin or Manager before stock changes.</string>
     <string name="staff_sign_in">Staff sign in</string>
     <string name="staff_email">Staff email</string>

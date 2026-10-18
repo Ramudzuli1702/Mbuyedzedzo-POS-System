@@ -23,6 +23,7 @@
         android:theme="@style/Theme.POSScanner"
         android:usesCleartextTraffic="true">
         
+        <activity android:name=".LoginActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".MainActivity"
             android:screenOrientation="portrait"

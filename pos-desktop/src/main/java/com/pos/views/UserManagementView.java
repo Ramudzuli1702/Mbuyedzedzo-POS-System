@@ -466,85 +466,25 @@ public class UserManagementView {
         });
     }
 
-    private void showEditUserDialog(User user) {
-        Dialog<User> dialog = new Dialog<>();
-        dialog.setTitle("Edit User");
-        dialog.setHeaderText("Modify user details");
 
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField = new TextField(user.getFullNames());
-        TextField emailField = new TextField(user.getEmailAddress());
-        ComboBox<String> typeCombo = new ComboBox<>();
-        typeCombo.getItems().addAll("Admin", "Manager", "Cashier");
-        typeCombo.setValue(user.getUserType());
-        ComboBox<String> statusCombo = new ComboBox<>();
-        statusCombo.getItems().addAll("Active", "Inactive");
-        statusCombo.setValue(user.getStatus());
-
-        grid.add(new Label("Full Name:"), 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(new Label("Email:"), 0, 1);
-        grid.add(emailField, 1, 1);
-        grid.add(new Label("User Type:"), 0, 2);
-        grid.add(typeCombo, 1, 2);
-        grid.add(new Label("Status:"), 0, 3);
-        grid.add(statusCombo, 1, 3);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                user.setFullNames(nameField.getText());
-                user.setEmailAddress(emailField.getText());
-                user.setUserType(typeCombo.getValue());
-                user.setStatus(statusCombo.getValue());
-                return user;
-            }
-            return null;
-        });
-
-        Optional<User> result = dialog.showAndWait();
-        result.ifPresent(u -> {
-            if (userService.updateUser(u)) {
-                showAlert("Success", "User updated successfully", Alert.AlertType.INFORMATION);
-                loadUsers();
-            } else {
-                showAlert("Error", "Failed to update user", Alert.AlertType.ERROR);
-            }
-        });
-    }
 
     private void showUserDetailsDialog(User user) {
-        VBox summary = new VBox(10);
-        summary.getChildren().addAll(
-            com.pos.components.Ui.detailRow("Email:", user.getEmailAddress()),
-            com.pos.components.Ui.detailRow("Role:", user.getUserType()),
-            com.pos.components.Ui.detailRow("Status:", user.getStatus())
-        );
-
-        boolean active = "Active".equalsIgnoreCase(user.getStatus());
-
-        Button editBtn     = com.pos.components.Ui.actionButton("Edit", "#d97706", "Edit name, email or role");
-        Button resetPwdBtn = com.pos.components.Ui.actionButton("Reset Password", "#2563eb", "Set a new password for this user");
-        Button authKeyBtn  = com.pos.components.Ui.actionButton("Authorisation Key", "#7c3aed",
-            "Issue (or view) this staff member's supervisor auth code, used to countersign sessions and approve exchanges/returns");
-        Button toggleBtn   = com.pos.components.Ui.actionButton(active ? "Deactivate" : "Activate",
-            active ? "#dc2626" : "#16a34a", "Activate / deactivate this account");
-
-        editBtn.setOnAction(e -> showEditUserDialog(user));
-        resetPwdBtn.setOnAction(e -> resetPassword(user));
-        authKeyBtn.setOnAction(e -> showAuthKeyDialog(user));
-        toggleBtn.setOnAction(e -> toggleUserStatus(user));
-
-        com.pos.components.Ui.showDetailDialog("Staff Member", user.getFullNames(), summary,
-            editBtn, resetPwdBtn, authKeyBtn, toggleBtn);
+        var grid=com.pos.components.Ui.formGrid();
+        TextField name=new TextField(user.getFullNames()),email=new TextField(user.getEmailAddress());
+        ComboBox<String> role=new ComboBox<>();role.getItems().addAll("Admin","Manager","Cashier");role.setValue(user.getUserType());
+        ComboBox<String> status=new ComboBox<>();status.getItems().addAll("Active","Inactive");status.setValue(user.getStatus());
+        com.pos.components.Ui.formField(grid,0,"Full name",name);com.pos.components.Ui.formField(grid,1,"Email address",email);
+        com.pos.components.Ui.formField(grid,2,"Role",role);com.pos.components.Ui.formField(grid,3,"Account status",status);
+        Button reset=new Button("Reset password"),key=new Button("Authorisation key");reset.setStyle(com.pos.utils.Theme.secondaryButton());key.setStyle(com.pos.utils.Theme.secondaryButton());
+        reset.setOnAction(e->resetPassword(user));key.setOnAction(e->showAuthKeyDialog(user));
+        VBox content=new VBox(16,com.pos.components.Ui.section("Staff information",grid,com.pos.components.Ui.detailRow("Staff ID",""+user.getStaffID())),
+            com.pos.components.Ui.section("Security actions",new Label("Password and supervisor keys are managed separately from profile changes."),new HBox(12,reset,key)));
+        boolean allowed=currentUser.hasFullAccess();grid.setDisable(!allowed);reset.setDisable(!allowed);key.setDisable(!allowed);
+        com.pos.components.Ui.editor("Staff member",user.getFullNames(),content,allowed?()->{
+            if(name.getText().isBlank()||!email.getText().contains("@"))throw new IllegalArgumentException("Enter a name and valid email address.");
+            User updated=new User(user.getStaffID(),name.getText().trim(),email.getText().trim(),role.getValue(),status.getValue());
+            boolean saved=userService.updateUser(updated);if(saved){user.setFullNames(updated.getFullNames());user.setEmailAddress(updated.getEmailAddress());user.setUserType(updated.getUserType());user.setStatus(updated.getStatus());loadUsers();}return saved;
+        }:null).showAndWait();
     }
 
     private void showAuthKeyDialog(User user) {

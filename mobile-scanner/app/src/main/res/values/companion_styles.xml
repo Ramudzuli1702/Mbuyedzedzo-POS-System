@@ -1,0 +1,8 @@
+<resources>
+    <style name="CompanionToolbar">
+        <item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">56dp</item><item name="android:paddingHorizontal">20dp</item><item name="android:paddingVertical">16dp</item>
+        <item name="android:background">@color/brand_primary</item><item name="android:textColor">@color/white</item>
+        <item name="android:textSize">18sp</item><item name="android:textStyle">bold</item>
+    </style>
+</resources>
