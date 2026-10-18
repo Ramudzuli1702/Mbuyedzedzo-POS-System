@@ -300,7 +300,7 @@ public class MainActivity extends AppCompatActivity {
                     serverIPText.setText("Server: " + savedServerIP);
                 }
             } else {
-                connectionStatus.setText("Not connected — standalone mode");
+                connectionStatus.setText("Not connected to desktop");
                 connectionStatus.setTextColor(getResources().getColor(R.color.brand_primary_dark));
                 connectionCard.setCardBackgroundColor(getResources().getColor(R.color.brand_primary_light));
                 statusText.setText("Connect to the POS desktop over WiFi");

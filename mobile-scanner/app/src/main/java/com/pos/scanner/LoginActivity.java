@@ -18,7 +18,7 @@ public final class LoginActivity extends AppCompatActivity {
     private View progress;
     private boolean busy;
     private final BroadcastReceiver connection=new BroadcastReceiver(){
-        @Override public void onReceive(Context context,Intent event){if(!wifi.isConnected())finish();}
+        @Override public void onReceive(Context context,Intent event){if(!wifi.isConnected()||wifi.isSignedIn())finish();}
     };
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);setContentView(R.layout.activity_login);
@@ -27,7 +27,8 @@ public final class LoginActivity extends AppCompatActivity {
         signIn=findViewById(R.id.loginSubmit);progress=findViewById(R.id.loginProgress);
         signIn.setOnClickListener(v->login());findViewById(R.id.loginDisconnect).setOnClickListener(v->{wifi.closeConnection();finish();});
         password.setOnEditorActionListener((v,action,event)->{login();return true;});
-        LocalBroadcastManager.getInstance(this).registerReceiver(connection,new IntentFilter("WIFI_CONNECTED"));
+        IntentFilter events=new IntentFilter("WIFI_CONNECTED");events.addAction(WiFiCommunication.ACTION_AUTH_CHANGED);
+        LocalBroadcastManager.getInstance(this).registerReceiver(connection,events);
         if(!wifi.isConnected()||wifi.isSignedIn())finish();
     }
     private void login(){
