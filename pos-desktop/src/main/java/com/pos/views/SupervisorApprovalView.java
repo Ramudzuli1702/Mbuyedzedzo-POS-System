@@ -53,7 +53,13 @@ public class SupervisorApprovalView {
         HBox.setHgrow(returnPanel, Priority.ALWAYS);
 
         body.getChildren().addAll(exchangePanel, returnPanel);
-        layout.setCenter(body);
+        TabPane approvals = new TabPane();
+        Tab sales = new Tab("Returns & exchanges", body);
+        sales.setClosable(false);
+        Tab stocktaking = new Tab("Stocktakes", new StocktakeReviewView(currentUser).getView());
+        stocktaking.setClosable(false);
+        approvals.getTabs().addAll(sales, stocktaking);
+        layout.setCenter(approvals);
 
         refreshData();
         return layout;

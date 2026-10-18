@@ -33,6 +33,7 @@ public class ReceiptActivity extends AppCompatActivity {
     private List<Receipt> receipts;
     
     private Handler handler;
+    private int loadGeneration;
     
     // Broadcast receiver for new receipts from Bluetooth
     private final BroadcastReceiver receiptReceiver = new BroadcastReceiver() {
@@ -41,11 +42,7 @@ public class ReceiptActivity extends AppCompatActivity {
             if ("RECEIPT_RECEIVED".equals(intent.getAction())) {
                 Receipt receipt = (Receipt) intent.getSerializableExtra("receipt");
                 if (receipt != null) {
-                    // Add to list and update UI
-                    receipts.add(0, receipt);
-                    receiptAdapter.notifyItemInserted(0);
-                    receiptsRecyclerView.scrollToPosition(0);
-                    updateEmptyState();
+                    loadReceipts();
                     
                     Toast.makeText(ReceiptActivity.this, 
                         "New receipt received!", 
@@ -89,12 +86,14 @@ public class ReceiptActivity extends AppCompatActivity {
     }
     
     private void loadReceipts() {
+        int generation = ++loadGeneration;
         progressBar.setVisibility(View.VISIBLE);
         
         new Thread(() -> {
             List<Receipt> loadedReceipts = ReceiptStorage.getInstance(this).getAllReceipts();
             
             handler.post(() -> {
+                if (isDestroyed() || generation != loadGeneration) return;
                 receipts.clear();
                 receipts.addAll(loadedReceipts);
                 receiptAdapter.notifyDataSetChanged();
@@ -103,6 +102,11 @@ public class ReceiptActivity extends AppCompatActivity {
                 updateEmptyState();
             });
         }).start();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (receiptAdapter != null) loadReceipts();
     }
     
     private void refreshReceipts() {

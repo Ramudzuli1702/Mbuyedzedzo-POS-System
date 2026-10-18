@@ -1,449 +1,167 @@
 package com.pos.scanner;
 
-import android.content.Context;
-import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
-import android.util.Log;
-import android.widget.Toast;
-
+import android.content.*;
+import android.os.*;
+import android.util.Base64;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-
+import com.google.gson.*;
 import java.io.*;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.net.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.*;
 
-/**
- * WiFi client for Android scanner app
- * Connects to desktop POS system over local network
- */
-public class WiFiCommunication {
-
-    private static final String TAG = "WiFiComm";
-    private static final int DEFAULT_PORT = 8888;
-    private static final int RECONNECT_DELAY_MS = 2000;
-    private static final int MAX_RECONNECT_ATTEMPTS = 5;
-
-    /** Broadcast sent (via LocalBroadcastManager) whenever the desktop's category list arrives. */
-    public static final String ACTION_CATEGORIES_UPDATED = "CATEGORIES_UPDATED";
-
+/** App-scoped connection; navigation does not disconnect the scanner. */
+public final class WiFiCommunication {
+    public static final String ACTION_CATEGORIES_UPDATED="CATEGORIES_UPDATED";
+    public static final String ACTION_STOCKTAKE_STATUS="STOCKTAKE_STATUS";
     private static WiFiCommunication instance;
     private final Context context;
-    private Socket socket;
-    private BufferedReader input;
-    private PrintWriter output;
-    private volatile boolean isConnected = false;
-    private volatile boolean shouldReconnect = true; // Set false on intentional disconnect
-    private Thread readThread;
-    private String serverIP;
-    private int serverPort;
-    private String lastAddress; // Saved for auto-reconnect
-    private int reconnectAttempts = 0;
-    private Gson gson = new Gson();
+    private final Handler main=new Handler(Looper.getMainLooper());
+    private final Gson gson=new Gson();
+    private final Object connectionLock=new Object(),writeLock=new Object();
+    private final ExecutorService sender=Executors.newSingleThreadExecutor();
+    private final Map<String,Callback> requests=new ConcurrentHashMap<>();
+    private volatile Socket socket;
+    private volatile PrintWriter output;
+    private volatile boolean connected,reconnect;
+    private volatile int generation,attempts;
+    private String host,address;private int port;
+    private volatile String token,staffName;
+    private volatile int staffId;
+    private volatile List<String> categories=Collections.emptyList();
+    public interface Callback { void complete(JsonObject response); }
+    private WiFiCommunication(Context context){this.context=context.getApplicationContext();}
+    public static synchronized WiFiCommunication getInstance(Context context){if(instance==null)instance=new WiFiCommunication(context);return instance;}
 
-    /** The desktop's real category list, as last received. Replaced wholesale on every update. */
-    private volatile List<String> categories = Collections.emptyList();
-
-    private WiFiCommunication(Context ctx) {
-        this.context = ctx.getApplicationContext();
+    public boolean connect(String endpoint) {
+        if(endpoint==null)return false;
+        String[] parts=endpoint.trim().split(":",-1);
+        if(parts.length>2||parts[0].trim().isEmpty())return false;
+        int requestedPort;
+        try { requestedPort=parts.length==2?Integer.parseInt(parts[1]):8888;if(requestedPort<1||requestedPort>65535)return false; }
+        catch(NumberFormatException e){return false;}
+        if(connected&&endpoint.trim().equals(address))return true;
+        closeConnection();
+        host=parts[0].trim();port=requestedPort;address=host+":"+port;attempts=0;reconnect=true;
+        int current=++generation;open(current);return true;
     }
-
-    public static synchronized WiFiCommunication getInstance(Context ctx) {
-        if (instance == null) {
-            instance = new WiFiCommunication(ctx);
-        }
-        return instance;
+    private void open(int current) {
+        new Thread(()-> {
+            Socket opened=new Socket();
+            try {
+                opened.connect(new InetSocketAddress(host,port),7000);opened.setKeepAlive(true);opened.setTcpNoDelay(true);
+                synchronized(connectionLock) {
+                    if(current!=generation||!reconnect){opened.close();return;}
+                    socket=opened;output=new PrintWriter(new OutputStreamWriter(opened.getOutputStream(),StandardCharsets.UTF_8),true);
+                    connected=true;attempts=0;categories=Collections.emptyList();clearAuth();
+                }
+                notifyConnection(true);
+                IncomingFrames frames=new IncomingFrames();
+                try(BufferedReader input=new BufferedReader(new InputStreamReader(opened.getInputStream(),StandardCharsets.UTF_8))) {
+                    String line;
+                    while(current==generation&&(line=readLine(input))!=null) {
+                        IncomingFrames.Frame frame=frames.accept(line);
+                        if(frame.json!=null)handle(frame.json);
+                        if(frame.receipt!=null)saveReceipt(Receipt.fromString(frame.receipt),false);
+                    }
+                }
+            } catch(Exception ignored) { /* A single status event below handles failure and reconnect. */ }
+            finally {
+                try{opened.close();}catch(IOException ignored){}
+                if(current==generation) {
+                    connected=false;output=null;socket=null;clearAuth();failRequests("DISCONNECTED","Connection lost. Your stocktake draft is saved on this phone.");
+                    notifyConnection(false);
+                    if(reconnect&&attempts<5){int delay=2000*++attempts;main.postDelayed(()->{if(current==generation&&reconnect&&!connected)open(current);},delay);}
+                }
+            }
+        },"POS-Connection").start();
     }
-
-    /**
-     * Connect to the desktop POS system
-     * @param address Full address like "192.168.1.100:8889" or just IP (uses default port)
-     */
-    public boolean connect(String address) {
-        if (isConnected) {
-            Log.i(TAG, "Already connected");
+    private static String readLine(Reader input) throws IOException {
+        StringBuilder line=new StringBuilder();int ch;
+        while((ch=input.read())!=-1){if(ch=='\n')return line.toString();if(ch!='\r')line.append((char)ch);if(line.length()>8*1024*1024)throw new IOException("Message too large");}
+        return line.length()==0?null:line.toString();
+    }
+    private void handle(String text) {
+        try {
+            JsonElement parsed=JsonParser.parseString(text);if(parsed.isJsonArray())parsed=parsed.getAsJsonArray().get(0);
+            JsonObject json=parsed.getAsJsonObject();String type=json.get("type").getAsString();
+            switch(type) {
+                case "response": {
+                    if(json.has("code")&&"AUTH_REQUIRED".equals(json.get("code").getAsString()))clearAuth();
+                    String id=json.get("requestId").getAsString();Callback callback=requests.remove(id);
+                    if(callback!=null)main.post(()->callback.complete(json));break;
+                }
+                case "categories": {
+                    List<String> values=new ArrayList<>();for(JsonElement e:json.getAsJsonArray("data"))values.add(e.getAsString());
+                    categories=Collections.unmodifiableList(values);broadcast(new Intent(ACTION_CATEGORIES_UPDATED));break;
+                }
+                case "receipt": {
+                    Receipt receipt=Receipt.fromString(json.get("text").getAsString());receipt.setReceiptId(json.get("id").getAsString());saveReceipt(receipt,true);break;
+                }
+                case "stocktake_status": {
+                    Intent event=new Intent(ACTION_STOCKTAKE_STATUS);event.putExtra("message",json.toString());broadcast(event);break;
+                }
+                default: break;
+            }
+        } catch(RuntimeException ignored) { /* Ignore malformed server data, without logging receipts or credentials. */ }
+    }
+    private void saveReceipt(Receipt receipt,boolean acknowledge) {
+        ReceiptStorage storage=ReceiptStorage.getInstance(context);boolean exists=storage.getReceiptById(receipt.getReceiptId())!=null;
+        if(!storage.saveReceipt(receipt))return;
+        if(acknowledge){JsonObject ack=new JsonObject();ack.addProperty("type","receipt_ack");ack.addProperty("id",receipt.getReceiptId());sendNow(ack.toString());}
+        if(!exists){Intent event=new Intent("RECEIPT_RECEIVED");event.putExtra("receipt",receipt);broadcast(event);}
+    }
+    private void broadcast(Intent intent){LocalBroadcastManager.getInstance(context).sendBroadcast(intent);}
+    private void notifyConnection(boolean connected){Intent event=new Intent("WIFI_CONNECTED");event.putExtra("connected",connected);broadcast(event);}
+    private void clearAuth(){token=null;staffId=0;staffName=null;}
+    public boolean isSignedIn(){return token!=null;}
+    public int getStaffId(){return staffId;}
+    public String getStaffName(){return staffName==null?"Staff":staffName;}
+    public boolean isConnected(){return connected;}
+    public String getServerAddress(){return address;}
+    public List<String> getCategories(){return categories;}
+    public void requestCategories(){JsonObject j=new JsonObject();j.addProperty("type","request_categories");sendData(j.toString());}
+    public boolean sendScan(String code){JsonObject j=new JsonObject();j.addProperty("type","scan");j.addProperty("data",code);return sendNow(j.toString());}
+    public void sendData(String text){sender.execute(()->sendNow(text));}
+    private boolean sendNow(String text) {
+        synchronized(writeLock) {
+            PrintWriter writer=output;if(!connected||writer==null)return false;
+            writer.println(text);writer.flush();
+            if(writer.checkError()){Socket old=socket;try{if(old!=null)old.close();}catch(IOException ignored){}return false;}
             return true;
         }
-
-        if (address == null || address.trim().isEmpty()) {
-            Log.e(TAG, "Address is required");
-            notifyConnected(false);
-            return false;
-        }
-
-        // Save address for auto-reconnect
-        lastAddress = address.trim();
-        shouldReconnect = true;
-        reconnectAttempts = 0;
-
-        // Parse address
-        serverPort = DEFAULT_PORT;
-        if (lastAddress.contains(":")) {
-            String[] parts = lastAddress.split(":");
-            if (parts.length == 2) {
-                serverIP = parts[0].trim();
+    }
+    public void request(JsonObject request,Callback callback) {
+        String id=UUID.randomUUID().toString();request.addProperty("requestId",id);
+        if(token!=null)request.addProperty("token",token);
+        requests.put(id,callback);
+        main.postDelayed(()-> {Callback waiting=requests.remove(id);if(waiting!=null)waiting.complete(error("TIMEOUT","The desktop did not respond. Check the connection and use the updated desktop."));},20000);
+        sender.execute(()-> {if(!sendNow(request.toString())){Callback waiting=requests.remove(id);if(waiting!=null)main.post(()->waiting.complete(error("DISCONNECTED","Connect to the desktop to continue.")));}});
+    }
+    public void login(String email,char[] password,Callback callback) {
+        clearAuth();JsonObject challenge=new JsonObject();challenge.addProperty("type","stocktake_challenge");challenge.addProperty("email",email);
+        request(challenge,response-> {
+            if(!response.get("ok").getAsBoolean()){Arrays.fill(password,'\0');callback.complete(response);return;}
+            sender.execute(()-> {
                 try {
-                    serverPort = Integer.parseInt(parts[1].trim());
-                } catch (NumberFormatException e) {
-                    Log.e(TAG, "Invalid port in address: " + parts[1]);
-                    notifyConnected(false);
-                    return false;
-                }
-            } else {
-                Log.e(TAG, "Invalid address format: " + lastAddress);
-                notifyConnected(false);
-                return false;
-            }
-        } else {
-            serverIP = lastAddress;
-        }
-
-        connectInternal();
-        return true;
+                    JsonObject data=response.getAsJsonObject("data");
+                    byte[] proof=PasswordProof.create(password,data.get("algorithm").getAsString(),data.get("iterations").getAsInt(),Base64.decode(data.get("salt").getAsString(),Base64.DEFAULT),data.get("nonce").getAsString(),data.get("challengeId").getAsString());
+                    JsonObject login=new JsonObject();login.addProperty("type","stocktake_login");login.add("challengeId",data.get("challengeId"));login.addProperty("proof",Base64.encodeToString(proof,Base64.NO_WRAP));Arrays.fill(proof,(byte)0);
+                    request(login,result-> {
+                        if(result.get("ok").getAsBoolean()){JsonObject account=result.getAsJsonObject("data");token=account.get("token").getAsString();staffId=account.get("staffId").getAsInt();staffName=account.get("name").getAsString();}
+                        callback.complete(result);
+                    });
+                } catch(Exception e){Arrays.fill(password,'\0');main.post(()->callback.complete(error("AUTH_FAILED","Could not complete sign-in. Check your password and update the desktop.")));}
+            });
+        });
     }
-
-    /**
-     * Internal connection logic (used by both connect() and auto-reconnect)
-     */
-    private void connectInternal() {
-        Log.i(TAG, "🔄 Connecting to " + serverIP + ":" + serverPort + "...");
-
-        new Thread(() -> {
-            try {
-                socket = new Socket(serverIP, serverPort);
-                input = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                output = new PrintWriter(socket.getOutputStream(), true);
-
-                // A fresh connection may be to a different desktop — drop the old
-                // list; the desktop pushes its current one right after connecting.
-                categories = Collections.emptyList();
-
-                isConnected = true;
-                reconnectAttempts = 0;
-                Log.i(TAG, "✅ Connected to " + serverIP + ":" + serverPort);
-
-                notifyConnected(true);
-
-                // Start read thread
-                readThread = new Thread(this::readFromDesktop, "WiFi-Read");
-                readThread.start();
-
-            } catch (IOException e) {
-                Log.e(TAG, "❌ Connection failed to " + serverIP + ":" + serverPort + " - " + e.getMessage());
-                cleanupSocket();
-                notifyConnected(false);
-
-                new Handler(Looper.getMainLooper()).post(() ->
-                    Toast.makeText(context, "Connection failed: " + e.getMessage(), Toast.LENGTH_LONG).show()
-                );
-
-                // Schedule reconnect if not intentionally disconnected
-                scheduleReconnect();
-            }
-        }, "WiFi-Connect").start();
-    }
-
-    /**
-     * Schedule an auto-reconnect attempt with backoff
-     */
-    private void scheduleReconnect() {
-        if (!shouldReconnect || lastAddress == null) {
-            Log.d(TAG, "🚫 Reconnect disabled or no address saved");
-            return;
-        }
-
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            Log.w(TAG, "⚠️ Max reconnect attempts (" + MAX_RECONNECT_ATTEMPTS + ") reached. Giving up.");
-            new Handler(Looper.getMainLooper()).post(() ->
-                Toast.makeText(context, "Could not reconnect to POS after " + MAX_RECONNECT_ATTEMPTS + " attempts.", Toast.LENGTH_LONG).show()
-            );
-            return;
-        }
-
-        reconnectAttempts++;
-        long delay = RECONNECT_DELAY_MS * reconnectAttempts; // Simple backoff
-        Log.i(TAG, "🔄 Scheduling reconnect attempt " + reconnectAttempts + "/" + MAX_RECONNECT_ATTEMPTS + " in " + delay + "ms...");
-
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!isConnected && shouldReconnect) {
-                Log.i(TAG, "🔄 Auto-reconnecting (attempt " + reconnectAttempts + ")...");
-                connectInternal();
-            }
-        }, delay);
-    }
-
-    /**
-     * Read data from desktop — persistent loop, handles reconnect on drop
-     */
-    private void readFromDesktop() {
-        Log.d(TAG, "===========================================");
-        Log.d(TAG, "👂 READ THREAD STARTED");
-        Log.d(TAG, "===========================================");
-
-        try {
-            String line;
-            int lineCount = 0;
-
-            while (isConnected && (line = input.readLine()) != null) {
-                lineCount++;
-
-                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                Log.d(TAG, "📨 LINE #" + lineCount + " RECEIVED");
-                Log.d(TAG, "Raw line: [" + line + "]");
-
-                String trimmedLine = line.trim();
-
-                // Handle receipt messages (multi-line)
-                if (trimmedLine.contains("===END_RECEIPT===")) {
-                    Log.d(TAG, "📄 RECEIPT END MARKER - Processing skipped (implement as needed)");
-                    continue;
-                }
-
-                // ✅ FIX: Parse the line directly, not an accumulated buffer
-                if (trimmedLine.startsWith("{") && trimmedLine.endsWith("}")) {
-                    Log.d(TAG, "🔍 JSON OBJECT DETECTED - Parsing...");
-                    parseAndHandleJson(trimmedLine);
-
-                } else if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]")) {
-                    Log.d(TAG, "🔍 JSON ARRAY DETECTED - Parsing...");
-                    // Unwrap array and try parsing inner object
-                    String inner = trimmedLine.substring(1, trimmedLine.length() - 1).trim();
-                    if (inner.startsWith("{") && inner.endsWith("}")) {
-                        Log.d(TAG, "🔍 Unwrapped inner object - Parsing...");
-                        parseAndHandleJson(inner);
-                    } else {
-                        Log.w(TAG, "⚠️ Unrecognised array content, skipping");
-                    }
-
-                } else {
-                    Log.d(TAG, "⚠️ Non-JSON line, skipping: " + trimmedLine);
-                }
-
-                Log.d(TAG, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            }
-
-            Log.d(TAG, "❌ Read loop ended (null line or disconnected)");
-
-        } catch (IOException e) {
-            if (isConnected) {
-                Log.e(TAG, "❌ IOException in read thread: " + e.getMessage());
-                e.printStackTrace();
-            }
-        } finally {
-            Log.d(TAG, "===========================================");
-            Log.d(TAG, "👋 READ THREAD STOPPED");
-            Log.d(TAG, "===========================================");
-
-            cleanupSocket();
-            notifyConnected(false);
-
-            // ✅ FIX: Auto-reconnect instead of dying permanently
-            scheduleReconnect();
-        }
-    }
-
-    /**
-     * Parse a JSON string and dispatch to the correct handler
-     */
-    private void parseAndHandleJson(String jsonString) {
-        try {
-            JsonObject json = gson.fromJson(jsonString, JsonObject.class);
-
-            if (json == null) {
-                Log.e(TAG, "❌ JSON parsing returned NULL");
-                return;
-            }
-
-            if (!json.has("type")) {
-                Log.e(TAG, "❌ JSON has no 'type' field. Keys: " + json.keySet().toString());
-                return;
-            }
-
-            String type = json.get("type").getAsString();
-            Log.d(TAG, "✅ JSON parsed. Type: [" + type + "]");
-
-            switch (type) {
-                case "categories":
-                    handleCategories(json);
-                    break;
-
-                case "scan_ack":
-                case "product_ack":
-                    String ackMsg = json.has("message") ? json.get("message").getAsString() : "no message";
-                    Log.d(TAG, "✅ ACK received: " + ackMsg);
-                    break;
-
-                case "product_added":
-                case "product_rejected":
-                    String resultMsg = json.has("message") ? json.get("message").getAsString() : "no message";
-                    Log.d(TAG, "ℹ️ " + type + ": " + resultMsg);
-                    break;
-
-                case "error":
-                    String errMsg = json.has("message") ? json.get("message").getAsString() : "no message";
-                    Log.w(TAG, "⚠️ ERROR from server: " + errMsg);
-                    break;
-
-                case "connected":
-                    String connMsg = json.has("message") ? json.get("message").getAsString() : "no message";
-                    Log.d(TAG, "✅ CONNECTED message: " + connMsg);
-                    break;
-
-                default:
-                    Log.d(TAG, "ℹ️ Unknown message type: " + type);
-                    break;
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "❌ JSON PARSE EXCEPTION: " + e.getClass().getName() + " - " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    /**
-     * The desktop pushes {"type":"categories","data":["Dairy","Bakery",...]}
-     * on connect and whenever we send request_categories. Store it and tell
-     * any open screen to refresh its dropdown.
-     */
-    private void handleCategories(JsonObject json) {
-        List<String> list = new ArrayList<>();
-        if (json.has("data") && json.get("data").isJsonArray()) {
-            JsonArray array = json.getAsJsonArray("data");
-            for (JsonElement el : array) {
-                if (el != null && !el.isJsonNull()) {
-                    String name = el.getAsString().trim();
-                    if (!name.isEmpty()) list.add(name);
-                }
-            }
-        }
-        categories = Collections.unmodifiableList(list);
-        Log.d(TAG, "📂 Received " + list.size() + " categories from desktop");
-
-        Intent intent = new Intent(ACTION_CATEGORIES_UPDATED);
-        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
-    }
-
-    /** The category names last received from the desktop (never null; empty until received). */
-    public List<String> getCategories() {
-        return categories;
-    }
-
-    /** Ask the desktop to re-send its category list. Safe to call from the UI thread. */
-    public void requestCategories() {
-        new Thread(() -> sendData("{\"type\":\"request_categories\"}"), "WiFi-RequestCategories").start();
-    }
-
-    /**
-     * Send scan data to desktop
-     */
-    public void sendScan(String code) {
-        // Escape any special characters in the barcode to keep JSON valid
-        String escapedCode = code.replace("\\", "\\\\").replace("\"", "\\\"");
-        String json = String.format(
-            "{\"type\":\"scan\",\"data\":\"%s\",\"timestamp\":%d}",
-            escapedCode,
-            System.currentTimeMillis()
-        );
-        sendData(json);
-    }
-
-    /**
-     * Send raw data string to desktop
-     */
-    public void sendData(String data) {
-        if (!isConnected || output == null) {
-            Log.w(TAG, "❌ Cannot send — not connected");
-            return;
-        }
-
-        try {
-            output.println(data);
-            output.flush();
-
-            if (output.checkError()) {
-                Log.e(TAG, "❌ PrintWriter error after send — connection may be broken");
-                closeConnection();
-                return;
-            }
-
-            Log.d(TAG, "📤 Sent: " + data.substring(0, Math.min(100, data.length())) + (data.length() > 100 ? "..." : ""));
-        } catch (Exception e) {
-            Log.e(TAG, "❌ Send failed: " + e.getMessage(), e);
-            closeConnection();
-        }
-    }
-
-    /**
-     * Intentionally close the connection (disables auto-reconnect)
-     */
+    public void logout(){if(token!=null){JsonObject j=new JsonObject();j.addProperty("type","stocktake_logout");request(j,r->{});}clearAuth();}
     public void closeConnection() {
-        shouldReconnect = false; // Intentional — don't auto-reconnect
-        cleanupSocket();
-        notifyConnected(false);
-        Log.i(TAG, "🔌 Connection intentionally closed");
+        reconnect=false;++generation;connected=false;clearAuth();
+        Socket old=socket;socket=null;output=null;try{if(old!=null)old.close();}catch(IOException ignored){}
+        failRequests("DISCONNECTED","Connection closed. Your saved counts will be kept.");notifyConnection(false);
     }
-
-    /**
-     * Clean up socket/stream resources without changing shouldReconnect
-     */
-    private void cleanupSocket() {
-        isConnected = false;
-
-        if (readThread != null && readThread.isAlive()) {
-            readThread.interrupt();
-            try {
-                readThread.join(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            readThread = null;
-        }
-
-        try { if (input != null) input.close(); } catch (IOException ignored) {}
-        try { if (output != null) output.close(); } catch (Exception ignored) {}
-        try { if (socket != null) socket.close(); } catch (IOException ignored) {}
-
-        input = null;
-        output = null;
-        socket = null;
-
-        Log.i(TAG, "🧹 Socket resources cleaned up");
-    }
-
-    /**
-     * Broadcast connection status change
-     */
-    private void notifyConnected(boolean connected) {
-        Intent intent = new Intent("WIFI_CONNECTED");
-        intent.putExtra("connected", connected);
-        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
-
-        Log.d(TAG, connected ? "✅ WiFi Connected" : "❌ WiFi Disconnected");
-
-        new Handler(Looper.getMainLooper()).post(() ->
-            Toast.makeText(context, connected ? "Connected to POS!" : "Disconnected from POS", Toast.LENGTH_SHORT).show()
-        );
-    }
-
-    /**
-     * Check if currently connected
-     */
-    public boolean isConnected() {
-        return isConnected;
-    }
-
-    /**
-     * Get server address in IP:PORT format
-     */
-    public String getServerAddress() {
-        if (serverIP == null) return null;
-        return serverIP + ":" + serverPort;
-    }
+    private void failRequests(String code,String message){for(String id:requests.keySet()){Callback cb=requests.remove(id);if(cb!=null)main.post(()->cb.complete(error(code,message)));}}
+    public static JsonObject error(String code,String message){JsonObject j=new JsonObject();j.addProperty("ok",false);j.addProperty("code",code);j.addProperty("message",message);return j;}
 }

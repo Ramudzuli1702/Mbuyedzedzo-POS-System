@@ -137,6 +137,15 @@ public class ProductService {
     }
 
     public Product getProductByCode(String code) {
+        Product exact = findProductByCode(code);
+        if (exact != null || code == null) return exact;
+        // ZXing may represent a zero-prefixed EAN-13 as its equivalent UPC-A.
+        if (code.matches("[0-9]{12}")) return findProductByCode("0" + code);
+        if (code.matches("0[0-9]{12}")) return findProductByCode(code.substring(1));
+        return null;
+    }
+
+    private Product findProductByCode(String code) {
 
         String sql = """
             SELECT p.*, c.CategoryName

@@ -221,6 +221,27 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/stocktakeButton" style="@style/ActionRow"
+                android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true"
+                android:foreground="?attr/selectableItemBackground">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical" android:padding="16dp">
+                    <FrameLayout android:layout_width="48dp" android:layout_height="48dp" android:background="@drawable/bg_icon_chip">
+                        <ImageView android:layout_width="22dp" android:layout_height="22dp" android:layout_gravity="center"
+                            android:src="@drawable/ic_inventory" android:contentDescription="@null" />
+                    </FrameLayout>
+                    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                        android:layout_marginStart="14dp" android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                            android:text="@string/stocktaking" android:textSize="16sp" android:textStyle="bold" android:textColor="@color/ink" />
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp"
+                            android:text="@string/stocktake_home_hint" android:textSize="13sp" android:textColor="@color/muted" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- Receipts -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/viewReceiptsButton"

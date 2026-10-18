@@ -937,7 +937,7 @@ public class SalesView {
                 }
 
                 if (settingsService.getReceiptAutoPrint()) ReceiptGenerator.printReceipt(fReceipt);
-                if (wifiHandler != null && wifiHandler.isConnected()) {
+                if (wifiHandler != null) {
                     new Thread(() -> wifiHandler.sendReceipt(fReceipt), "Receipt-Sender").start();
                 }
 

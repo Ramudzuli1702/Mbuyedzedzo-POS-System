@@ -30,8 +30,9 @@ public class ReceiptStorage {
         return instance;
     }
     
-    public void saveReceipt(Receipt receipt) {
+    public synchronized boolean saveReceipt(Receipt receipt) {
         List<Receipt> receipts = getAllReceipts();
+        for (Receipt existing : receipts) if (existing.getReceiptId().equals(receipt.getReceiptId())) return true;
         receipts.add(0, receipt); // Add to beginning
         
         // Keep only last 100 receipts
@@ -40,21 +41,23 @@ public class ReceiptStorage {
         }
         
         String json = gson.toJson(receipts);
-        preferences.edit().putString(KEY_RECEIPTS, json).apply();
+        return preferences.edit().putString(KEY_RECEIPTS, json).commit();
     }
     
-    public List<Receipt> getAllReceipts() {
+    public synchronized List<Receipt> getAllReceipts() {
         String json = preferences.getString(KEY_RECEIPTS, null);
         if (json == null) {
             return new ArrayList<>();
         }
         
         Type type = new TypeToken<List<Receipt>>(){}.getType();
-        List<Receipt> receipts = gson.fromJson(json, type);
+        List<Receipt> receipts;
+        try { receipts = gson.fromJson(json, type); }
+        catch (RuntimeException e) { return new ArrayList<>(); }
         return receipts != null ? receipts : new ArrayList<>();
     }
     
-    public void clearAllReceipts() {
+    public synchronized void clearAllReceipts() {
         preferences.edit().remove(KEY_RECEIPTS).apply();
     }
     

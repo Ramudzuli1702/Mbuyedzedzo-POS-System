@@ -1,633 +1,171 @@
 package com.pos.services;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import com.pos.models.Product;
-import javafx.collections.ObservableList;
 import java.io.*;
-import java.math.BigDecimal;
 import java.net.*;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.nio.charset.StandardCharsets;
+import java.math.BigDecimal;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * WiFi server for desktop POS system
- * Handles scans and product additions from Android app
- */
+/** One paired scanner connection, UTF-8 line-delimited JSON, no credential/payload logging. */
 public class WiFiHandler {
-
-    private static final int BASE_PORT = 8888;
-    private static final int MAX_PORT_TRIES = 10;
-
+    private static final Logger log=LoggerFactory.getLogger(WiFiHandler.class);
     private static WiFiHandler instance;
-
-    public static synchronized WiFiHandler getInstance() {
-        if (instance == null) {
-            instance = new WiFiHandler();
-        }
-        return instance;
+    public static synchronized WiFiHandler getInstance() { if(instance==null)instance=new WiFiHandler();return instance; }
+    private final Gson gson=new Gson();
+    private final MobileReceiptService receipts;
+    private final StocktakeService stocktakes;
+    private final Supplier<List<String>> categoryNames;
+    private final int basePort;
+    public WiFiHandler() { this(new StocktakeService(),new MobileReceiptService(),()->new CategoryService().getAllCategories(),8888); }
+    WiFiHandler(StocktakeService stocktakes,MobileReceiptService receipts,Supplier<List<String>> categories,int basePort) {
+        this.stocktakes=stocktakes;this.receipts=receipts;this.categoryNames=categories;this.basePort=basePort;
     }
+    private final Set<String> receiptsInFlight=ConcurrentHashMap.newKeySet();
+    private volatile ServerSocket serverSocket;
+    private volatile Socket clientSocket;
+    private volatile PrintWriter output;
+    private volatile boolean running,connected;
+    private volatile Consumer<String> onScanReceived;
+    private volatile Consumer<Product> onProductReceived;
+    private int actualPort=-1;
 
-    private ServerSocket serverSocket;
-    private Socket clientSocket;
-    private BufferedReader input;
-    private PrintWriter output;
-
-    private Thread serverThread;
-    private AtomicBoolean isRunning = new AtomicBoolean(false);
-    private AtomicBoolean isConnected = new AtomicBoolean(false);
-
-    private Consumer<String> onScanReceived;
-    private Consumer<Product> onProductReceived;
-    private Gson gson = new Gson();
-    private int actualPort = -1;
-
-    /**
-     * Start WiFi server and listen for connections
-     */
-    public boolean startListening(Consumer<String> onScanReceived, Consumer<Product> onProductReceived) {
-        this.onScanReceived = onScanReceived;
-        this.onProductReceived = onProductReceived;
-
-        if (isRunning.get()) {
-            return true;
-        }
-
-        boolean started = false;
-        String localIP = getLocalIP();
-
-        for (int tryPort = BASE_PORT; tryPort < BASE_PORT + MAX_PORT_TRIES; tryPort++) {
-            try {
-                serverSocket = new ServerSocket(tryPort);
-                actualPort = tryPort;
-
-                System.out.println("WiFi Server started on " + localIP + ":" + tryPort);
-                System.out.println("📱 Enter this IP in the Android app to connect: " + localIP + ":" + tryPort);
-                System.out.println("🔍 Use 'netstat -an | grep " + tryPort + "' to verify listening");
-
-                isRunning.set(true);
-
-                // Start server thread
-                serverThread = new Thread(this::acceptConnections, "WiFi-Server");
-                serverThread.setDaemon(true);
-                serverThread.start();
-
-                started = true;
-                break;
-
-            } catch (IOException e) {
-                if (e.getMessage().contains("Address already in use")) {
-                    System.err.println("Port " + tryPort + " in use, trying next...");
-                    continue;
-                } else {
-                    System.err.println("Failed to start WiFi server: " + e.getMessage());
-                    e.printStackTrace();
-                    return false;
-                }
-            }
-        }
-
-        if (!started) {
-            System.err.println("Failed to find available port after " + MAX_PORT_TRIES + " tries");
-            System.err.println("💡 Try closing other applications using ports " + BASE_PORT + " to "
-                    + (BASE_PORT + MAX_PORT_TRIES - 1));
-            return false;
-        }
-
-        return true;
+    public synchronized boolean startListening(Consumer<String> scan,Consumer<Product> product) {
+        onScanReceived=scan;onProductReceived=product;
+        if(running)return true;
+        for(int port=basePort;port<basePort+10;port++) try {
+            serverSocket=new ServerSocket(port);actualPort=port;running=true;
+            actualPort=serverSocket.getLocalPort();
+            Thread thread=new Thread(this::acceptConnections,"WiFi-Server");thread.setDaemon(true);thread.start();return true;
+        } catch(BindException e) { /* Try the next pairing port. */ }
+        catch(IOException e) { log.warn("Scanner server could not start",e);return false; }
+        return false;
     }
-
-    /**
-     * Get the actual port being used
-     */
-    public int getPort() {
-        return actualPort;
-    }
-
-    /**
-     * Accept incoming connections
-     */
     private void acceptConnections() {
-        System.out.println("🚀 acceptConnections thread started on port " + actualPort);
-        while (isRunning.get()) {
+        while(running) {
             try {
-                System.out.println("⏳ Waiting for connection on port " + actualPort + "...");
-
-                // Accept client connection
-                clientSocket = serverSocket.accept();
-                String clientIP = clientSocket.getInetAddress().getHostAddress();
-
-                System.out.println("Android device connected: " + clientIP + " on port " + actualPort);
-                System.out.println("🔌 Setting up streams...");
-
-                // Setup streams
-                input = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                output = new PrintWriter(clientSocket.getOutputStream(), true);
-                isConnected.set(true);
-
-                System.out.println("📡 Streams ready. isConnected = " + isConnected.get());
-
-                // Send welcome message
-                sendData("{\"type\":\"connected\",\"message\":\"Connected to " + com.pos.Branding.APP_NAME + "\"}");
-
-                // Send the real category list so the Add Product screen's
-                // dropdown has something to show as soon as it connects.
-                sendCategoriesToApp();
-
-                System.out.println("🚀 Starting handleClient()...");
-                // Handle this connection
-                handleClient();
-
-                System.out.println("🏁 handleClient() ended - connection closed");
-
-            } catch (IOException e) {
-                if (isRunning.get()) {
-                    System.err.println("Connection error on port " + actualPort + ": " + e.getMessage());
-                    e.printStackTrace();
-                }
-            }
-        }
-        System.out.println("🛑 acceptConnections loop ended");
-    }
-
-    /**
-     * Handle client communication
-     */
-    private void handleClient() {
-        StringBuilder messageBuilder = new StringBuilder();
-
-        System.out.println("===========================================");
-        System.out.println("👂 HANDLE CLIENT STARTED");
-        System.out.println("===========================================");
-
-        System.out.println("👂 Listening for data from Android...");
-
-        try {
-            String line;
-            int lineCount = 0;
-
-            while (isConnected.get() && (line = input.readLine()) != null) {
-                lineCount++;
-
-                System.out.println("");
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                System.out.println("📨 LINE #" + lineCount + " RECEIVED");
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                System.out.println("Raw line: [" + line + "]");
-                System.out.println("Line length: " + line.length());
-                System.out.println("Starts with '{': " + line.trim().startsWith("{"));
-                System.out.println("Starts with '[': " + line.trim().startsWith("["));
-                System.out.println("Ends with '}': " + line.trim().endsWith("}"));
-                System.out.println("Ends with ']': " + line.trim().endsWith("]"));
-
-                messageBuilder.append(line).append("\n");
-
-                // Check for complete receipt
-                String fullMessage = messageBuilder.toString().trim();
-                if (fullMessage.contains("===END_RECEIPT===")) {
-                    System.out.println("📄 Receipt detected - processing...");
-                    // Process receipt if needed
-                    messageBuilder.setLength(0);
-                    continue;
-                }
-
-                // Parse JSON messages (check trimmed full buffer for complete JSON object or
-                // array)
-                String trimmedBuffer = messageBuilder.toString().trim();
-                boolean isComplete = false;
-                String jsonToProcess = null;
-
-                if (trimmedBuffer.startsWith("{") && trimmedBuffer.endsWith("}")) {
-                    // Single object
-                    System.out.println("🔍 SINGLE JSON OBJECT DETECTED");
-                    jsonToProcess = trimmedBuffer;
-                    isComplete = true;
-                } else if (trimmedBuffer.startsWith("[") && trimmedBuffer.endsWith("]")) {
-                    // Array - extract first object if single-item
-                    System.out.println("🔍 JSON ARRAY DETECTED - Extracting inner object");
-                    try {
-                        JsonArray jsonArray = gson.fromJson(trimmedBuffer, JsonArray.class);
-                        if (jsonArray.size() > 0) {
-                            JsonObject innerJson = jsonArray.get(0).getAsJsonObject();
-                            jsonToProcess = gson.toJson(innerJson);
-                            isComplete = true;
-                            System.out.println("Extracted inner JSON: " + jsonToProcess);
-                        } else {
-                            System.err.println("Empty JSON array");
-                        }
-                    } catch (Exception arrayEx) {
-                        System.err.println("Failed to parse array: " + arrayEx.getMessage());
+                ServerSocket listener=serverSocket;if(listener==null)break;
+                Socket socket=listener.accept();clientSocket=socket;
+                socket.setKeepAlive(true);socket.setTcpNoDelay(true);
+                output=new PrintWriter(new OutputStreamWriter(socket.getOutputStream(),StandardCharsets.UTF_8),true);
+                connected=true;receiptsInFlight.clear();
+                StocktakeProtocol stocktake=new StocktakeProtocol(stocktakes); // Auth never survives a new socket.
+                JsonObject hello=new JsonObject();hello.addProperty("type","connected");hello.addProperty("protocolVersion",2);
+                hello.addProperty("message","Connected to "+com.pos.Branding.APP_NAME);sendData(gson.toJson(hello));
+                sendCategories();drainReceipts();
+                try(BufferedReader input=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8))) {
+                    String line;
+                    while(connected && (line=readFrame(input,8*1024*1024))!=null) {
+                        try {
+                            JsonElement parsed=JsonParser.parseString(line);
+                            if(parsed.isJsonArray())parsed=parsed.getAsJsonArray().get(0); // Legacy phone wrapper.
+                            JsonObject message=parsed.getAsJsonObject();
+                            String type=message.get("type").getAsString();
+                            if(type.startsWith("stocktake_")) sendData(gson.toJson(stocktake.handle(message)));
+                            else switch(type) {
+                                case "request_categories" -> sendCategories();
+                                case "scan" -> {
+                                    String code=message.get("data").getAsString();
+                                    Consumer<String> callback=onScanReceived;
+                                    if(callback!=null) { callback.accept(code);reply("scan_ack","Scan received"); }
+                                    else reply("error","Open Sales on the desktop to scan products.");
+                                }
+                                case "add_product" -> addProduct(message.getAsJsonObject("data"));
+                                case "receipt_ack" -> {
+                                    String id=message.get("id").getAsString();
+                                    if(receiptsInFlight.remove(id))receipts.acknowledge(id);
+                                    drainReceipts();
+                                }
+                                default -> reply("error","Unsupported scanner request. Update the desktop and phone together.");
+                            }
+                        } catch(Exception e) { reply("error","The desktop could not process this request. Please retry."); }
                     }
                 }
-
-                if (isComplete && jsonToProcess != null) {
-                    System.out.println("🔍 PROCESSING EXTRACTED JSON");
-                    try {
-                        JsonObject json = gson.fromJson(jsonToProcess, JsonObject.class);
-
-                        if (json == null) {
-                            System.err.println("JSON parsing returned NULL");
-                        } else if (!json.has("type")) {
-                            System.err.println("JSON has no 'type' field");
-                            System.err.println("JSON keys: " + json.keySet().toString());
-                        } else {
-                            String type = json.get("type").getAsString();
-                            System.out.println("JSON PARSED SUCCESSFULLY");
-                            System.out.println("Type: [" + type + "]");
-
-                            processReceivedData(json);
-                        }
-                    } catch (Exception jsonEx) {
-                        System.err.println("JSON PARSE EXCEPTION: " + jsonEx.getClass().getName());
-                        System.err.println("Exception message: " + jsonEx.getMessage());
-                        System.err.println("JSON to process: " + jsonToProcess);
-                        jsonEx.printStackTrace();
-                    }
-
-                    messageBuilder.setLength(0);
-                } else {
-                    System.out.println(
-                            "NOT COMPLETE JSON - Accumulating in buffer (size: " + trimmedBuffer.length() + ")");
-                    System.out.println(
-                            "Buffer preview: " + trimmedBuffer.substring(0, Math.min(200, trimmedBuffer.length())));
-                }
-
-                System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-                System.out.println("");
-            }
-
-            System.out.println("Read loop ended (connection closed or null line)");
-
-        } catch (IOException e) {
-            if (isConnected.get()) {
-                System.err.println("IOException in handleClient: " + e.getMessage());
-                e.printStackTrace();
-            }
-        } finally {
-            System.out.println("===========================================");
-            System.out.println("👋 HANDLE CLIENT STOPPED");
-            System.out.println("===========================================");
-            closeConnection();
+            } catch(IOException e) { if(running)log.info("Scanner connection closed: {}",e.getClass().getSimpleName()); }
+            finally { closeConnection(); }
         }
     }
-
-    /**
-     * Process received data from Android
-     */
-    private void processReceivedData(JsonObject json) {
+    public static String readFrame(Reader reader,int limit) throws IOException {
+        StringBuilder result=new StringBuilder();int ch;
+        while((ch=reader.read())!=-1) {
+            if(ch=='\n')return result.toString();
+            if(ch!='\r')result.append((char)ch);
+            if(result.length()>limit)throw new IOException("Scanner frame too large");
+        }
+        return result.isEmpty()?null:result.toString();
+    }
+    private void sendCategories() {
         try {
-            if (json == null || !json.has("type")) {
-                System.err.println("Invalid JSON received");
-                return;
-            }
-
-            String type = json.get("type").getAsString();
-            System.out.println("📥 Processed message type: " + type);
-
-            switch (type) {
-                case "scan":
-                    handleScan(json);
-                    break;
-
-                case "add_product":
-                    handleAddProduct(json);
-                    break;
-
-                case "request_categories":
-                    System.out.println("📂 Categories re-requested by Android");
-                    sendCategoriesToApp();
-                    break;
-
-                default:
-                    System.out.println("Unknown message type: " + type);
-                    System.out.println("Full JSON: " + gson.toJson(json));
-            }
-
-        } catch (Exception e) {
-            System.err.println("Error processing data: " + e.getMessage());
-            e.printStackTrace();
-        }
+            JsonObject message=new JsonObject();message.addProperty("type","categories");
+            message.add("data",gson.toJsonTree(categoryNames.get()));sendData(gson.toJson(message));
+        } catch(Exception e) { reply("error","Categories could not be loaded. Please retry."); }
     }
-
-    /**
-     * Send the real category list to the connected Android app, so its Add
-     * Product dropdown reflects whatever categories actually exist on
-     * desktop (created/renamed via Inventory's Manage Categories dialog).
-     */
-    private void sendCategoriesToApp() {
+    private void addProduct(JsonObject data) {
+        Consumer<Product> callback=onProductReceived;
+        if(callback==null) { reply("error","Open Inventory on the desktop to add products.");return; }
+        Product product=new Product();product.setProductName(data.get("name").getAsString());
+        product.setBarCode(data.get("barcode").getAsString());product.setQuantity(data.get("quantity").getAsInt());
+        product.setCategoryName(data.has("category")?data.get("category").getAsString():null);
+        product.setPrice(money(data,"price"));product.setCostPrice(money(data,"costPrice"));
+        callback.accept(product);reply("product_ack","Product received by desktop inventory.");
+    }
+    private BigDecimal money(JsonObject data,String key) {
+        return !data.has(key)||data.get(key).isJsonNull()?BigDecimal.ZERO:new BigDecimal(data.get(key).getAsString().replace(',','.'));
+    }
+    private void reply(String type,String message) {
+        JsonObject json=new JsonObject();json.addProperty("type",type);json.addProperty("message",message);sendData(gson.toJson(json));
+    }
+    public void sendReceipt(String text) {
+        try { receipts.queue(text);drainReceipts(); }
+        catch(Exception e) { log.warn("Phone receipt could not be queued; the saved desktop receipt is still available",e); }
+    }
+    private synchronized void drainReceipts() {
+        if(!connected)return;
         try {
-            CategoryService categoryService = new CategoryService();
-            ObservableList<String> categories = categoryService.getAllCategories();
-
-            JsonObject categoriesJson = new JsonObject();
-            categoriesJson.addProperty("type", "categories");
-
-            JsonArray categoriesArray = new JsonArray();
-            for (String category : categories) {
-                categoriesArray.add(category);
+            for(JsonObject message:receipts.pending()) {
+                String id=message.get("id").getAsString();
+                if(receiptsInFlight.add(id))sendData(gson.toJson(message));
             }
-            categoriesJson.add("data", categoriesArray);
-
-            sendData(gson.toJson(categoriesJson));
-            System.out.println("📂 Sent " + categories.size() + " categories to Android app");
-        } catch (Exception e) {
-            System.err.println("Failed to send categories: " + e.getMessage());
-        }
+        } catch(Exception e) { log.warn("Pending phone receipts could not be loaded",e); }
     }
-
-    /**
-     * Handle barcode/QR scan
-     */
-    private void handleScan(JsonObject json) {
-        if (!json.has("data")) {
-            System.err.println("Scan data missing");
-            return;
-        }
-
-        String code = json.get("data").getAsString();
-        System.out.println("📦 Scan received: " + code);
-
-        if (onScanReceived != null) {
-            onScanReceived.accept(code);
-        }
-
-        // Send acknowledgment
-        sendData("{\"type\":\"scan_ack\",\"message\":\"Scan received\"}");
+    public synchronized void sendData(String data) {
+        PrintWriter writer=output;
+        if(!connected || writer==null)return;
+        writer.println(data);writer.flush();
+        if(writer.checkError())closeConnection();
     }
-
-    /**
-     * A money field from the phone may arrive as a JSON number (dot decimal)
-     * or, if the phone sent it as a string, with a comma decimal separator —
-     * normalize either to a double.
-     */
-    private double parseAndroidMoney(JsonElement element, double fallback) {
-        if (element == null || element.isJsonNull()) return fallback;
-        if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
-            return element.getAsDouble();
-        }
-        try {
-            return Double.parseDouble(element.getAsString().replace(",", "."));
-        } catch (NumberFormatException e) {
-            return fallback;
-        }
-    }
-
-    /**
-     * Handle product addition from Android
-     */
-    private void handleAddProduct(JsonObject json) {
-        if (!json.has("data")) {
-            System.err.println("Product data missing");
-            sendData("{\"type\":\"error\",\"message\":\"Product data missing\"}");
-            return;
-        }
-
-        try {
-            JsonObject productData = json.getAsJsonObject("data");
-
-            // Extract product fields
-            String name = productData.get("name").getAsString();
-            String barcode = productData.get("barcode").getAsString();
-            int quantity = productData.get("quantity").getAsInt();
-            // Optional, not required — an older phone build mid-upgrade may
-            // not send one; InventoryView falls back to the default category.
-            String category = productData.has("category") && !productData.get("category").isJsonNull()
-                    ? productData.get("category").getAsString() : null;
-
-            double price = parseAndroidMoney(productData.get("price"), 0.0);
-            // costPrice is a newer field — not every phone build sends it, so
-            // it defaults to 0 like every other no-cost-price entry point
-            // (InventoryView already backfills this the same way on insert).
-            double costPrice = productData.has("costPrice")
-                    ? parseAndroidMoney(productData.get("costPrice"), 0.0) : 0.0;
-
-            System.out.println("➕ Product received from Android:");
-            System.out.println("   Name: " + name);
-            System.out.println("   Category: " + category);
-            System.out.println("   Barcode: " + barcode);
-            System.out.println("   Quantity: " + quantity);
-            System.out.println("   Price: R " + price);
-            System.out.println("   Cost Price: R " + costPrice);
-
-            // Create Product object
-            Product product = new Product();
-            product.setProductName(name);
-            product.setCategoryName(category);
-            product.setBarCode(barcode);
-            product.setQuantity(quantity);
-            product.setPrice(BigDecimal.valueOf(price));
-            product.setCostPrice(BigDecimal.valueOf(costPrice));
-
-            // Call callback to handle product addition
-            if (onProductReceived != null) {
-                onProductReceived.accept(product);
-
-                // Send success response
-                sendData("{\"type\":\"product_ack\",\"message\":\"Product received and added to inventory\"}");
-            } else {
-                System.err.println("No product handler registered");
-                sendData("{\"type\":\"error\",\"message\":\"No product handler available\"}");
-            }
-
-        } catch (Exception e) {
-            System.err.println("Error processing product: " + e.getMessage());
-            e.printStackTrace();
-            sendData("{\"type\":\"error\",\"message\":\"Failed to process product: " + e.getMessage() + "\"}");
-        }
-    }
-
-    /**
-     * Send receipt to Android device
-     */
-    public void sendReceipt(String receiptText) {
-        sendData(receiptText + "\n===END_RECEIPT===\n");
-    }
-
-    /**
-     * Send data to Android device
-     */
-    public void sendData(String data) {
-        if (!isConnected.get() || output == null) {
-            System.err.println("Not connected - cannot send data");
-            return;
-        }
-
-        try {
-            output.println(data);
-            output.flush();
-            System.out.println("📤 Sent to Android (" + data.length() + " bytes): "
-                    + data.substring(0, Math.min(100, data.length())) + (data.length() > 100 ? "..." : ""));
-        } catch (Exception e) {
-            System.err.println("Failed to send data: " + e.getMessage());
-            e.printStackTrace();
-            closeConnection();
-        }
-    }
-
-    /**
-     * Close current connection
-     */
     public void closeConnection() {
-        isConnected.set(false);
-
-        try {
-            if (input != null)
-                input.close();
-        } catch (IOException e) {
-            System.err.println("Error closing input: " + e.getMessage());
-        }
-
-        try {
-            if (output != null)
-                output.close();
-        } catch (Exception e) {
-            System.err.println("Error closing output: " + e.getMessage());
-        }
-
-        try {
-            if (clientSocket != null)
-                clientSocket.close();
-        } catch (IOException e) {
-            System.err.println("Error closing socket: " + e.getMessage());
-        }
-
-        input = null;
-        output = null;
-        clientSocket = null;
-
-        System.out.println("👋 Android device disconnected");
+        connected=false;Socket socket=clientSocket;clientSocket=null;
+        try { if(socket!=null)socket.close(); } catch(IOException ignored) {}
+        output=null;receiptsInFlight.clear();
     }
-
-    /**
-     * Stop server and cleanup
-     */
     public void stopListening() {
-        isRunning.set(false);
-        closeConnection();
-
-        if (serverThread != null && serverThread.isAlive()) {
-            serverThread.interrupt();
-            try {
-                serverThread.join(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            serverThread = null;
-        }
-
-        try {
-            if (serverSocket != null)
-                serverSocket.close();
-        } catch (IOException e) {
-            // Ignore
-        }
-
-        System.out.println("🛑 WiFi server stopped");
+        running=false;closeConnection();
+        try { if(serverSocket!=null)serverSocket.close(); } catch(IOException ignored) {}
+        serverSocket=null;
     }
-
-    /**
-     * Full cleanup (call on app shutdown)
-     */
-    public void cleanup() {
-        stopListening();
-
-        // Extra safety: Force-close server socket if still open
-        try {
-            if (serverSocket != null && !serverSocket.isClosed()) {
-                serverSocket.close();
-            }
-        } catch (IOException e) {
-            System.err.println("Failed to close server socket: " + e.getMessage());
-        }
-
-        // Reset state
-        actualPort = -1;
-        isRunning.set(false);
-        isConnected.set(false);
-        onScanReceived = null;
-        onProductReceived = null;
-
-        System.out.println("🧹 WiFiHandler fully cleaned up");
-    }
-
-    /**
-     * Check if client is connected
-     */
-    public boolean isConnected() {
-        return isConnected.get();
-    }
-
-    /**
-     * Check if server is running
-     */
-    public boolean isServerRunning() {
-        return isRunning.get();
-    }
-
-    /**
-     * Get connection status
-     */
-    public String getStatus() {
-        if (isConnected.get()) {
-            return "Connected";
-        } else if (isRunning.get()) {
-            return "Waiting for connection";
-        } else {
-            return "Stopped";
-        }
-    }
-
-    /**
-     * Register product callback without restarting the server.
-     * Call this when InventoryView is opened and server is already running.
-     */
-    public void setProductCallback(Consumer<Product> onProductReceived) {
-        this.onProductReceived = onProductReceived;
-        System.out.println("Product callback registered: " + (onProductReceived != null ? "SET" : "CLEARED"));
-    }
-
-    /**
-     * Register scan callback without restarting the server.
-     */
-    public void setScanCallback(Consumer<String> onScanReceived) {
-        this.onScanReceived = onScanReceived;
-        System.out.println("Scan callback registered: " + (onScanReceived != null ? "SET" : "CLEARED"));
-    }
-
-    /**
-     * The string encoded in the "connect" QR code shown on the desktop.
-     * The scanner app strips the {@code POS:} prefix and connects to the rest.
-     */
-    public String getConnectionPayload() {
-        int port = actualPort > 0 ? actualPort : BASE_PORT;
-        return "POS:" + getLocalIP() + ":" + port;
-    }
-
-    /**
-     * Get local IP address
-     */
+    public void cleanup() { stopListening();onScanReceived=null;onProductReceived=null; }
+    public boolean isConnected() { return connected; }
+    public boolean isServerRunning() { return running; }
+    public int getPort() { return actualPort; }
+    public String getStatus() { return connected?"Connected":running?"Waiting for phone":"Not connected"; }
+    public void setProductCallback(Consumer<Product> callback) { onProductReceived=callback; }
+    public void setScanCallback(Consumer<String> callback) { onScanReceived=callback; }
+    public String getConnectionPayload() { return "POS:"+getLocalIP()+":"+actualPort; }
     public String getLocalIP() {
         try {
-            for (NetworkInterface ni : Collections.list(NetworkInterface.getNetworkInterfaces())) {
-                if (!ni.isLoopback() && ni.isUp()) {
-                    for (InterfaceAddress addr : ni.getInterfaceAddresses()) {
-                        InetAddress inetAddr = addr.getAddress();
-                        if (inetAddr instanceof Inet4Address) {
-                            String ip = inetAddr.getHostAddress();
-                            if (ip.startsWith("192.168.")) {
-                                return ip;
-                            }
-                        }
-                    }
-                }
+            for(NetworkInterface network:Collections.list(NetworkInterface.getNetworkInterfaces())) {
+                if(!network.isUp() || network.isLoopback() || network.isVirtual())continue;
+                for(InetAddress address:Collections.list(network.getInetAddresses()))
+                    if(address instanceof Inet4Address && address.isSiteLocalAddress())return address.getHostAddress();
             }
             return InetAddress.getLocalHost().getHostAddress();
-        } catch (Exception e) {
-            return "Unknown";
-        }
+        } catch(Exception e) { return "127.0.0.1"; }
     }
 }

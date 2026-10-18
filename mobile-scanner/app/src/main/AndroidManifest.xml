@@ -38,6 +38,7 @@
             android:name=".ScannerActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.POSScanner.Fullscreen" />
+        <activity android:name=".StocktakeActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
         
         <activity
             android:name=".ReceiptActivity"

@@ -24,10 +24,13 @@ import com.google.zxing.ResultPoint;
 import com.journeyapps.barcodescanner.BarcodeCallback;
 import com.journeyapps.barcodescanner.BarcodeResult;
 import com.journeyapps.barcodescanner.DecoratedBarcodeView;
+import com.journeyapps.barcodescanner.DefaultDecoderFactory;
+import com.journeyapps.barcodescanner.Size;
 
 import java.util.List;
 
 public class ScannerActivity extends AppCompatActivity {
+    private boolean cameraActive;
 
     private DecoratedBarcodeView barcodeView;
     private TextView lastScannedText;
@@ -37,6 +40,7 @@ public class ScannerActivity extends AppCompatActivity {
 
     private boolean isFlashOn = false;
     private int scanCount = 0;
+    private boolean handlingScan;
 
     private WiFiCommunication wifiComm;
     private Vibrator vibrator;
@@ -100,8 +104,16 @@ public class ScannerActivity extends AppCompatActivity {
     }
 
     private void setupScanner() {
+        String mode = getIntent().getStringExtra("mode");
+        barcodeView.getBarcodeView().setDecoderFactory(new DefaultDecoderFactory(ScanFormats.forMode(mode)));
+        int width = (int) (getResources().getDisplayMetrics().widthPixels * .85);
+        barcodeView.getBarcodeView().setFramingRectSize(new Size(width, "connect".equals(mode) ? width : width / 2));
+        barcodeView.getBarcodeView().getCameraSettings().setAutoFocusEnabled(true);
+        barcodeView.getBarcodeView().getCameraSettings().setContinuousFocusEnabled(true);
         barcodeView.decodeContinuous(callback);
-        barcodeView.setStatusText("Point camera at barcode/QR code");
+        String hint = getString("connect".equals(mode) ? R.string.scan_pairing_qr : R.string.scan_product_barcode);
+        barcodeView.setStatusText(hint);
+        lastScannedText.setText(hint);
     }
 
     private void setupClickListeners() {
@@ -122,9 +134,11 @@ public class ScannerActivity extends AppCompatActivity {
     }
 
     private void handleScan(String scannedData) {
+        if (handlingScan) return;
+        handlingScan = true;
         String mode = getIntent().getStringExtra("mode");
         boolean suppressSend = getIntent().getBooleanExtra("suppress_send", false);
-        boolean isAddProductMode = "add_product".equals(mode) || suppressSend;
+        boolean isAddProductMode = "add_product".equals(mode) || "stocktake".equals(mode) || "connect".equals(mode) || suppressSend;
 
         // Quick UI feedback (non-blocking)
         uiHandler.post(() -> {
@@ -159,12 +173,12 @@ public class ScannerActivity extends AppCompatActivity {
 
         // Pause scanner briefly to avoid duplicate scans
         barcodeView.pause();
-        barcodeView.postDelayed(barcodeView::resume, 2000);
+        barcodeView.postDelayed(() -> { handlingScan = false; if (cameraActive && !isFinishing()) barcodeView.resume(); }, 2000);
     }
 
     private void sendToPC(String data) {
         try {
-            wifiComm.sendScan(data);
+            if (!wifiComm.sendScan(data)) throw new IllegalStateException("Connection unavailable");
             uiHandler.post(() ->
                 Toast.makeText(ScannerActivity.this, "Sent to POS: " + data, Toast.LENGTH_SHORT).show()
             );
@@ -212,12 +226,14 @@ public class ScannerActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        cameraActive = true;
         barcodeView.resume();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        cameraActive = false;
         barcodeView.pause();
     }
 

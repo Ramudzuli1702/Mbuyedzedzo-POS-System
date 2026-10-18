@@ -38,6 +38,10 @@ public class DatabaseSetup {
             fixSaleSequenceSchema();
             createAllTables();
             runMigrations();
+            try (Connection companion = DatabaseConnection.getConnection()) {
+                if (companion == null) throw new SQLException("Database connection unavailable");
+                CompanionSchema.ensure(companion);
+            }
             System.out.println("Database setup complete.");
             return true;
         } catch (Exception e) {

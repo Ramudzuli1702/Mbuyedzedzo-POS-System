@@ -1,82 +1,47 @@
-# Mbuyedzedzo Scanner (mobile companion)
+﻿# Mbuyedzedzo Scanner 1.3.0
 
-*Part of the [Mbuyedzedzo](../README.md) suite — see the root README for
-how this fits with [`pos-desktop`](../pos-desktop) and [`licensing-server`](../licensing-server).*
+Android companion for the [desktop POS](../pos-desktop), using the existing teal Material theme, outlined inputs and rounded action cards. Requires Android 7.0 or later.
 
-An Android app that turns a phone into a wireless barcode/QR scanner for the
-[desktop POS](../pos-desktop) — scan a product at the shelf, or from the till
-without a USB scanner attached, and it lands directly in the sale on the
-desktop app over the local network.
+## Pairing and barcodes
 
-## How it connects
+Connect both devices to the same trusted local network. Enter the desktop's displayed IP address and port, or scan its connection QR (`POS:<ip>:<port>`). The default port is 8888; the desktop tries the next nine ports if necessary. Navigation between phone screens keeps the connection alive.
 
-The desktop POS runs a small TCP server (`WiFiHandler`, port `8888` by
-default, auto-incrementing up to 10 times if that's taken) and speaks
-line-delimited JSON. The phone is the client (`WiFiCommunication`).
+Product scanning reads Code 128 (including desktop labels), Code 39/93, EAN-13/8, UPC-A/E, ITF and Codabar. QR scanning is reserved for pairing. Leading zeroes are preserved; equivalent UPC-A and zero-prefixed EAN-13 forms also match. In Add Product and Stocktaking, scanning fills/selects a product instead of adding it to a sale.
 
-Pairing is one of:
-- **Scan the "Connect" QR code** shown on the desktop (encodes `POS:<ip>:<port>`) — no typing required.
-- **Enter the IP manually** in the app's connect dialog.
+## Stocktaking
 
-Once connected, the app auto-reconnects with backoff (up to 5 attempts) if
-the connection drops, and the desktop pushes its product categories down
-immediately so the "Add Product" screen's dropdown is ready without a
-separate request.
+1. Connect and open **Stocktaking**.
+2. Sign in with an active desktop staff account's email and password. Inventory loads into a fixed snapshot.
+3. Search by name, barcode or category, or scan. Enter physical quantities, including zero. Blank means **not counted**; those products stay unchanged.
+4. Counts and notes save on the phone after each edit. The current screen can count offline. Reconnect and sign in again before submitting. After restarting the app, sign in to resume that staff member's saved snapshot for this server.
+5. Submit counted products. Submission freezes the sheet and leaves live stock unchanged.
+6. An **Admin or Manager** opens desktop **Supervisor Approvals > Stocktakes**, compares loaded, physical and current quantities, and approves or rejects. Rejection requires notes. Approval applies all counted corrections in one transaction and records the reviewer. Products whose stock changed since the snapshot require a fresh count, even if their quantity returned to its original value. Deleted counted products also block approval.
 
-| Direction | `type` | Payload | Purpose |
-| --- | --- | --- | --- |
-| Phone → Desktop | `scan` | `data`: the scanned code | A barcode/QR was scanned — desktop adds it to the current sale |
-| Phone → Desktop | `add_product` | `data`: `{name, category, barcode, quantity, price}` | Submit a brand-new product from the phone |
-| Phone → Desktop | `request_categories` | — | Ask for the category list again (e.g. after reconnecting) |
-| Desktop → Phone | `connected` | `message` | Handshake acknowledgement |
-| Desktop → Phone | `categories` | `data`: string array | Product categories, for the dropdown |
-| Desktop → Phone | `scan_ack` / `product_ack` | `message` | Confirms a scan/product was received |
-| Desktop → Phone | `error` | `message` | Something went wrong server-side |
+The phone receives review results while connected, or refreshes them when resuming after sign-in. A fresh count replaces the phone's unsubmitted draft; submitted audit records remain on the desktop.
 
-JSON is built with Gson on both ends (not string concatenation), so a
-product name or barcode containing a quote can't corrupt the stream.
+Sign-in uses a short-lived nonce challenge and HMAC proof derived from existing staff password hashes. Passwords are not stored on the phone or sent as plaintext. Sessions expire after 30 minutes of inactivity and clear on disconnect. The local TCP connection has no TLS; use a trusted network.
 
-**Known gap:** the desktop can push a finished sale receipt down to the
-phone (`ReceiptActivity` has the list/detail screens for it), but the
-phone-side handler for the `===END_RECEIPT===` marker isn't wired up yet —
-receipts sent that way are currently dropped. Scanning, product submission,
-and category sync are all live.
+## Receipts
 
-## Screens
+The desktop queues finished receipts in a persistent outbox even when disconnected. The phone saves before acknowledging; unacknowledged receipts replay on reconnect and deduplicate by ID. Receipt history refreshes on receipt arrival and screen resume. Details retain original text and parse wrapped names, quantities, prices, discounts and final totals.
 
-| Activity | What it does |
-| --- | --- |
-| `MainActivity` | Home screen — connection status, and entry points to Scan / Add Product / Receipts |
-| `ScannerActivity` | Full-screen camera scanner (ZXing), also reused in "add product" mode (fills the barcode field instead of sending a scan) and "connect" mode (reads the pairing QR) |
-| `AddProductActivity` | Form to submit a new product to the desktop's inventory, with barcode-scan-to-fill |
-| `ReceiptActivity` / `ReceiptDetailActivity` | Local receipt history (see the gap above — not currently populated from the desktop) |
+Legacy multiline receipts ending with `===END_RECEIPT===` are supported. Reliable outbox delivery and stocktaking require the matching desktop source in this release; older desktop binaries do not implement these additions. The desktop creates companion tables and the stock-version trigger during normal database setup.
 
-## Build & run
+## Protocol
 
-This is a plain Android Gradle module — **always use the wrapper**
-(`gradlew`/`gradlew.bat`), never a bare `gradle` on your PATH: the project
-is pinned to Gradle 8.9 to match Android Gradle Plugin 8.2.0, and a newer
-system-wide Gradle will fail in confusing ways (Gradle 9's stricter
-configuration locking breaks AGP 8.2.0's data/view-binding task).
+UTF-8 newline-delimited JSON uses Gson and bounded frames. Existing `scan`, `add_product` and `request_categories` messages remain. Added messages: `receipt`/`receipt_ack`, `stocktake_challenge`, `stocktake_login`, `stocktake_start`, `stocktake_resume`, `stocktake_submit`, `stocktake_logout`, `stocktake_status`. Stocktake responses correlate by `requestId`; authenticated requests carry a socket-bound token. The server checks ownership and roles independently of client fields. UUID snapshot IDs make retries safe after lost responses.
 
-```bash
-# Windows
-.\gradlew.bat assembleDebug      # build only
-.\gradlew.bat installDebug       # build + install on a connected device/emulator
-.\gradlew.bat run                # installDebug, then launch it via adb
+## Build and verification
+
+Use JDK 17, Android SDK 34 and the checked-in Gradle 8.9 wrapper (AGP 8.2.0):
+
+```powershell
+.\gradlew.bat testDebugUnitTest assembleDebug assembleRelease
+.\gradlew.bat installDebug
 ```
 
-Requirements: JDK 17, Android SDK (compileSdk 34, minSdk 24), a device or
-emulator on the same Wi-Fi network as the desktop POS for the socket
-connection to work — `adb devices` to confirm one is attached.
+Release builds are unsigned by default. Sign with the installed app's certificate to preserve update compatibility; keep keystores outside the repository. The distributed APK's certificate and SHA-256 checksum are recorded with the GitHub release.
 
-## Permissions
+Android unit tests exercise actual Code 128/EAN decoding, receipt parsing/framing, password proofs (including the older Android fallback), and draft/count semantics. From `pos-desktop`, run `mvn test` for desktop unit tests. `src/test/powershell/Verify-Companion.ps1` starts a separate disposable database using installed MySQL binaries, testing real approval transactions/rollback, authentication and receipt reconnects. It never connects to the shop database. Optional `-Interactive` mode enables the emulator workflow against that test server; test-only fixture details are in `CompanionIT`.
 
-`CAMERA` (scanning), `INTERNET` + `ACCESS_NETWORK_STATE` + `ACCESS_WIFI_STATE`
-(the socket connection), `VIBRATE` (scan feedback).
-
-## Stack
-
-Java · Android SDK 34 (min 24) · ZXing (`zxing-android-embedded`) for
-scanning · Gson for the wire protocol · Material Components · Gradle 8.9 /
-AGP 8.2.0.
+Permissions: camera, network access/state, Wi-Fi state and vibration. No additional account service is required.

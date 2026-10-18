@@ -96,6 +96,7 @@ public class MainActivity extends AppCompatActivity {
         scanButton = findViewById(R.id.scanButton);
         addProductButton = findViewById(R.id.addProductButton);
         viewReceiptsButton = findViewById(R.id.viewReceiptsButton);
+        findViewById(R.id.stocktakeButton).setOnClickListener(v -> startActivity(new Intent(this, StocktakeActivity.class)));
         connectionCard = findViewById(R.id.connectionCard);
         connectButton = findViewById(R.id.connectButton);
     }
@@ -326,9 +327,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         LocalBroadcastManager.getInstance(this).unregisterReceiver(connectionReceiver);
         LocalBroadcastManager.getInstance(this).unregisterReceiver(receiptReceiver);
-        if (wifiComm != null) {
-            wifiComm.closeConnection();
-        }
+        // The app-scoped connection stays alive while other screens are open.
     }
 
     @Override
