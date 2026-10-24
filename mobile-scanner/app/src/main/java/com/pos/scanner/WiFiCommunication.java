@@ -23,11 +23,14 @@ public final class WiFiCommunication {
     private final Object connectionLock=new Object(),writeLock=new Object();
     private final ExecutorService sender=Executors.newSingleThreadExecutor();
     private final Map<String,Callback> requests=new ConcurrentHashMap<>();
+    private final Map<String,Integer> loginRequests=new ConcurrentHashMap<>();
+    private volatile int authGeneration;
     private volatile Socket socket;
     private volatile PrintWriter output;
     private volatile boolean connected,reconnect;
+    private volatile String connectionMessage="Connect to the POS desktop over WiFi";
     private volatile int generation,attempts;
-    private String host,address;private int port;
+    private String host,address,fingerprint;private int port;
     private volatile String token,staffName;
     private volatile long authenticatedUntil;
     private volatile int staffId;
@@ -37,44 +40,53 @@ public final class WiFiCommunication {
     public static synchronized WiFiCommunication getInstance(Context context){if(instance==null)instance=new WiFiCommunication(context);return instance;}
 
     public boolean connect(String endpoint) {
-        if(endpoint==null)return false;
-        String[] parts=endpoint.trim().split(":",-1);
-        if(parts.length>2||parts[0].trim().isEmpty())return false;
-        int requestedPort;
-        try { requestedPort=parts.length==2?Integer.parseInt(parts[1]):8888;if(requestedPort<1||requestedPort>65535)return false; }
-        catch(NumberFormatException e){return false;}
+        PairingEndpoint pairing=PairingEndpoint.parse(endpoint);
+        if(pairing==null)return false;
         if(connected&&endpoint.trim().equals(address))return true;
         closeConnection();
-        host=parts[0].trim();port=requestedPort;address=host+":"+port;attempts=0;reconnect=true;
+        connectionMessage="Connecting to the desktop...";
+        host=pairing.host;port=pairing.port;fingerprint=pairing.fingerprint;address=pairing.encoded;attempts=0;reconnect=true;
         int current=++generation;open(current);return true;
     }
     private void open(int current) {
+        final String openingHost=host,openingFingerprint=fingerprint;final int openingPort=port;
         new Thread(()-> {
-            Socket opened=new Socket();
+            Socket opened=null;
+            boolean retry=true;
             try {
-                opened.connect(new InetSocketAddress(host,port),7000);opened.setKeepAlive(true);opened.setTcpNoDelay(true);
+                javax.net.ssl.SSLSocket secure=(javax.net.ssl.SSLSocket)PinnedDesktop.factory(openingFingerprint).createSocket();opened=secure;
+                secure.setEnabledProtocols(new String[]{"TLSv1.2"});
+                opened.connect(new InetSocketAddress(openingHost,openingPort),7000);opened.setSoTimeout(10000);
+                secure.startHandshake();opened.setKeepAlive(true);opened.setTcpNoDelay(true);
+                try(BufferedReader input=new BufferedReader(new InputStreamReader(opened.getInputStream(),StandardCharsets.UTF_8))) {
+                ScannerHandshake.requireSupported(readLine(input));
+                opened.setSoTimeout(0);
                 synchronized(connectionLock) {
                     if(current!=generation||!reconnect){opened.close();return;}
                     socket=opened;output=new PrintWriter(new OutputStreamWriter(opened.getOutputStream(),StandardCharsets.UTF_8),true);
-                    connected=true;attempts=0;categories=Collections.emptyList();clearAuth();
+                    connected=true;connectionMessage="Connected. Sign in to continue.";categories=Collections.emptyList();clearAuth();
                 }
                 notifyConnection(true);
                 IncomingFrames frames=new IncomingFrames();
-                try(BufferedReader input=new BufferedReader(new InputStreamReader(opened.getInputStream(),StandardCharsets.UTF_8))) {
                     String line;
                     while(current==generation&&(line=readLine(input))!=null) {
                         IncomingFrames.Frame frame=frames.accept(line);
                         if(frame.json!=null)handle(frame.json);
                         if(frame.receipt!=null)saveReceipt(Receipt.fromString(frame.receipt),false);
                     }
+                    if(current==generation)connectionMessage="The desktop closed the connection. Reconnect and sign in again.";
                 }
-            } catch(Exception ignored) { /* A single status event below handles failure and reconnect. */ }
+            } catch(Exception failure) {
+                retry=ConnectionFailure.retry(failure);
+                if(current==generation)connectionMessage=ConnectionFailure.message(failure);
+            }
             finally {
-                try{opened.close();}catch(IOException ignored){}
+                try{if(opened!=null)opened.close();}catch(IOException ignored){}
                 if(current==generation) {
+                    ++authGeneration;loginRequests.clear();
                     connected=false;output=null;socket=null;clearAuth();failRequests("DISCONNECTED","Connection lost. Your stocktake draft is saved on this phone.");
                     notifyConnection(false);
-                    if(reconnect&&attempts<5){int delay=2000*++attempts;main.postDelayed(()->{if(current==generation&&reconnect&&!connected)open(current);},delay);}
+                    if(retry&&reconnect&&attempts<5){int delay=2000*++attempts;main.postDelayed(()->{if(current==generation&&reconnect&&!connected)open(current);},delay);}
                 }
             }
         },"POS-Connection").start();
@@ -92,9 +104,15 @@ public final class WiFiCommunication {
                 case "response": {
                     if(json.has("code")&&"AUTH_REQUIRED".equals(json.get("code").getAsString()))clearAuth();
                     String id=json.get("requestId").getAsString();Callback callback=requests.remove(id);
+                    Integer loginAttempt=loginRequests.remove(id);
                     if(callback!=null&&json.has("ok")&&json.get("ok").getAsBoolean()&&json.has("data")&&json.get("data").isJsonObject()){
                         JsonObject account=json.getAsJsonObject("data");
-                        if(account.has("token")){token=account.get("token").getAsString();authenticatedUntil=SystemClock.elapsedRealtime()+30*60*1000;staffId=account.get("staffId").getAsInt();staffName=account.get("name").getAsString();}
+                        if(account.has("token") && loginAttempt!=null && loginAttempt==authGeneration){
+                            staffId=account.get("staffId").getAsInt();
+                            ReceiptStorage.getInstance(context).setScope(fingerprint,staffId);
+                            token=account.get("token").getAsString();authenticatedUntil=SystemClock.elapsedRealtime()+30*60*1000;staffName=account.get("name").getAsString();
+                            attempts=0;
+                        }
                     }
                     if(callback!=null)main.post(()->callback.complete(json));break;
                 }
@@ -116,6 +134,7 @@ public final class WiFiCommunication {
         } catch(RuntimeException ignored) { /* Ignore malformed server data, without logging receipts or credentials. */ }
     }
     private void saveReceipt(Receipt receipt,boolean acknowledge) {
+        if(!isSignedIn())return;
         ReceiptStorage storage=ReceiptStorage.getInstance(context);boolean exists=storage.getReceiptById(receipt.getReceiptId())!=null;
         if(!storage.saveReceipt(receipt))return;
         if(acknowledge){JsonObject ack=new JsonObject();ack.addProperty("type","receipt_ack");ack.addProperty("id",receipt.getReceiptId());sendNow(ack.toString());}
@@ -123,11 +142,12 @@ public final class WiFiCommunication {
     }
     private void broadcast(Intent intent){LocalBroadcastManager.getInstance(context).sendBroadcast(intent);}
     private void notifyConnection(boolean connected){Intent event=new Intent("WIFI_CONNECTED");event.putExtra("connected",connected);broadcast(event);}
-    private void clearAuth(){token=null;authenticatedUntil=0;staffId=0;staffName=null;broadcast(new Intent(ACTION_AUTH_CHANGED));}
+    private void clearAuth(){token=null;authenticatedUntil=0;staffId=0;staffName=null;ReceiptStorage.getInstance(context).clearScope();broadcast(new Intent(ACTION_AUTH_CHANGED));}
     public boolean isSignedIn(){if(token!=null&&SystemClock.elapsedRealtime()>=authenticatedUntil)clearAuth();return connected&&token!=null;}
     public int getStaffId(){return staffId;}
     public String getStaffName(){return staffName==null?"Staff":staffName;}
     public boolean isConnected(){return connected;}
+    public String getConnectionMessage(){return connectionMessage;}
     public String getServerAddress(){return address;}
     public List<String> getCategories(){return categories;}
     public void requestCategories(){JsonObject j=new JsonObject();j.addProperty("type","request_categories");sendData(j.toString());}
@@ -145,15 +165,18 @@ public final class WiFiCommunication {
     }
     public void request(JsonObject request,Callback callback) {
         String id=UUID.randomUUID().toString();request.addProperty("requestId",id);
+        if(request.has("type") && "auth_login".equals(request.get("type").getAsString()))loginRequests.put(id,authGeneration);
         if(token!=null)request.addProperty("token",token);
         requests.put(id,callback);
-        main.postDelayed(()-> {Callback waiting=requests.remove(id);if(waiting!=null)waiting.complete(error("TIMEOUT","The desktop did not respond. Check the connection and use the updated desktop."));},20000);
+        main.postDelayed(()-> {loginRequests.remove(id);Callback waiting=requests.remove(id);if(waiting!=null)waiting.complete(error("TIMEOUT","The desktop did not respond. Check the connection and use the updated desktop."));},20000);
         sender.execute(()-> {if(!sendNow(request.toString())){Callback waiting=requests.remove(id);if(waiting!=null)main.post(()->waiting.complete(error("DISCONNECTED","Connect to the desktop to continue.")));}});
     }
     public void login(String email,char[] password,Callback callback) {
+        final int loginAttempt=++authGeneration;
         final int loginGeneration=generation;
         clearAuth();JsonObject challenge=new JsonObject();challenge.addProperty("type","auth_challenge");challenge.addProperty("email",email);
         request(challenge,response-> {
+            if(loginAttempt!=authGeneration){Arrays.fill(password,'\0');callback.complete(error("AUTH_FAILED","Sign-in was cancelled."));return;}
             if(!response.get("ok").getAsBoolean()){Arrays.fill(password,'\0');callback.complete(response);return;}
             sender.execute(()-> {
                 try {
@@ -161,17 +184,18 @@ public final class WiFiCommunication {
                     byte[] proof=PasswordProof.create(password,data.get("algorithm").getAsString(),data.get("iterations").getAsInt(),Base64.decode(data.get("salt").getAsString(),Base64.DEFAULT),data.get("nonce").getAsString(),data.get("challengeId").getAsString());
                     JsonObject login=new JsonObject();login.addProperty("type","auth_login");login.add("challengeId",data.get("challengeId"));login.addProperty("proof",Base64.encodeToString(proof,Base64.NO_WRAP));Arrays.fill(proof,(byte)0);
                     request(login,result-> {
-                        if(loginGeneration!=generation||!connected){callback.complete(error("DISCONNECTED","Connection changed. Sign in again."));return;}
-                        if(result.get("ok").getAsBoolean()){JsonObject account=result.getAsJsonObject("data");token=account.get("token").getAsString();staffId=account.get("staffId").getAsInt();staffName=account.get("name").getAsString();broadcast(new Intent(ACTION_AUTH_CHANGED));}
+                        if(loginAttempt!=authGeneration || loginGeneration!=generation||!connected){callback.complete(error("DISCONNECTED","Connection changed. Sign in again."));return;}
+                        if(result.get("ok").getAsBoolean())broadcast(new Intent(ACTION_AUTH_CHANGED));
                         callback.complete(result);
                     });
                 } catch(Exception e){Arrays.fill(password,'\0');main.post(()->callback.complete(error("AUTH_FAILED","Could not complete sign-in. Check your password and update the desktop.")));}
             });
         });
     }
-    public void logout(){if(token!=null){JsonObject j=new JsonObject();j.addProperty("type","auth_logout");request(j,r->{});}clearAuth();}
+    public void logout(){++authGeneration;loginRequests.clear();if(token!=null){JsonObject j=new JsonObject();j.addProperty("type","auth_logout");request(j,r->{});}clearAuth();}
     public void closeConnection() {
-        reconnect=false;++generation;connected=false;clearAuth();
+        reconnect=false;++generation;++authGeneration;loginRequests.clear();connected=false;clearAuth();
+        connectionMessage="Connect to the POS desktop over WiFi";
         Socket old=socket;socket=null;output=null;try{if(old!=null)old.close();}catch(IOException ignored){}
         failRequests("DISCONNECTED","Connection closed. Your saved counts will be kept.");notifyConnection(false);
     }

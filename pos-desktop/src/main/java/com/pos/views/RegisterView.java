@@ -65,7 +65,8 @@ public class RegisterView {
         );
 
         // ── Header ──
-        Label title = new Label("Welcome to " + com.pos.Branding.APP_NAME);
+        Label title = new Label(com.pos.Branding.DISPLAY_NAME);
+        title.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
         title.setFont(Font.font("System", FontWeight.BOLD, 26));
         title.setTextFill(Color.web("#0f766e"));
 
@@ -165,32 +166,11 @@ public class RegisterView {
         }
 
         // ── Persist ──
-        String hashedPassword = PasswordUtil.hashPassword(password);
-
-        try (Connection conn = DatabaseConnection.getConnection()) {
-            String sql = "INSERT INTO Staff (FullNames, EmailAddress, UserPassword, UserType, Status) " +
-                         "VALUES (?, ?, ?, 'Admin', 'Active')";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setString(1, fullName);
-                ps.setString(2, email);
-                ps.setString(3, hashedPassword);
-                ps.executeUpdate();
-            }
-
-            System.out.println("Admin account created for: " + email);
-
-            // ── Go to login ──
-            LoginView loginView = new LoginView(stage);
-            loginView.show();
-
-        } catch (SQLException ex) {
-            if (ex.getMessage() != null && ex.getMessage().contains("Duplicate entry")) {
-                showError(errorLabel, "An account with this email already exists.");
-            } else {
-                showError(errorLabel, "Database error: " + ex.getMessage());
-                ex.printStackTrace();
-            }
+        if(!new com.pos.services.UserService().bootstrapAdmin(fullName,email,password)) {
+            showError(errorLabel,"The administrator could not be created. An account may already exist; restart the app to sign in.");return;
         }
+        passwordField.clear();confirmField.clear();
+        new LoginView(stage).show();
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

@@ -1,10 +1,14 @@
-# Mbuyedzedzo Scanner 1.4.1
+# Mbuyedzedzo Scanner 1.5.1
 
 Android companion for the [desktop POS](../pos-desktop), using the existing teal Material theme, outlined inputs and rounded action cards. Requires Android 7.0 or later.
 
+For the complete shop workflow, see the [user guide](../pos-desktop/docs/user-guide.md), [stocktaking guide](../pos-desktop/docs/stocktaking.md) and [troubleshooting](../pos-desktop/docs/troubleshooting.md). This README describes the current source; check installed versions before assuming a published download includes the same desktop features.
+
 ## Pairing and barcodes
 
-Connect both devices to the same trusted local network. Enter the desktop's displayed IP address and port, or scan its connection QR (`POS:<ip>:<port>`). The default port is 8888; the desktop tries the next nine ports if necessary. Navigation between phone screens keeps the connection alive.
+Connect both devices to the same local network. Scan the updated desktop's connection QR, or paste its complete connection code (`POS-TLS:<ip>:<port>:<certificate-fingerprint>`). A bare IP address or older `POS:` QR cannot verify the desktop and is not accepted. The default port is 8888; the desktop tries the next nine ports if necessary. Navigation between phone screens keeps the connection alive.
+
+If scanning says the QR is not a POS connection code while the desktop logs SSL failures, update the installed phone app as well as the desktop. Earlier Android versions only understand the older unencrypted protocol. Version 1.5.1 checks the desktop's protocol before opening login, shows pairing/connection errors, and stops automatic retries for incompatible identities. Interrupted sign-in stays on the login screen while the connection retries; use Disconnect to pair again. The desktop allows two minutes to enter credentials.
 
 After connecting, sign in with an existing active desktop staff account. One app-wide session covers scanning, product submissions, receipts and stocktaking. Sign out from the home screen. Reconnecting requires sign-in again; sessions expire after 30 minutes of inactivity. The desktop enforces authentication before accepting scans/products or sending categories/receipts. Use the matching updated desktop; the original v1.0.0 installers cannot authenticate this version.
 
@@ -17,11 +21,11 @@ Product scanning reads Code 128 (including desktop labels), Code 39/93, EAN-13/8
 3. Search by name, barcode or category, or scan. Enter physical quantities, including zero. Blank means **not counted**; those products stay unchanged.
 4. Counts and notes save on the phone after each edit. If disconnected, reconnect and sign in to resume that staff member's saved snapshot for this server.
 5. Submit counted products. Submission freezes the sheet and leaves live stock unchanged.
-6. An **Admin or Manager** opens desktop **Supervisor Approvals > Stocktakes**, compares loaded, physical and current quantities, and approves or rejects. Rejection requires notes. Approval applies all counted corrections in one transaction and records the reviewer. Products whose stock changed since the snapshot require a fresh count, even if their quantity returned to its original value. Deleted counted products also block approval.
+6. An **Admin or Manager** opens desktop **Approvals > Stocktakes**, compares loaded, physical and current quantities, and approves or rejects using their single-use authorization code (valid for 15 minutes). Generate the code in **Sessions > Auth Key** after confirming the supervisor's staff password. Rejection requires notes. Approval applies all counted corrections in one transaction and records the reviewer. Products whose stock changed since the snapshot require a fresh count, even if their quantity returned to its original value. Deleted counted products also block approval.
 
 The phone receives review results while connected, or refreshes them when resuming after sign-in. A fresh count replaces the phone's unsubmitted draft; submitted audit records remain on the desktop.
 
-Sign-in uses a short-lived nonce challenge and HMAC proof derived from existing staff password hashes. Passwords are not stored on the phone or sent as plaintext. Sessions expire after 30 minutes of inactivity and clear on disconnect. The local TCP connection has no TLS; use a trusted network.
+Sign-in uses a short-lived nonce challenge and HMAC proof derived from existing staff password hashes. Passwords are not stored on the phone or sent as plaintext. Sessions expire after 30 minutes of inactivity and clear on disconnect. TLS encrypts the connection and the QR's certificate fingerprint verifies the desktop. Receipt storage is encrypted and separated by desktop and staff account.
 
 ## Receipts
 
@@ -31,7 +35,7 @@ Legacy multiline receipts ending with `===END_RECEIPT===` are supported. Reliabl
 
 ## Protocol
 
-UTF-8 newline-delimited JSON uses Gson and bounded frames. `auth_challenge`, `auth_login` and `auth_logout` manage the shared session; older stocktake authentication aliases remain supported. All scan, product, category, receipt-acknowledgement and stocktake requests carry a socket-bound token. Responses correlate by `requestId`. The server checks ownership and roles independently of client fields. UUID snapshot IDs make retries safe after lost responses. Protocol version 3 advertises `requiresLogin` in the connection handshake.
+UTF-8 newline-delimited JSON over TLS uses Gson and bounded frames. `auth_challenge`, `auth_login` and `auth_logout` manage the shared session; older stocktake authentication aliases remain supported. All scan, product, category, receipt-acknowledgement and stocktake requests carry a socket-bound token. Responses correlate by `requestId`. The server checks ownership and roles independently of client fields. UUID snapshot IDs make retries safe after lost responses. Protocol version 4 advertises `requiresLogin` in the connection handshake.
 
 ## Build and verification
 
@@ -44,6 +48,6 @@ Use JDK 17, Android SDK 34 and the checked-in Gradle 8.9 wrapper (AGP 8.2.0):
 
 Release builds are unsigned by default. Sign with the installed app's certificate to preserve update compatibility; keep keystores outside the repository. The distributed APK's certificate and SHA-256 checksum are recorded with the GitHub release.
 
-Android unit tests exercise actual Code 128/EAN decoding, receipt parsing/framing, password proofs (including the older Android fallback), and draft/count semantics. From `pos-desktop`, run `mvn test` for desktop unit tests. `src/test/powershell/Verify-Companion.ps1` starts a separate disposable database using installed MySQL binaries, testing real approval transactions/rollback, authentication and receipt reconnects. It never connects to the shop database. Optional `-Interactive` mode enables the emulator workflow against that test server; test-only fixture details are in `CompanionIT`.
+Android unit tests exercise actual Code 128/EAN decoding, receipt parsing/framing, password proofs (including the older Android fallback), and draft/count semantics. From `pos-desktop`, run `mvn test` for desktop unit tests. The [desktop verification instructions](../pos-desktop/README.md#verification) explain isolated MySQL integration fixtures, including `CompanionIT`. Those fixtures require disposable data and explicit configuration; do not use a shop database. Device tests under `app/src/androidTest` require a connected Android device/emulator and are separate from JVM unit tests.
 
 Permissions: camera, network access/state, Wi-Fi state and vibration. No additional account service is required.

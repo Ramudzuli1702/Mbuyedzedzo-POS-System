@@ -55,7 +55,7 @@ public final class LogSetup {
         System.setErr(tee(System.err, console));
 
         Logger log = LoggerFactory.getLogger(LogSetup.class);
-        log.info("=== {} starting ===", com.pos.Branding.APP_NAME);
+        log.info("=== {} starting ===", com.pos.Branding.WINDOW_TITLE);
         log.info("Log directory: {}", dir.toAbsolutePath());
 
         Thread.setDefaultUncaughtExceptionHandler((thread, ex) ->

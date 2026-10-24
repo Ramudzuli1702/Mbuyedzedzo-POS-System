@@ -61,7 +61,7 @@ public class TermsView {
         title.setFont(Font.font("System", FontWeight.BOLD, 22));
         title.setTextFill(Color.WHITE);
 
-        Label sub = new Label("Please review and accept the licence agreement for " + Branding.APP_NAME);
+        Label sub = new Label("Please review and accept the licence agreement for " + Branding.BRAND_NAME + ".");
         sub.setFont(Font.font("System", 13));
         sub.setTextFill(Color.web("#ccfbf1"));
 

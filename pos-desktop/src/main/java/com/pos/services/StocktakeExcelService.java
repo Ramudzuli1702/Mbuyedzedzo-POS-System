@@ -76,7 +76,7 @@ public final class StocktakeExcelService {
         List<Count> counts = new ArrayList<>(); List<String> errors = new ArrayList<>();
         Map<Integer, Line> products = new HashMap<>(); snapshot.items().forEach(line -> products.put(line.productId(), line));
         Set<Integer> seen = new HashSet<>(); int rows = 0;
-        try (InputStream input = new FileInputStream(source); Workbook workbook = WorkbookFactory.create(input)) {
+        try (Workbook workbook = com.pos.utils.SpreadsheetFiles.open(source)) {
             Sheet sheet = workbook.getSheet("Stocktake");
             if (sheet == null) return new ImportPlan(List.of(), List.of("Use a stocktake export containing the Stocktake sheet."), 0);
             DataFormatter format = new DataFormatter(Locale.ROOT);

@@ -41,9 +41,14 @@ public final class LicenseManager {
 
     // ── Startup check (offline) ─────────────────────────────────────────────
 
+    static boolean withinOfflineGrace(Instant issued,Instant now) {
+        return issued!=null && issued.isAfter(Instant.EPOCH) && !issued.isAfter(now)
+                && Duration.between(issued,now).compareTo(Duration.ofDays(OFFLINE_GRACE_DAYS))<=0;
+    }
+
     public Status check() {
         if (store.token == null || store.token.isBlank()) {
-            return new Status(State.NEEDS_ACTIVATION, "This copy of " + Branding.APP_NAME
+            return new Status(State.NEEDS_ACTIVATION, "This copy of " + Branding.BRAND_NAME
                     + " has not been activated.", null);
         }
         LicenseToken t;
@@ -69,10 +74,8 @@ public final class LicenseManager {
         if (t.tokenFresh()) {
             return new Status(State.ACTIVE, "Licensed to " + t.key, t);
         }
-        // token window lapsed — lean on the offline grace
-        Instant lastOk = Instant.ofEpochSecond(store.lastValidatedEpoch);
-        if (store.lastValidatedEpoch > 0
-                && Duration.between(lastOk, Instant.now()).toDays() <= OFFLINE_GRACE_DAYS) {
+        // Grace is bounded by signed server claims, never an editable local timestamp.
+        if (withinOfflineGrace(t.issuedAt, Instant.now())) {
             return new Status(State.GRACE,
                     "Licence needs to re-check with the server. Connect to the internet soon.", t);
         }

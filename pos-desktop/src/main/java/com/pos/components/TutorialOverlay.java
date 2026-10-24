@@ -48,7 +48,7 @@ public final class TutorialOverlay {
 
         Dialog<Void> dialog = new Dialog<>();
         if (owner != null) dialog.initOwner(owner);
-        dialog.setTitle("Get to know " + com.pos.Branding.APP_SHORT + " (" + (index + 1) + " of " + sections.size() + ")");
+        dialog.setTitle("Get to know " + com.pos.Branding.BRAND_NAME + " (" + (index + 1) + " of " + sections.size() + ")");
         dialog.setHeaderText(entry.title());
         dialog.getDialogPane().setContent(bodyLabel(entry.body()));
 

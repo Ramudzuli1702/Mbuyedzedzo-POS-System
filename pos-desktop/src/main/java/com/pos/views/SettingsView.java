@@ -287,14 +287,18 @@ public class SettingsView {
                 return;
             }
             status("Sending test email to " + user + "...", status, true);
+            String password=passwordField.getText(),fromName=fromNameField.getText();
+            testBtn.setDisable(true);
             new Thread(() -> {
                 try {
-                    settings.saveEmailCredentials(user, passwordField.getText(), fromNameField.getText());
-                    javafx.application.Platform.runLater(() ->
-                        status("Test sent! Check inbox at " + user, status, true));
+                    if(!settings.saveEmailCredentials(user, password, fromName))throw new IllegalStateException("Email settings could not be saved.");
+                    if(!new com.pos.services.CommunicationsService().sendTestEmail(user))throw new IllegalStateException("The mail server did not accept the test email. Check the address and app password.");
+                    javafx.application.Platform.runLater(() ->status("Test accepted by the mail server. Check inbox at " + user, status, true));
                 } catch (Exception ex) {
                     javafx.application.Platform.runLater(() ->
                         status("Failed: " + ex.getMessage(), status, false));
+                } finally {
+                    javafx.application.Platform.runLater(()->testBtn.setDisable(false));
                 }
             }).start();
         });

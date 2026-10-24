@@ -149,6 +149,14 @@ public class ReportsView {
     }
 
     private void render() {
+        try {renderReport();}
+        catch(IllegalStateException ex) {
+            contentArea.getChildren().clear();
+            contentArea.getChildren().add(emptyState("Reports could not be loaded. Check the database connection and retry."));
+            rangeSummary.setText("Report unavailable — no figures were loaded.");
+        }
+    }
+    private void renderReport() {
         contentArea.getChildren().clear();
 
         boolean valid = start()!=null && end()!=null && !end().isBefore(start());
@@ -166,6 +174,7 @@ public class ReportsView {
             default -> "";
         };
         rangeSummary.setText(sessionReport+" | "+dates+scope);
+        rangeSummary.setText(rangeSummary.getText()+" Profit is unavailable where older sales have no recorded purchase cost.");
 
         switch (reportCombo.getValue()) {
             case "Overview"                 -> buildExecutiveDashboard();
@@ -408,7 +417,7 @@ public class ReportsView {
         int totalRecipients = campaigns.stream().mapToInt(r -> (int) r.get("recipients")).sum();
 
         GridPane kpi = kpiGrid(com.pos.Edition.current().hasCustomers() ? 4 : 2);
-        kpi.add(kpiCard("Promo Sales",       String.valueOf(promoSalesCount), 0, C_GREEN,  "with promo code"), 0, 0);
+        kpi.add(kpiCard("Offer uses",       String.valueOf(promoSalesCount), 0, C_GREEN,  "sale/offer combinations"), 0, 0);
         kpi.add(kpiCard("Promo Revenue",     fmtR(promoRevenue),              0, C_BLUE,   "promo-driven"),    1, 0);
         if(com.pos.Edition.current().hasCustomers()) {
         kpi.add(kpiCard("Email Campaigns",   String.valueOf(campaignCount),   0, C_PURPLE, "sent"),            2, 0);
@@ -416,7 +425,7 @@ public class ReportsView {
         }
         contentArea.getChildren().add(kpi);
 
-        contentArea.getChildren().add(sectionLabel("Promo Code Performance"));
+        contentArea.getChildren().add(sectionLabel("Promotion performance"));
         contentArea.getChildren().add(buildPromoTable(promos));
 
         contentArea.getChildren().add(sectionLabel("Revenue: Promo vs Non-Promo"));
@@ -834,6 +843,7 @@ public class ReportsView {
         col.setStyle("-fx-alignment: CENTER-RIGHT;");
         col.setCellValueFactory(cd -> {
             Object v = cd.getValue().get(key);
+            if(v==null)return new javafx.beans.property.SimpleStringProperty("Unavailable");
             BigDecimal bd = (v instanceof BigDecimal b) ? b
                           : (v instanceof Number n)     ? BigDecimal.valueOf(n.doubleValue())
                           : BigDecimal.ZERO;
@@ -850,7 +860,7 @@ public class ReportsView {
         col.setCellValueFactory(cd -> {
             Object v = cd.getValue().get(key);
             double d = (v instanceof Number n) ? n.doubleValue() : 0.0;
-            return new javafx.beans.property.SimpleStringProperty(String.format("%.1f%%", d));
+            return new javafx.beans.property.SimpleStringProperty(v==null?"Unavailable":fmtPct(d));
         });
         return col;
     }
@@ -1068,11 +1078,11 @@ public class ReportsView {
     }
 
     private static String fmtR(BigDecimal v) {
-        return "R " + String.format("%,.2f", v == null ? 0.0 : v.doubleValue());
+        return v==null?"Unavailable":"R " + String.format("%,.2f", v.doubleValue());
     }
 
     private static String fmtPct(double v) {
-        return String.format("%.1f%%", v);
+        return Double.isFinite(v)?String.format("%.1f%%", v):"Unavailable";
     }
 
     private void doExport() {

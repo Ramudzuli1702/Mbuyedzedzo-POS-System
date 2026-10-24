@@ -60,7 +60,8 @@ public class LoginView {
         // but not truly transparent (e.g. if the card style ever changes).
         ImageView logo = BrandAssets.logoMark(110);
 
-        Label title = new Label(com.pos.Branding.APP_NAME);
+        Label title = new Label(com.pos.Branding.DISPLAY_NAME);
+        title.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
         title.setFont(Font.font("System", FontWeight.BOLD, 23));
         title.setTextFill(Color.web(Theme.TEXT));
 

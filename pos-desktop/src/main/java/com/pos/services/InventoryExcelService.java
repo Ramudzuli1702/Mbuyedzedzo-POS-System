@@ -133,8 +133,7 @@ public class InventoryExcelService {
             existingCategories.add(c.trim().toLowerCase());
         }
 
-        try (FileInputStream fis = new FileInputStream(source);
-             Workbook wb = WorkbookFactory.create(fis)) {
+        try (Workbook wb = com.pos.utils.SpreadsheetFiles.open(source)) {
 
             Sheet sheet = wb.getSheetAt(0);
             DataFormatter fmt = new DataFormatter();
@@ -231,11 +230,13 @@ public class InventoryExcelService {
             product.setCategoryID(categoryId != null ? categoryId : defaultCategoryId);
             product.setStaffID(importingStaffID);
 
+            try {
             if (productService.addProduct(product)) {
                 added.add(new ImportRow(row.rowNumber(), row.productName(), row.barcode()));
             } else {
                 invalid.add("Row " + row.rowNumber() + " (" + row.productName() + "): could not be saved — check the log.");
             }
+            }catch(IllegalArgumentException e){invalid.add("Row "+row.rowNumber()+": "+e.getMessage());}
         }
 
         return new ImportResult(added, plan.duplicates(), invalid);
@@ -251,8 +252,8 @@ public class InventoryExcelService {
     private Integer parseInt(String s) {
         if (s == null || s.isBlank()) return 0;
         try {
-            return (int) Double.parseDouble(s.replace(",", "").trim());
-        } catch (NumberFormatException e) {
+            return new BigDecimal(s.replace(",", "").trim()).intValueExact();
+        } catch (NumberFormatException | ArithmeticException e) {
             return null;
         }
     }

@@ -12,8 +12,27 @@ import java.time.LocalDate;
 import java.util.*;
 
 public class UserService {
+    /** The shared lock row serializes first-administrator creation across app instances. */
+    public boolean bootstrapAdmin(String name,String email,String password) {
+        if(name==null || name.isBlank() || email==null || email.isBlank() || !PasswordUtil.isValidPassword(password))return false;
+        try(Connection c=DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try(Statement s=c.createStatement()) {
+                    s.executeUpdate("INSERT IGNORE INTO BusinessSettings (SettingKey,SettingValue) VALUES ('bootstrap.admin.lock','1')");
+                    try(ResultSet lock=s.executeQuery("SELECT SettingValue FROM BusinessSettings WHERE SettingKey='bootstrap.admin.lock' FOR UPDATE")){if(!lock.next())throw new SQLException("Bootstrap lock missing.");}
+                    try(ResultSet staff=s.executeQuery("SELECT COUNT(*) FROM Staff")){staff.next();if(staff.getInt(1)!=0){c.rollback();return false;}}
+                }
+                try(PreparedStatement p=c.prepareStatement("INSERT INTO Staff (FullNames,EmailAddress,UserPassword,UserType,Status) VALUES (?,?,?,'Admin','Active')")) {
+                    p.setString(1,name.trim());p.setString(2,email.trim());p.setString(3,PasswordUtil.hashPassword(password));p.executeUpdate();
+                }
+                c.commit();return true;
+            }catch(SQLException|RuntimeException e){c.rollback();throw e;}
+        }catch(SQLException e){return false;}
+    }
 
     public User login(String email, String password) {
+        if(!com.pos.utils.LoginAttempts.SHARED.begin(email))return null;
         String query = "SELECT * FROM Staff WHERE EmailAddress = ? AND Status = 'Active'";
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -25,6 +44,7 @@ public class UserService {
             if (rs.next()) {
                 String hashedPassword = rs.getString("UserPassword");
                 if (PasswordUtil.verifyPassword(password, hashedPassword)) {
+                    com.pos.utils.LoginAttempts.SHARED.success(email);
                     int staffID = rs.getInt("StaffID");
 
                     // Transparently upgrade legacy (unsalted SHA-256) hashes to

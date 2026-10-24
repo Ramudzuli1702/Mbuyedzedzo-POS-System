@@ -1,5 +1,7 @@
 # Desktop 1.0.7 and Scanner 1.4.1
 
+Historical change note. Barcode printing described below was removed in desktop 1.0.8; current product details offer PNG saving. Use the [user guide](user-guide.md) for current instructions. Test results below describe verification at the time of this change.
+
 Barcode labels print through a separate AWT printable instead of sending the live JavaFX product detail controls to the printer. Printer selection runs on the AWT event thread and spooling runs on a worker, leaving the till responsive. Missing printers, cancellation and print errors return control to the product screen. Labels fit the selected printable area without enlarging on office paper.
 
 Generated inventory/stocktake spreadsheets, report workbooks, session PDFs and receipt text files use `Mbuyedzedzo_Type_Reference_yyyy-MM-dd_HHmmss_SSS.ext`. References are sanitized for Windows filenames. Timestamps use the desktop's local time; repeated exports receive distinct default filenames. Users can still change filenames in save dialogs. Existing files and release download URLs are unchanged.

@@ -1,74 +1,59 @@
 # Mbuyedzedzo
+POS System
 
-A point-of-sale platform built solo, end to end: a JavaFX desktop POS, an
-Android companion scanner, and a Spring Boot licensing/subscription backend
-that turns the desktop app into a licensed, offline-capable commercial
-product. Three components, three different runtimes (JVM desktop, JVM
-server, Android), talking to each other over the network — kept in one
-repository because they ship and version together.
+Mbuyedzedzo helps shops manage sales, inventory, stocktaking, promotions and business sessions. The Windows desktop app uses a local MySQL database. An Android companion provides barcode scanning, receipts and stock counts over the shop's Wi-Fi network.
+
+## Documentation
+
+| Start here | Contents |
+| --- | --- |
+| [Documentation index](pos-desktop/docs/README.md) | Current guides and historical change notes |
+| [User guide](pos-desktop/docs/user-guide.md) | Installation, first login, daily sales, approvals and file locations |
+| [Stocktaking](pos-desktop/docs/stocktaking.md) | Desktop/phone counts, Excel sheets and manager review |
+| [Retail promotions](pos-desktop/docs/promotions.md) | Scheduled prices, multibuys, bundles, Excel imports and approval keys |
+| [Troubleshooting](pos-desktop/docs/troubleshooting.md) | Setup, pairing, login, receipts and export problems |
+| [Code architecture](pos-desktop/docs/code-architecture.md) | Packages, call flows, transaction boundaries and extension rules |
+| [Database architecture](pos-desktop/docs/database.md) | Relationships, migrations, financial fields and the table dictionary |
+
+These guides describe the current source. An older published installer or APK may not contain the same features. Update the desktop and phone together when changing the companion protocol.
+
+## Components
+
+| Component | Purpose | Development guide |
+| --- | --- | --- |
+| `pos-desktop` | Windows JavaFX till, database setup, inventory, staff, sessions, reports and receipts | [Desktop README](pos-desktop/README.md) |
+| `mobile-scanner` | Android barcode scanner, product submissions, receipt history and stocktaking | [Android README](mobile-scanner/README.md) |
+| `licensing-server` | Licence activation/validation API and browser administration | [Licensing README](licensing-server/README.md) |
 
 ```mermaid
 flowchart LR
-    subgraph Shop["On the shop's own network"]
-        Scanner["mobile-scanner<br/>(Android)"] -- "Wi-Fi · JSON/TCP<br/>scans, new products" --> Desktop["pos-desktop<br/>(JavaFX)"]
-        Desktop -- MySQL --> DB[(pos_db)]
-    end
-    Desktop -- "HTTPS<br/>activate / validate licence" --> License["licensing-server<br/>(Spring Boot)"]
-    License -- "Azure SQL" --> LDB[(licensing db)]
-    Agent["Sales agent / admin<br/>(browser)"] -- "issue & manage keys" --> License
+    Phone[Android companion] -->|"Local Wi-Fi: TLS + staff sign-in"| Desktop[Windows desktop]
+    Desktop -->|JDBC| ShopDB[(Local MySQL)]
+    Desktop -->|"HTTPS: activation and validation"| Licensing[Licensing service]
+    Licensing --> LicenseDB[(SQL Server / Azure SQL)]
 ```
 
-## The three components
+Sales and inventory use the shop database. The phone connects to the desktop; it does not connect directly to MySQL. Licence activation and periodic online validation use the licensing service.
 
-| | What it is | Look here for |
+## Editions
+
+- **Standard:** customer accounts, purchase history, customer reports and marketing alongside the core POS features.
+- **Retail:** walk-in sales, with customer and marketing screens hidden. Sales use a shared walk-in account internally.
+
+The edition is selected when building the desktop app. Standard and Retail use separate default schemas and edition-specific connection files. A licence must match the installed edition.
+
+## Developer quick start
+
+Run each command from the named component folder after completing that component's setup:
+
+| Component | Requirements | Run |
 | --- | --- | --- |
-| **[`pos-desktop`](pos-desktop)** | The JavaFX point-of-sale app shops actually run — sales, inventory, staff, customers, reports, receipts | Two products from one codebase (a build-time edition flag), the `jlink`/`jpackage` Windows installer pipeline, offline licence verification |
-| **[`licensing-server`](licensing-server)** | Spring Boot service + admin portal that issues and validates licence keys for the desktop app | Machine-bound activation, RS256 offline tokens, an admin portal with role-scoped agents |
-| **[`mobile-scanner`](mobile-scanner)** | Android app that turns a phone into a wireless barcode scanner for the desktop till | A hand-rolled JSON-over-socket protocol, QR-code pairing |
+| Desktop | JDK 22, Maven, local MySQL or Windows setup flow | `mvn javafx:run` |
+| Android | JDK 17, Android SDK 34, connected device/emulator | `.\gradlew.bat installDebug` |
+| Licensing | JDK 21, Maven, configured SQL Server | `mvn spring-boot:run` |
 
-Each has its own README with full setup instructions — this one is the map.
+See the component READMEs for configuration, packaging and tests. Building source does not publish a release or replace website downloads.
 
-**`licensing-server` is live**: https://mbuyedzedzo-licensing.azurewebsites.net
-(storefront + admin portal, running on Azure App Service against Azure SQL;
-`pos-desktop` and `mobile-scanner` run on a customer's own machines, so there's
-nothing to host for those two).
+## Licence
 
-## Why it's split this way
-
-- **`pos-desktop` ↔ `mobile-scanner`**: no shared code or language (Java desktop vs. Android), talk only over a local socket — separate deployables, same repo for coordinated versioning.
-- **`pos-desktop` ↔ `licensing-server`**: the desktop is licensed software; the server is what makes that real (issuing keys, verifying activations) rather than a client-side flag. They share nothing but an HTTPS contract and an RSA public key.
-
-## Engineering highlights
-
-A few things worth a closer look if you're skimming:
-
-- **One codebase, two shipped products.** `pos-desktop`'s "Standard" and "Retail" editions are the same jar with a build-time flag (`com.pos.Edition`) — different screens compile in or out, not a runtime toggle. See [`pos-desktop/README.md`](pos-desktop/README.md#editions--two-products-one-codebase).
-- **Licensing that works offline.** The desktop verifies its licence with a bundled RSA public key on every launch (no network required) and only *phones home* in the background to catch revocations, with a 14-day grace window if it can't reach the server. See [`licensing-server/README.md`](licensing-server/README.md#how-licensing-works).
-- **A Windows installer with automatic database setup.** `jlink` builds a custom JRE and `jpackage` + WiX creates the Windows `.exe`. On first launch the customer chooses a server password and approves Windows elevation; the POS installs/configures MySQL through Oracle's web installer console. New installations require internet. Existing server passwords and databases are preserved.
-- **A hand-rolled device protocol.** The Android scanner and the desktop speak line-delimited JSON over a plain socket the desktop hosts — no MQTT/Firebase/cloud relay, because there's no reason a phone and a till on the same counter need one. See [`mobile-scanner/README.md`](mobile-scanner/README.md#how-it-connects).
-- **Verified, not assumed.** Where the effect of a change couldn't be eyeballed easily — a JavaFX centering fix, an installer build actually producing a working `.exe`, an icon actually embedding — it was checked with an offscreen render, a real build, or a pixel measurement rather than taken on faith.
-
-## Tech stack
-
-| | |
-| --- | --- |
-| Desktop | Java 22, JavaFX 22, MySQL, HikariCP, Maven, `jlink`/`jpackage`, WiX |
-| Server | Java 21, Spring Boot 3.3, Spring Security, Thymeleaf, Azure SQL (SQL Server), Flyway, Nimbus JOSE (RS256) — deployed on Azure App Service |
-| Mobile | Android (Java, min SDK 24), ZXing, Gradle |
-| Shared concerns | Gson (wire protocols), Apache POI (Excel), iText 5 (PDF), Jakarta Mail |
-
-## Getting started
-
-Each component is independently runnable — pick the one you want and follow
-its README:
-
-```
-git clone <this-repo-url> && cd <repo-folder>
-cd pos-desktop      && mvn javafx:run          # desktop app, dev mode
-cd licensing-server && mvn spring-boot:run     # licensing server + admin portal
-cd mobile-scanner   && ./gradlew installDebug  # Android app, needs a device/emulator
-```
-
-## License
-
-Portfolio/personal project — not licensed for redistribution.
+This repository is not licensed for redistribution. Product activation and subscriptions are separate from permission to redistribute its source or binaries.

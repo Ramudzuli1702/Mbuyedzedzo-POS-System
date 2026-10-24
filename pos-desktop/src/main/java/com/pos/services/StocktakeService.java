@@ -16,6 +16,7 @@ public final class StocktakeService {
     public StocktakeService(Connections connections) { this.connections = connections; }
 
     public record Account(int id, String name, String role, String passwordHash) {}
+    /** Snapshot plus live comparison; counted=null is uncounted, counted=0 is an empty shelf. */
     public record Line(int productId, String name, String barcode, String category,
                        int expected, long version, Integer counted, Integer current, Long currentVersion) {
         public boolean conflict() { return current == null || currentVersion == null || version != currentVersion || expected != current; }
@@ -49,6 +50,7 @@ public final class StocktakeService {
             }
         }
     }
+    /** Creates a UUID-keyed snapshot once; retrying the same ID resumes its owner's sheet. */
     public CountSheet start(String id, int staffId) throws SQLException {
         UUID.fromString(id);
         try (Connection c = connections.open()) {
@@ -61,7 +63,7 @@ public final class StocktakeService {
                         try (PreparedStatement snapshot = c.prepareStatement("""
                             INSERT INTO StocktakeLine (StocktakeID,ProductID,ProductName,BarCode,CategoryName,ExpectedQuantity,ExpectedVersion)
                             SELECT ?,p.ProductID,p.ProductName,p.BarCode,c.CategoryName,p.Quantity,p.StockVersion
-                            FROM Product p LEFT JOIN Category c ON c.CategoryID=p.CategoryID ORDER BY p.ProductID
+                            FROM Product p LEFT JOIN Category c ON c.CategoryID=p.CategoryID WHERE p.IsArchived=FALSE ORDER BY p.ProductID
                             """)) { snapshot.setString(1,id); snapshot.executeUpdate(); }
                     }
                 }
@@ -157,17 +159,26 @@ public final class StocktakeService {
             }
         }
     }
-    public CountSheet review(String id,int reviewer,boolean approve,String notes) throws SQLException {
+    /**
+     * Reviews a pending snapshot with a manager's single-use key. Approval compares
+     * both quantity and StockVersion for every counted product; one conflict rolls
+     * back all corrections, the decision and key consumption. Rejection changes no
+     * live stock and requires review notes. Product snapshots are never rewritten.
+     */
+    public CountSheet review(String id,int reviewer,boolean approve,String notes,String authCode) throws SQLException {
         if(notes==null || notes.length()>1000 || !approve && notes.isBlank()) throw new Rejected("INVALID","Enter a rejection reason (up to 1,000 characters).");
         try(Connection c=connections.open()) {
             c.setAutoCommit(false);
             try {
                 requireStaff(c,reviewer,true);
                 if(!"Pending".equals(lock(c,id,null))) throw new Rejected("ALREADY_REVIEWED","This stocktake has already been reviewed.");
+                final int authorization;
+                try { authorization=SupervisorAuthorization.verify(c,reviewer,authCode); }
+                catch(SQLException e) { throw new Rejected("AUTH_FAILED",e.getMessage()); }
                 CountSheet sheet=load(c,id);
                 if(approve) {
                     // Conditional writes plus the DB stock-version trigger detect every intervening stock movement.
-                    try(PreparedStatement p=c.prepareStatement("UPDATE Product SET Quantity=? WHERE ProductID=? AND Quantity=? AND StockVersion=?")) {
+                    try(PreparedStatement p=c.prepareStatement("UPDATE Product SET Quantity=? WHERE ProductID=? AND Quantity=? AND StockVersion=? AND IsArchived=FALSE")) {
                         for(Line line:sheet.items()) if(line.counted()!=null) {
                             p.setInt(1,line.counted()); p.setInt(2,line.productId()); p.setInt(3,line.expected()); p.setLong(4,line.version());
                             if(p.executeUpdate()!=1) throw new Rejected("STOCK_CHANGED","Stock changed after this inventory was loaded. Reject this count and ask for a fresh count; no stock was changed.");
@@ -177,6 +188,7 @@ public final class StocktakeService {
                 try(PreparedStatement p=c.prepareStatement("UPDATE Stocktake SET Status=?,ReviewedBy=?,ReviewedAt=CURRENT_TIMESTAMP,ReviewNotes=? WHERE StocktakeID=?")) {
                     p.setString(1,approve?"Approved":"Rejected");p.setInt(2,reviewer);p.setString(3,notes);p.setString(4,id);p.executeUpdate();
                 }
+                SupervisorAuthorization.consume(c,authorization);
                 CountSheet result=load(c,id); c.commit();return result;
             } catch(SQLException | RuntimeException e) { c.rollback(); throw e; }
         }

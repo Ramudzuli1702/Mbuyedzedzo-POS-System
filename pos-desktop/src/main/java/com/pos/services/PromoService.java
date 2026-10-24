@@ -126,7 +126,15 @@ public class PromoService {
         """;
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            ps.setString(1, promo.getPromoCode().toUpperCase().trim());
+            conn.setAutoCommit(false);
+            try {
+            PromotionService.guard(conn);
+            String code=promo.getPromoCode().toUpperCase(java.util.Locale.ROOT).trim();
+            try(PreparedStatement check=conn.prepareStatement("SELECT 1 FROM PromotionCampaign WHERE UPPER(JSON_UNQUOTE(JSON_EXTRACT(Definition,'$.code')))=? OR UPPER(JSON_UNQUOTE(JSON_EXTRACT(PublishedDefinition,'$.code')))=? LIMIT 1")) {
+                check.setString(1,code);check.setString(2,code);
+                try(ResultSet r=check.executeQuery()){if(r.next())throw new SQLException("This code belongs to a retail offer. Choose a different coupon code.");}
+            }
+            ps.setString(1, code);
             ps.setString(2, promo.getPromoName());
             ps.setString(3, promo.getDiscountType());
             ps.setBigDecimal(4, promo.getDiscountValue());
@@ -136,10 +144,12 @@ public class PromoService {
             ps.setBoolean(8, promo.isActive());
             ps.setObject(9, promo.getUsageLimit());
             if (ps.executeUpdate() > 0) {
-                ResultSet keys = ps.getGeneratedKeys();
-                if (keys.next()) promo.setPromoID(keys.getInt(1));
+                try(ResultSet keys = ps.getGeneratedKeys()){if (keys.next()) promo.setPromoID(keys.getInt(1));}
+                conn.commit();
                 return true;
             }
+            conn.rollback();
+            }catch(SQLException|RuntimeException e){conn.rollback();throw e;}
         } catch (SQLException e) { e.printStackTrace(); }
         return false;
     }
@@ -262,6 +272,30 @@ public class PromoService {
     }
 
     // ── Extract ───────────────────────────────────────────────────────────────
+
+    /** Revalidate and consume a use while the checkout transaction owns the promo row. */
+    void reserve(Connection c, int id, BigDecimal subtotal, BigDecimal expectedDiscount) throws SQLException {
+        try (PreparedStatement p=c.prepareStatement("SELECT *,CURRENT_TIMESTAMP AS CheckoutNow FROM Promo WHERE PromoID=? FOR UPDATE")) {
+            p.setInt(1,id);
+            try(ResultSet r=p.executeQuery()) {
+                if(!r.next())throw new SQLException("Promotion no longer exists.");
+                Promo promo=extract(r);LocalDateTime now=r.getTimestamp("CheckoutNow").toLocalDateTime();
+                if(!promo.isActive() || promo.getValidFrom()!=null && now.isBefore(promo.getValidFrom())
+                        || promo.getValidTill()!=null && now.isAfter(promo.getValidTill())
+                        || promo.getUsageLimit()!=null && promo.getUsageCount()>=promo.getUsageLimit()
+                        || promo.getMinimumPurchase()!=null && subtotal.compareTo(promo.getMinimumPurchase())<0)
+                    throw new SQLException("Promotion is no longer valid. Reapply it before checkout.");
+                BigDecimal discount="PERCENT".equals(promo.getDiscountType())
+                        ?subtotal.multiply(promo.getDiscountValue()).divide(BigDecimal.valueOf(100),2,RoundingMode.HALF_UP).min(subtotal)
+                        :promo.getDiscountValue().min(subtotal);
+                if(discount.signum()<0 || expectedDiscount==null || discount.compareTo(expectedDiscount)!=0)
+                    throw new SQLException("Promotion changed. Reapply it before checkout.");
+            }
+        }
+        try(PreparedStatement p=c.prepareStatement("UPDATE Promo SET UsageCount=UsageCount+1 WHERE PromoID=?")) {
+            p.setInt(1,id);if(p.executeUpdate()!=1)throw new SQLException("Promotion could not be reserved.");
+        }
+    }
 
     private Promo extract(ResultSet rs) throws SQLException {
         Promo p = new Promo();

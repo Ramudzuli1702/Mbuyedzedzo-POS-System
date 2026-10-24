@@ -200,90 +200,13 @@ public class ExchangeReturnService {
     // ── Approve exchange ──────────────────────────────────────────────────────
 
     public boolean approveExchange(int exchangeID, int supervisorID, String authCode) {
-        Connection conn = null;
-        try {
-            conn = DatabaseConnection.getConnection();
-            conn.setAutoCommit(false);
-
-            String getQuery = """
-                SELECT e.OriginalTransactionID, e.NewProductID, e.NewPrice, e.StaffID,
-                       t.AccountID, t.SaleID
-                FROM Exchanges e
-                JOIN Transactions t ON e.OriginalTransactionID = t.TransactionID
-                WHERE e.ExchangeID = ?
-                """;
-            int originalTransactionID = 0, newProductID = 0, staffID = 0, accountID = 0, saleID = 0;
-            BigDecimal newPrice = BigDecimal.ZERO;
-            try (PreparedStatement ps = conn.prepareStatement(getQuery)) {
-                ps.setInt(1, exchangeID);
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    originalTransactionID = rs.getInt("OriginalTransactionID");
-                    newProductID          = rs.getInt("NewProductID");
-                    newPrice              = rs.getBigDecimal("NewPrice");
-                    staffID               = rs.getInt("StaffID");
-                    accountID             = rs.getInt("AccountID");
-                    saleID                = rs.getInt("SaleID");
-                } else { conn.rollback(); return false; }
-            }
-
-            // New transaction for exchanged product
-            int newTransactionID = 0;
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "INSERT INTO Transactions (SaleID,ProductID,StaffID,AccountID,Quantity,SalePrice,TransactionDate) " +
-                    "VALUES (?,?,?,?,1,?,CURRENT_TIMESTAMP)", Statement.RETURN_GENERATED_KEYS)) {
-                ps.setInt(1, saleID);
-                ps.setInt(2, newProductID);
-                ps.setInt(3, staffID);
-                ps.setInt(4, accountID);
-                ps.setBigDecimal(5, newPrice);
-                if (ps.executeUpdate() > 0) {
-                    ResultSet rs = ps.getGeneratedKeys();
-                    if (rs.next()) newTransactionID = rs.getInt(1);
-                }
-            }
-
-            // Update exchange record
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE Exchanges SET Status='Approved', NewTransactionID=?, SupervisorID=?, " +
-                    "ApprovalCode=?, ApprovalDate=CURRENT_TIMESTAMP WHERE ExchangeID=?")) {
-                ps.setInt(1, newTransactionID);
-                ps.setInt(2, supervisorID);
-                ps.setString(3, authCode);
-                ps.setInt(4, exchangeID);
-                ps.executeUpdate();
-            }
-
-            // Reduce new product stock
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE Product SET Quantity = Quantity - 1 WHERE ProductID = ?")) {
-                ps.setInt(1, newProductID);
-                ps.executeUpdate();
-            }
-
-            conn.commit();
-            return true;
-        } catch (SQLException e) {
-            if (conn != null) try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
-            e.printStackTrace();
-            return false;
-        } finally {
-            if (conn != null) try { conn.setAutoCommit(true); conn.close(); } catch (SQLException ex) { ex.printStackTrace(); }
-        }
+        return FinancialApproval.review(true, true, exchangeID, supervisorID, authCode);
     }
 
     // ── Reject exchange ───────────────────────────────────────────────────────
 
     public boolean rejectExchange(int exchangeID, int supervisorID, String authCode) {
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE Exchanges SET Status='Rejected', SupervisorID=?, ApprovalCode=?, " +
-                     "ApprovalDate=CURRENT_TIMESTAMP WHERE ExchangeID=?")) {
-            ps.setInt(1, supervisorID);
-            ps.setString(2, authCode);
-            ps.setInt(3, exchangeID);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) { e.printStackTrace(); return false; }
+        return FinancialApproval.review(true, false, exchangeID, supervisorID, authCode);
     }
 
     // ── Request return ────────────────────────────────────────────────────────
@@ -313,67 +236,13 @@ public class ExchangeReturnService {
     // ── Approve return ────────────────────────────────────────────────────────
 
     public boolean approveReturn(int returnID, int supervisorID, String authCode) {
-        Connection conn = null;
-        try {
-            conn = DatabaseConnection.getConnection();
-            conn.setAutoCommit(false);
-
-            int transactionID = 0, returnQty = 0, productID = 0;
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "SELECT r.TransactionID, r.ReturnQuantity, t.ProductID " +
-                    "FROM Returns r JOIN Transactions t ON r.TransactionID = t.TransactionID " +
-                    "WHERE r.ReturnID = ?")) {
-                ps.setInt(1, returnID);
-                ResultSet rs = ps.executeQuery();
-                if (rs.next()) {
-                    transactionID = rs.getInt("TransactionID");
-                    returnQty     = rs.getInt("ReturnQuantity");
-                    productID     = rs.getInt("ProductID");
-                }
-            }
-
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE Returns SET Status='Approved', SupervisorID=?, ApprovalCode=?, " +
-                    "ApprovalDate=CURRENT_TIMESTAMP WHERE ReturnID=?")) {
-                ps.setInt(1, supervisorID); ps.setString(2, authCode); ps.setInt(3, returnID);
-                ps.executeUpdate();
-            }
-
-            // NOTE: Transactions.Quantity is intentionally NOT modified here.
-            // Remaining quantity is always derived as:
-            //   Transactions.Quantity (original sold qty)
-            //   minus SUM of approved Returns.ReturnQuantity
-            // Mutating Transactions.Quantity would corrupt getRemainingQuantity()
-            // and all net-total calculations throughout the app.
-
-            // Restore inventory stock for the returned product
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "UPDATE Product SET Quantity = Quantity + ? WHERE ProductID = ?")) {
-                ps.setInt(1, returnQty); ps.setInt(2, productID);
-                ps.executeUpdate();
-            }
-
-            conn.commit();
-            return true;
-        } catch (SQLException e) {
-            if (conn != null) try { conn.rollback(); } catch (SQLException ex) { ex.printStackTrace(); }
-            e.printStackTrace();
-            return false;
-        } finally {
-            if (conn != null) try { conn.setAutoCommit(true); conn.close(); } catch (SQLException ex) { ex.printStackTrace(); }
-        }
+        return FinancialApproval.review(false, true, returnID, supervisorID, authCode);
     }
 
     // ── Reject return ─────────────────────────────────────────────────────────
 
     public boolean rejectReturn(int returnID, int supervisorID, String authCode) {
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "UPDATE Returns SET Status='Rejected', SupervisorID=?, ApprovalCode=?, " +
-                     "ApprovalDate=CURRENT_TIMESTAMP WHERE ReturnID=?")) {
-            ps.setInt(1, supervisorID); ps.setString(2, authCode); ps.setInt(3, returnID);
-            return ps.executeUpdate() > 0;
-        } catch (SQLException e) { e.printStackTrace(); return false; }
+        return FinancialApproval.review(false, false, returnID, supervisorID, authCode);
     }
 
     // ── Pending queues (used by supervisor approval views) ─────────────────────

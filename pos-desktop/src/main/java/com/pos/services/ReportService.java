@@ -18,8 +18,8 @@ import java.util.*;
 /**
  * ReportService — all queries use the correct schema columns:
  *   - Revenue  = SUM(t.SalePrice * t.Quantity)         [SalePrice = actual selling price]
- *   - Cost     = SUM(p.CostPrice * t.Quantity)         [CostPrice = what the shop paid]
- *   - Profit   = SUM((t.SalePrice - p.CostPrice) * t.Quantity)
+ *   - Cost     = CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE SUM(t.UnitCostAtSale * t.Quantity) END         [CostPrice = what the shop paid]
+ *   - Profit   = CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE SUM((t.SalePrice - t.UnitCostAtSale) * t.Quantity) END
  *   - Returns  filtered to Status = 'Approved' only
  *   - Payment breakdown uses t.PaymentMethod (Cash / Card)
  */
@@ -42,24 +42,27 @@ public class ReportService {
     /** Total cost of goods sold for the period (cost price × quantity). */
     public BigDecimal getTotalCOGS(LocalDate start, LocalDate end) {
         String sql = """
-            SELECT COALESCE(SUM(p.CostPrice * t.Quantity), 0) AS total
+            SELECT CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE COALESCE(SUM(t.UnitCostAtSale * t.Quantity),0) END AS total
             FROM Transactions t
             JOIN Product p ON t.ProductID = p.ProductID
             WHERE t.TransactionDate BETWEEN ? AND ?
             """;
-        return queryBigDecimal(sql, tsStart(start), tsEnd(end));
+        return queryNullableDecimal(sql, tsStart(start), tsEnd(end));
     }
 
     /** Gross profit = revenue − COGS. */
     public BigDecimal getGrossProfit(LocalDate start, LocalDate end) {
-        return getTotalRevenue(start, end).subtract(getTotalCOGS(start, end));
+        BigDecimal cost=getTotalCOGS(start,end);
+        return cost==null?null:getTotalRevenue(start,end).subtract(cost);
     }
 
     /** Gross profit margin as a percentage (0–100). */
     public double getGrossProfitMargin(LocalDate start, LocalDate end) {
         BigDecimal revenue = getTotalRevenue(start, end);
         if (revenue.compareTo(BigDecimal.ZERO) == 0) return 0.0;
-        return getGrossProfit(start, end)
+        BigDecimal profit=getGrossProfit(start,end);
+        if(profit==null)return Double.NaN;
+        return profit
                 .divide(revenue, 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100))
                 .doubleValue();
@@ -75,7 +78,7 @@ public class ReportService {
         String sql = """
             SELECT COALESCE(SUM(r.RefundAmount), 0) AS total
             FROM Returns r
-            WHERE r.ReturnDate BETWEEN ? AND ?
+            WHERE COALESCE(r.ApprovalDate,r.ReturnDate) BETWEEN ? AND ?
               AND r.Status = 'Approved'
             """;
         return queryBigDecimal(sql, tsStart(start), tsEnd(end));
@@ -92,18 +95,31 @@ public class ReportService {
             ORDER BY day
             """;
         Map<LocalDate, BigDecimal> result = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next())
                 result.put(rs.getDate("day").toLocalDate(), rs.getBigDecimal("total"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         // fill gaps
         for (LocalDate d = start; !d.isAfter(end); d = d.plusDays(1))
             result.putIfAbsent(d, BigDecimal.ZERO);
         return new TreeMap<>(result);
+    }
+
+    public Map<LocalDate,BigDecimal> getDailyGrossProfit(LocalDate start,LocalDate end) {
+        Map<LocalDate,BigDecimal> result=new TreeMap<>();
+        try(Connection c=connection();PreparedStatement p=c.prepareStatement("""
+                SELECT DATE(TransactionDate),CASE WHEN COUNT(UnitCostAtSale)<COUNT(*) THEN NULL
+                  ELSE SUM((SalePrice-UnitCostAtSale)*Quantity) END
+                FROM Transactions WHERE TransactionDate BETWEEN ? AND ? GROUP BY DATE(TransactionDate)
+                """)) {
+            p.setTimestamp(1,tsStart(start));p.setTimestamp(2,tsEnd(end));
+            try(ResultSet r=p.executeQuery()){while(r.next())result.put(r.getDate(1).toLocalDate(),r.getBigDecimal(2));}
+        }catch(SQLException e){throw new IllegalStateException("Daily profit could not be loaded.",e);}
+        return result;
     }
 
     /** Revenue split by payment method (Cash / Card). */
@@ -130,14 +146,14 @@ public class ReportService {
             ORDER BY mon
             """;
         Map<YearMonth, BigDecimal> result = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, year);
             ResultSet rs = ps.executeQuery();
             while (rs.next())
                 result.put(YearMonth.of(rs.getInt("yr"), rs.getInt("mon")),
                         rs.getBigDecimal("total"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         for (int m = 1; m <= 12; m++)
             result.putIfAbsent(YearMonth.of(year, m), BigDecimal.ZERO);
         return result;
@@ -154,14 +170,14 @@ public class ReportService {
             ORDER BY hr
             """;
         Map<Integer, BigDecimal> result = new TreeMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next())
                 result.put(rs.getInt("hr"), rs.getBigDecimal("total"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         for (int i = 0; i < 24; i++) result.putIfAbsent(i, BigDecimal.ZERO);
         return result;
     }
@@ -221,7 +237,7 @@ public class ReportService {
         dist.put("R 151–300", 0);
         dist.put("R 301–500", 0);
         dist.put("R 500+",    0);
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -234,7 +250,7 @@ public class ReportService {
                 else if (v <= 500) dist.merge("R 301–500", 1, Integer::sum);
                 else               dist.merge("R 500+",    1, Integer::sum);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return dist;
     }
 
@@ -252,10 +268,10 @@ public class ReportService {
                    c.CategoryName,
                    SUM(t.Quantity)                                     AS units_sold,
                    SUM(t.SalePrice * t.Quantity)                       AS revenue,
-                   SUM(p.CostPrice * t.Quantity)                       AS cost,
-                   SUM((t.SalePrice - p.CostPrice) * t.Quantity)       AS profit,
+                   CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE SUM(t.UnitCostAtSale * t.Quantity) END                       AS cost,
+                   CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE SUM((t.SalePrice - t.UnitCostAtSale) * t.Quantity) END       AS profit,
                    CASE WHEN SUM(t.SalePrice * t.Quantity) = 0 THEN 0
-                        ELSE ROUND(SUM((t.SalePrice - p.CostPrice) * t.Quantity)
+                        ELSE ROUND(CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE SUM((t.SalePrice - t.UnitCostAtSale) * t.Quantity) END
                                  / SUM(t.SalePrice * t.Quantity) * 100, 1)
                    END AS margin_pct
             FROM Transactions t
@@ -267,7 +283,7 @@ public class ReportService {
             LIMIT ?
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -281,10 +297,10 @@ public class ReportService {
                 row.put("revenue",   rs.getBigDecimal("revenue"));
                 row.put("cost",      rs.getBigDecimal("cost"));
                 row.put("profit",    rs.getBigDecimal("profit"));
-                row.put("margin",    rs.getDouble("margin_pct"));
+                row.put("margin",    rs.getObject("margin_pct"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -307,13 +323,13 @@ public class ReportService {
                 WHERE TransactionDate BETWEEN ? AND ?
                 GROUP BY ProductID
             ) s ON p.ProductID = s.ProductID
-            WHERE p.Quantity > 20
+            WHERE p.IsArchived=FALSE AND p.Quantity > 20
               AND COALESCE(s.units_sold, 0) < 5
             ORDER BY p.Quantity DESC
             LIMIT 15
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -328,7 +344,7 @@ public class ReportService {
                 row.put("costPrice", rs.getBigDecimal("cost_price"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -344,7 +360,7 @@ public class ReportService {
             SELECT c.CategoryName,
                    SUM(t.Quantity)                               AS units_sold,
                    SUM(t.SalePrice * t.Quantity)                AS revenue,
-                   SUM((t.SalePrice - p.CostPrice) * t.Quantity) AS profit,
+                   CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE SUM((t.SalePrice - t.UnitCostAtSale) * t.Quantity) END AS profit,
                    CASE WHEN AVG(p.Quantity) = 0 THEN 0
                         ELSE ROUND(SUM(t.Quantity) / NULLIF(AVG(p.Quantity), 0), 2)
                    END AS turnover_ratio,
@@ -357,7 +373,7 @@ public class ReportService {
             ORDER BY revenue DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -372,7 +388,7 @@ public class ReportService {
                 row.put("productCount", rs.getInt("product_count"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -389,7 +405,7 @@ public class ReportService {
                    s.UserType,
                    COUNT(DISTINCT t.SaleID)                                AS sales_count,
                    COALESCE(SUM(t.SalePrice * t.Quantity), 0)              AS revenue,
-                   COALESCE(SUM((t.SalePrice - p.CostPrice) * t.Quantity), 0)  AS profit,
+                   CASE WHEN COUNT(t.UnitCostAtSale)<COUNT(*) THEN NULL ELSE COALESCE(SUM((t.SalePrice - t.UnitCostAtSale) * t.Quantity),0) END  AS profit,
                    COALESCE(AVG(sale_totals.sale_total), 0)                AS avg_sale_value,
                    COALESCE(AVG(
                        TIMESTAMPDIFF(MINUTE, ci.LoginStamp, ci.LogoutStamp) / 60.0
@@ -412,7 +428,7 @@ public class ReportService {
             ORDER BY revenue DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             Timestamp t1 = tsStart(start), t2 = tsEnd(end);
             ps.setTimestamp(1, t1); ps.setTimestamp(2, t2);
@@ -430,7 +446,7 @@ public class ReportService {
                 row.put("avgHoursShift", rs.getDouble("avg_hours_per_shift"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -454,7 +470,7 @@ public class ReportService {
             ORDER BY total_hours DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -468,7 +484,7 @@ public class ReportService {
                 row.put("totalHours",     rs.getDouble("total_hours"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -486,13 +502,13 @@ public class ReportService {
             ORDER BY SUM(t.SalePrice * t.Quantity) DESC
             LIMIT 1
             """;
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return rs.getString("FullNames");
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return "—";
     }
 
@@ -528,7 +544,7 @@ public class ReportService {
                 GROUP BY AccountID
             ) sub
             """;
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -538,7 +554,7 @@ public class ReportService {
                 int total   = rs.getInt("total");
                 return total > 0 ? (repeats * 100.0 / total) : 0.0;
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return 0.0;
     }
 
@@ -569,13 +585,13 @@ public class ReportService {
         result.put("Regular (5–9)", 0);
         result.put("Occasional (2–4)", 0);
         result.put("One-Time", 0);
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) result.put(rs.getString("segment"), rs.getInt("cnt"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -601,11 +617,11 @@ public class ReportService {
             ORDER BY MIN(age)
             """;
         Map<String, Integer> result = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              Statement  stmt = c.createStatement();
              ResultSet  rs   = stmt.executeQuery(sql)) {
             while (rs.next()) result.put(rs.getString("age_group"), rs.getInt("cnt"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -619,13 +635,13 @@ public class ReportService {
             ORDER BY mon
             """;
         Map<YearMonth, Integer> result = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setInt(1, year);
             ResultSet rs = ps.executeQuery();
             while (rs.next())
                 result.put(YearMonth.of(rs.getInt("yr"), rs.getInt("mon")), rs.getInt("cnt"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         for (int m = 1; m <= 12; m++)
             result.putIfAbsent(YearMonth.of(year, m), 0);
         return result;
@@ -649,7 +665,7 @@ public class ReportService {
             """;
         Map<String, Integer>   statusCounts  = new LinkedHashMap<>();
         Map<String, BigDecimal> statusRefunds = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(statusSql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -658,7 +674,7 @@ public class ReportService {
                 statusCounts.put(rs.getString("status"), rs.getInt("cnt"));
                 statusRefunds.put(rs.getString("status"), rs.getBigDecimal("total_refund"));
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         summary.put("countByStatus",  statusCounts);
         summary.put("refundByStatus", statusRefunds);
 
@@ -677,13 +693,13 @@ public class ReportService {
             LIMIT 5
             """;
         Map<String, Integer> reasons = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(reasonSql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) reasons.put(rs.getString("reason"), rs.getInt("cnt"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         summary.put("topReasons", reasons);
 
         return summary;
@@ -700,13 +716,13 @@ public class ReportService {
             GROUP BY status
             """;
         Map<String, Integer> statusCounts = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) statusCounts.put(rs.getString("status"), rs.getInt("cnt"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         summary.put("countByStatus", statusCounts);
 
         String reasonSql = """
@@ -718,13 +734,13 @@ public class ReportService {
             LIMIT 5
             """;
         Map<String, Integer> reasons = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(reasonSql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
             ResultSet rs = ps.executeQuery();
             while (rs.next()) reasons.put(rs.getString("reason"), rs.getInt("cnt"));
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         summary.put("topReasons", reasons);
 
         return summary;
@@ -735,23 +751,23 @@ public class ReportService {
     // ─────────────────────────────────────────────────────────────────────
 
     public int getTotalProducts() {
-        return queryInt("SELECT COUNT(*) AS cnt FROM Product");
+        return queryInt("SELECT COUNT(*) AS cnt FROM Product WHERE IsArchived=FALSE");
     }
 
     public int getTotalStockUnits() {
-        return queryInt("SELECT COALESCE(SUM(Quantity), 0) AS cnt FROM Product");
+        return queryInt("SELECT COALESCE(SUM(Quantity), 0) AS cnt FROM Product WHERE IsArchived=FALSE");
     }
 
     public BigDecimal getTotalStockValue() {
-        return queryBigDecimal("SELECT COALESCE(SUM(Price * Quantity), 0) AS total FROM Product");
+        return queryBigDecimal("SELECT COALESCE(SUM(CostPrice * Quantity), 0) AS total FROM Product WHERE IsArchived=FALSE");
     }
 
     public int getLowStockCount() {
-        return queryInt("SELECT COUNT(*) AS cnt FROM Product WHERE Quantity > 0 AND Quantity < 10");
+        return queryInt("SELECT COUNT(*) AS cnt FROM Product WHERE IsArchived=FALSE AND Quantity > 0 AND Quantity < 10");
     }
 
     public int getOutOfStockCount() {
-        return queryInt("SELECT COUNT(*) AS cnt FROM Product WHERE Quantity = 0");
+        return queryInt("SELECT COUNT(*) AS cnt FROM Product WHERE IsArchived=FALSE AND Quantity = 0");
     }
 
     /**
@@ -785,10 +801,11 @@ public class ReportService {
                 FROM AddInventory
                 GROUP BY ProductID
             ) r ON p.ProductID = r.ProductID
+            WHERE p.IsArchived=FALSE
             ORDER BY days_cover ASC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, days);
             ps.setLong(2, days);
@@ -808,7 +825,7 @@ public class ReportService {
                 row.put("lastRestock", rs.getTimestamp("last_restock"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -823,11 +840,12 @@ public class ReportService {
                    SUM(CASE WHEN p.Quantity > 0 AND p.Quantity < 10 THEN 1 ELSE 0 END) AS low_stock
             FROM Product p
             JOIN Category c ON p.CategoryID = c.CategoryID
+            WHERE p.IsArchived=FALSE
             GROUP BY c.CategoryID, c.CategoryName
             ORDER BY total_stock DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              Statement  stmt = c.createStatement();
              ResultSet  rs   = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -840,7 +858,7 @@ public class ReportService {
                 row.put("lowStock",     rs.getInt("low_stock"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -861,7 +879,7 @@ public class ReportService {
             ORDER BY ai.InventoryDate DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -876,7 +894,7 @@ public class ReportService {
                 row.put("restockedBy", rs.getString("restocked_by"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -890,7 +908,7 @@ public class ReportService {
      */
     public List<Map<String, Object>> getPromoPerformance(LocalDate start, LocalDate end) {
         String sql = """
-            SELECT COALESCE(t.PromoCode, 'No Promo') AS promo_code,
+            SELECT COALESCE(CONCAT(JSON_UNQUOTE(JSON_EXTRACT(t.PromotionSnapshot,'$.name')),' [',JSON_UNQUOTE(JSON_EXTRACT(t.PromotionSnapshot,'$.offerId')),']'),t.PromoCode, 'No Promo') AS promo_code,
                    COUNT(DISTINCT t.SaleID)           AS sales_count,
                    SUM(t.Quantity)                    AS units_sold,
                    SUM(t.SalePrice * t.Quantity)      AS revenue,
@@ -901,7 +919,7 @@ public class ReportService {
             ORDER BY revenue DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -915,7 +933,7 @@ public class ReportService {
                 row.put("avgSaleValue",rs.getBigDecimal("avg_sale_value"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -936,7 +954,7 @@ public class ReportService {
             ORDER BY mh.SentAt DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -951,7 +969,7 @@ public class ReportService {
                 row.put("deliveryRate",  rs.getDouble("delivery_rate"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -978,7 +996,7 @@ public class ReportService {
             ORDER BY bs.StartDate DESC
             """;
         List<Map<String, Object>> result = new ArrayList<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setTimestamp(1, tsStart(start));
             ps.setTimestamp(2, tsEnd(end));
@@ -996,7 +1014,7 @@ public class ReportService {
                 row.put("durationMins",    rs.getInt("duration_mins"));
                 result.add(row);
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
@@ -1005,7 +1023,7 @@ public class ReportService {
     // ─────────────────────────────────────────────────────────────────────
 
     public double calculateGrowth(BigDecimal prev, BigDecimal curr) {
-        if (prev == null || prev.compareTo(BigDecimal.ZERO) == 0) return 0.0;
+        if (prev == null || curr == null || prev.compareTo(BigDecimal.ZERO) == 0) return 0.0;
         return curr.subtract(prev).divide(prev, 4, RoundingMode.HALF_UP)
                    .multiply(BigDecimal.valueOf(100)).doubleValue();
     }
@@ -1091,7 +1109,7 @@ public class ReportService {
 
         double margin = getGrossProfitMargin(start, end);
         h.blank();
-        h.labelValueRow("Gross Margin %",     String.format("%.1f%%", margin));
+        h.labelValueRow("Gross Margin %",     percentage(margin));
         h.labelValueRow("Repeat Customer Rate", String.format("%.1f%%", getRepeatCustomerRate(start, end)));
         h.labelValueRow("Top Performer",       getTopPerformerByRevenue(start, end));
         h.labelValueRow("Low Stock Items",     String.valueOf(getLowStockCount()));
@@ -1109,12 +1127,12 @@ public class ReportService {
         h.headerRow("Date", "Revenue (R)", "Gross Profit (R)", "Margin %");
 
         Map<LocalDate, BigDecimal> daily = getDailyRevenue(start, end);
+        Map<LocalDate, BigDecimal> profits = getDailyGrossProfit(start,end);
         for (Map.Entry<LocalDate, BigDecimal> e : daily.entrySet()) {
             BigDecimal r = e.getValue();
-            // Approx per-day profit using overall margin
-            double margin = getGrossProfitMargin(start, end) / 100.0;
-            BigDecimal p = r.multiply(BigDecimal.valueOf(margin)).setScale(2, RoundingMode.HALF_UP);
-            h.dataRow(e.getKey().toString(), fmt(r), fmt(p), String.format("%.1f%%", margin * 100));
+            BigDecimal p = profits.containsKey(e.getKey())?profits.get(e.getKey()):BigDecimal.ZERO;
+            double margin=p==null || r.signum()==0?Double.NaN:p.divide(r,4,RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).doubleValue();
+            h.dataRow(e.getKey().toString(), fmt(r), fmt(p), percentage(margin));
         }
         h.blank();
 
@@ -1150,7 +1168,7 @@ public class ReportService {
                 str(row, "name"), str(row, "category"),
                 str(row, "unitsSold"), fmt(bd(row, "revenue")),
                 fmt(bd(row, "cost")),  fmt(bd(row, "profit")),
-                String.format("%.1f%%", dbl(row, "margin"))
+                row.get("margin")==null?"Unavailable":percentage(dbl(row, "margin"))
             );
         }
         h.blank();
@@ -1348,8 +1366,18 @@ public class ReportService {
         return d == null ? null : Timestamp.valueOf(d.atTime(23, 59, 59));
     }
 
+    private static Connection connection() throws SQLException {
+        Connection c=DatabaseConnection.getConnection();
+        if(c==null)throw new SQLException("Database unavailable");return c;
+    }
+    private BigDecimal queryNullableDecimal(String sql,Object... params) {
+        try(Connection c=connection();PreparedStatement p=c.prepareStatement(sql)) {
+            for(int i=0;i<params.length;i++)p.setObject(i+1,params[i]);
+            try(ResultSet r=p.executeQuery()){return r.next()?r.getBigDecimal(1):null;}
+        }catch(SQLException e){throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e);}
+    }
     private BigDecimal queryBigDecimal(String sql, Object... params) {
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
             ResultSet rs = ps.executeQuery();
@@ -1357,34 +1385,35 @@ public class ReportService {
                 BigDecimal v = rs.getBigDecimal(1);
                 return v != null ? v : BigDecimal.ZERO;
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return BigDecimal.ZERO;
     }
 
     private int queryInt(String sql, Object... params) {
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return rs.getInt(1);
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return 0;
     }
 
     private Map<String, BigDecimal> queryStringBigDecimalMap(String sql, Object... params) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
-        try (Connection c = DatabaseConnection.getConnection();
+        try (Connection c = connection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) ps.setObject(i + 1, params[i]);
             ResultSet rs = ps.executeQuery();
             while (rs.next()) result.put(rs.getString(1),
                     rs.getBigDecimal(2) != null ? rs.getBigDecimal(2) : BigDecimal.ZERO);
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) { throw new IllegalStateException("Reports could not be loaded. Check the database connection and retry.",e); }
         return result;
     }
 
+    private static String percentage(double value){return Double.isFinite(value)?String.format("%.1f%%",value):"Unavailable";}
     private static String fmt(BigDecimal v) {
-        return v == null ? "0.00" : String.format("%.2f", v.doubleValue());
+        return v == null ? "Unavailable" : String.format("%.2f", v.doubleValue());
     }
     private static String str(Map<String, Object> m, String k) {
         Object v = m.get(k);
@@ -1394,7 +1423,7 @@ public class ReportService {
         Object v = m.get(k);
         if (v instanceof BigDecimal bd) return bd;
         if (v instanceof Number  n)  return BigDecimal.valueOf(n.doubleValue());
-        return BigDecimal.ZERO;
+        return null;
     }
     private static double dbl(Map<String, Object> m, String k) {
         Object v = m.get(k);
@@ -1500,6 +1529,7 @@ public class ReportService {
             r.createCell(0).setCellValue(label);
             setMoney(r.createCell(1), current);
             setMoney(r.createCell(2), prior);
+            if(current==null || prior==null){r.createCell(3).setCellValue("Unavailable");r.createCell(4).setCellValue("Unavailable");return;}
             BigDecimal diff = current.subtract(prior);
             setMoney(r.createCell(3), diff);
             double growth = prior.compareTo(BigDecimal.ZERO) == 0 ? 0
@@ -1522,7 +1552,7 @@ public class ReportService {
         }
 
         private void setMoney(Cell c, BigDecimal v) {
-            c.setCellValue(v == null ? 0 : v.doubleValue());
+            if(v==null)c.setCellValue("Unavailable");else c.setCellValue(v.doubleValue());
             c.setCellStyle(moneyStyle);
         }
     }

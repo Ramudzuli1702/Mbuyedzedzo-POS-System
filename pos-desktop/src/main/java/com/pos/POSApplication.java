@@ -62,6 +62,7 @@ public class POSApplication extends Application {
 
     @Override
     public void start(Stage primaryStage) {
+        com.pos.utils.BrandAssets.installWindowIcons();
         // Any exception that escapes an FX event handler lands here.
         Thread.currentThread().setUncaughtExceptionHandler((t, ex) -> {
             log.error("Uncaught exception on the JavaFX thread", ex);
@@ -69,7 +70,7 @@ public class POSApplication extends Application {
                     "The last action could not be completed.", ex);
         });
 
-        primaryStage.setTitle(Branding.APP_NAME);
+        primaryStage.setTitle(Branding.WINDOW_TITLE);
         primaryStage.setMinWidth(900);
         primaryStage.setMinHeight(600);
         primaryStage.setMaximized(true);
@@ -217,6 +218,14 @@ public class POSApplication extends Application {
         }
 
         // ── 2. Licence gate ──────────────────────────────────────────────────
+        // A restored older schema must receive the same safeguards before login.
+        if(setupView!=null && setupView.getChosenBackupFile()!=null && !DatabaseSetup.run()) {
+            setupView.showError("The backup was restored but its database upgrade failed. Close the app and reconnect through setup before using it.");return;
+        }
+        try {com.pos.database.RuntimeDatabaseAccount.migrateIfRoot();}
+        catch(Exception e) {
+            Dialogs.error(primaryStage,"Database account setup failed","The POS could not switch to a schema-scoped database account. Close the app and retry setup.",e);return;
+        }
         com.pos.license.LicenseManager licence = new com.pos.license.LicenseManager();
         com.pos.license.LicenseManager.Status ls = licence.check();
         log.info("Licence check: {} — {}", ls.state(), ls.message());

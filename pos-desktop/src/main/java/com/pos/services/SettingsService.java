@@ -25,16 +25,10 @@ import java.util.Properties;
  *      Business profile data — name, address, phone, VAT number, receipt footer.
  *      Shared across all terminals. Appears on receipts and reports.
  *
- *   2. ENCRYPTED LOCAL FILE (config/app.config)
- *      Sensitive machine-specific settings — email credentials, file save paths.
- *      AES-256 encrypted. Even if the file is accessed directly, it's unreadable.
- *      Never stored in the database.
- *
- * ENCRYPTION:
- *   AES-256-CBC with PBKDF2 key derivation.
- *   Key is derived from a machine-specific identifier + a fixed salt.
- *   This means the config file is tied to the machine it was created on —
- *   copying it to another PC won't work.
+ *   2. USER-PROTECTED LOCAL FILE
+ *      Email credentials and output paths use Windows DPAPI under the current
+ *      Windows account. Legacy CBC files are read only for migration on save.
+ *      Other software running as the same Windows user can still access these secrets.
  */
 public class SettingsService {
 
@@ -242,20 +236,19 @@ public class SettingsService {
             return new BackupResult(false, "Could not create backup directory: " + e.getMessage(), null);
         }
 
-        String timestamp = java.time.LocalDateTime.now()
-                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String filename = backupPath + "pos_backup_" + timestamp + ".sql";
+        String filename = Paths.get(backupPath,com.pos.utils.DocumentNames.name("Backup",com.pos.Edition.current().name(),"sql")).toString();
 
         String[] command = {
             locateMysqlExecutable("mysqldump"),
             "--host=" + DatabaseConnection.HOST,
             "--port=" + DatabaseConnection.PORT,
             "--user=" + DatabaseConnection.USERNAME,
+            "--ssl-mode="+(DatabaseConnection.isLoopback()?"PREFERRED":"VERIFY_IDENTITY"),
             // Password is passed via the MYSQL_PWD environment variable below,
             // never on the command line where it would be visible to any process
             // listing (tasklist / ps / Process Explorer).
             "--single-transaction",     // consistent backup without locking
-            "--routines",
+            "--no-tablespaces",
             "--triggers",
             DatabaseConnection.DATABASE
         };
@@ -263,18 +256,27 @@ public class SettingsService {
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.environment().put("MYSQL_PWD", DatabaseConnection.PASSWORD == null ? "" : DatabaseConnection.PASSWORD);
-            pb.redirectOutput(new File(filename));
-            pb.redirectErrorStream(false);
+            Path partial=Files.createTempFile(Paths.get(backupPath),"backup-",".partial");
+            pb.redirectOutput(partial.toFile());
+            File diagnostics=File.createTempFile("pos-backup-", ".log");diagnostics.deleteOnExit();
+            pb.redirectError(diagnostics);
 
             Process process = pb.start();
-            int exitCode = process.waitFor();
+            if(!process.waitFor(120,java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                process.waitFor(5,java.util.concurrent.TimeUnit.SECONDS);Files.deleteIfExists(partial);
+                return new BackupResult(false,"Backup timed out. The incomplete file is not a usable backup.",null);
+            }
+            int exitCode = process.exitValue();
 
             if (exitCode == 0) {
+                Files.move(partial,Paths.get(filename));
                 long fileSize = new File(filename).length();
                 com.pos.setup.BackupReminder.markBackedUp();
                 return new BackupResult(true, "Backup created: " + filename,
-                        filename + " (" + (fileSize / 1024) + " KB)");
+                        filename);
             } else {
+                Files.deleteIfExists(partial);
                 return new BackupResult(false, "mysqldump exited with code " + exitCode, null);
             }
         } catch (IOException e) {
@@ -292,9 +294,8 @@ public class SettingsService {
     /**
      * Imports a mysqldump .sql file (as produced by {@link #createBackup()})
      * back into the live database, via the "mysql" CLI with the file piped
-     * in as stdin. Safe to run against a schema that already exists — the
-     * dump's own DROP TABLE IF EXISTS / CREATE TABLE statements replace
-     * everything table by table.
+     * in as stdin. This replaces tables and is not atomic. A failed restore
+     * must be repaired from a verified backup before the POS can be used.
      */
     public BackupResult restoreBackup(File sqlFile) {
         if (sqlFile == null || !sqlFile.isFile()) {
@@ -306,6 +307,7 @@ public class SettingsService {
             "--host=" + DatabaseConnection.HOST,
             "--port=" + DatabaseConnection.PORT,
             "--user=" + DatabaseConnection.USERNAME,
+            "--ssl-mode="+(DatabaseConnection.isLoopback()?"PREFERRED":"VERIFY_IDENTITY"),
             DatabaseConnection.DATABASE
         };
 
@@ -313,11 +315,17 @@ public class SettingsService {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.environment().put("MYSQL_PWD", DatabaseConnection.PASSWORD == null ? "" : DatabaseConnection.PASSWORD);
             pb.redirectInput(sqlFile);
-            pb.redirectErrorStream(true);
+            File diagnostics=File.createTempFile("pos-restore-", ".log");diagnostics.deleteOnExit();
+            pb.redirectErrorStream(true);pb.redirectOutput(diagnostics);
 
             Process process = pb.start();
-            String output = new String(process.getInputStream().readAllBytes());
-            int exitCode = process.waitFor();
+            if(!process.waitFor(120,java.util.concurrent.TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return new BackupResult(false,"Restore timed out. The database may be incomplete; restore a verified backup before using the POS.",null);
+            }
+            String output;
+            try(InputStream diagnosticInput=new FileInputStream(diagnostics)){output=new String(diagnosticInput.readNBytes(16384),java.nio.charset.StandardCharsets.UTF_8);}
+            int exitCode = process.exitValue();
 
             if (exitCode == 0) {
                 return new BackupResult(true, "Backup restored from: " + sqlFile.getName(), sqlFile.getAbsolutePath());
@@ -393,8 +401,8 @@ public class SettingsService {
     // ── AES-256 Encryption ─────────────────────────────────────────────────────
 
     /**
-     * Derives a machine-specific AES key using PBKDF2.
-     * The machine identifier is the username + OS name — stable across reboots.
+     * Legacy derivation, retained only to read old settings during migration.
+     * Username and OS name are public metadata, not secrets.
      */
     private SecretKey deriveKey() throws Exception {
         String machineId = System.getProperty("user.name") + System.getProperty("os.name");
@@ -404,24 +412,12 @@ public class SettingsService {
     }
 
     private String encrypt(String plaintext) throws Exception {
-        SecretKey key = deriveKey();
-        byte[] iv = new byte[16];
-        new SecureRandom().nextBytes(iv);
-        IvParameterSpec ivSpec = new IvParameterSpec(iv);
-
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-        byte[] encrypted = cipher.doFinal(plaintext.getBytes());
-
-        // Prepend IV to the encrypted bytes so we can retrieve it for decryption
-        byte[] combined = new byte[iv.length + encrypted.length];
-        System.arraycopy(iv, 0, combined, 0, iv.length);
-        System.arraycopy(encrypted, 0, combined, iv.length, encrypted.length);
-
-        return Base64.getEncoder().encodeToString(combined);
+        return com.pos.utils.WindowsSecret.protect(plaintext.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private String decrypt(String encryptedBase64) throws Exception {
+        if(encryptedBase64.startsWith("dpapi:"))return new String(com.pos.utils.WindowsSecret.unprotect(encryptedBase64),java.nio.charset.StandardCharsets.UTF_8);
+        // Read old settings only for migration; every subsequent save uses DPAPI.
         SecretKey key = deriveKey();
         byte[] combined = Base64.getDecoder().decode(encryptedBase64);
 

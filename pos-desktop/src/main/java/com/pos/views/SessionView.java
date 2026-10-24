@@ -843,60 +843,7 @@ public class SessionView {
     }
 
     private void showAuthKeyDialog() {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Authorization Key");
-        dialog.setHeaderText("View Your Manager/Admin Authorization Key");
-
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(15);
-        grid.setPadding(new Insets(20));
-
-        PasswordField passwordField = new PasswordField();
-        passwordField.setPromptText("Enter your login password");
-
-        Label keyLabel = new Label("");
-        keyLabel.setFont(Font.font("Courier New", FontWeight.BOLD, 18));
-        keyLabel.setStyle("-fx-text-fill: #16a34a;");
-        keyLabel.setVisible(false);
-
-        Button showKeyBtn = new Button("Show Key");
-        showKeyBtn.setStyle(
-                "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-padding: 8 16; -fx-font-weight: bold;");
-
-        showKeyBtn.setOnAction(e -> {
-            String password = passwordField.getText();
-            if (password.isEmpty()) {
-                showAlert("Error", "Please enter your password", Alert.AlertType.ERROR);
-                return;
-            }
-            User verifiedUser = userService.login(currentUser.getEmailAddress(), password);
-            if (verifiedUser != null) {
-                String authKey = sessionService.getOrCreateAuthKey(currentUser.getStaffID());
-                keyLabel.setText(authKey);
-                keyLabel.setVisible(true);
-                passwordField.setDisable(true);
-                showKeyBtn.setText("Key Shown");
-                showKeyBtn.setDisable(true);
-            } else {
-                showAlert("Error", "Invalid password", Alert.AlertType.ERROR);
-                passwordField.clear();
-            }
-        });
-
-        grid.add(new Label("Password:"), 0, 0);
-        grid.add(passwordField, 1, 0);
-        grid.add(new Label("Your Key:"), 0, 1);
-        grid.add(keyLabel, 1, 1);
-
-        dialog.getDialogPane().setContent(grid);
-
-        ButtonBar buttonBar = (ButtonBar) dialog.getDialogPane().lookup(".button-bar");
-        buttonBar.getButtons().add(0, showKeyBtn);
-
-        dialog.showAndWait();
+        com.pos.components.AuthorizationKeyDialog.show(currentUser,currentUser,userService,sessionService);
     }
 
     private void showEndSessionDialog(BusinessSession session) {
@@ -957,7 +904,7 @@ public class SessionView {
                 showAlert("Error", "Invalid authorization code", Alert.AlertType.ERROR);
                 return;
             }
-            if (sessionService.endSession(session.getSessionID(), authCode, notesArea.getText())) {
+            if (sessionService.endSession(session.getSessionID(), currentUser.getStaffID(), authCode, notesArea.getText())) {
                 generateSessionPDFs(session.getSessionID());
                 showAlert("Success", "Session ended and reports generated successfully", Alert.AlertType.INFORMATION);
                 refreshView();

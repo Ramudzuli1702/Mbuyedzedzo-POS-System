@@ -34,15 +34,23 @@ public final class Ui {
         Label caption=new Label(label);caption.setFont(Theme.label());caption.setTextFill(Color.web(Theme.TEXT_MUTED));
         if(control instanceof javafx.scene.layout.Region region)region.setMaxWidth(Double.MAX_VALUE);
         if(control instanceof javafx.scene.control.Control)control.setStyle(Theme.input());
-        grid.add(caption,0,row);grid.add(control,1,row);
+        caption.setLabelFor(control);grid.add(caption,0,row);grid.add(control,1,row);
     }
     public static VBox section(String title,Node... children) {
-        Label heading=new Label(title);heading.setFont(Theme.sectionTitle());heading.setTextFill(Color.web(Theme.TEXT));
+        Label heading=new Label(title);heading.setFont(Theme.sectionTitle());heading.setTextFill(Color.web(Theme.TEXT));heading.setStyle("-fx-font-size: 18; -fx-font-weight: bold;");
         VBox box=new VBox(14,heading);box.getChildren().addAll(children);box.setPadding(new Insets(20));box.setStyle(Theme.card());return box;
     }
     /** Details and editable fields share one scrollable, labeled display. Save never dismisses validation errors. */
     public static Dialog<Void> editor(String title,String heading,Node content,java.util.function.BooleanSupplier save) {
+        return actionDialog(title,heading,content,"Save changes",save,false);
+    }
+    /** A creation or confirmation form closes only after its action succeeds. */
+    public static Dialog<Void> createForm(String title,String heading,Node content,String action,java.util.function.BooleanSupplier save) {
+        return actionDialog(title,heading,content,action,save,true);
+    }
+    private static Dialog<Void> actionDialog(String title,String heading,Node content,String action,java.util.function.BooleanSupplier save,boolean closeOnSuccess) {
         Dialog<Void> dialog=new Dialog<>();dialog.setTitle(title);dialog.setResizable(true);
+        dialog.getDialogPane().getStylesheets().add(Ui.class.getResource("/css/app-theme.css").toExternalForm());
         Label recordHeading=new Label(heading);recordHeading.setFont(Font.font("System",FontWeight.BOLD,24));recordHeading.setTextFill(Color.web(Theme.BRAND));recordHeading.setWrapText(true);
         Label caption=new Label(title);caption.setFont(Theme.body());caption.setTextFill(Color.web(Theme.TEXT_MUTED));
         VBox header=new VBox(6,recordHeading,caption);header.setPadding(new Insets(20));header.setStyle(Theme.topBar());dialog.getDialogPane().setHeader(header);
@@ -52,12 +60,12 @@ public final class Ui {
         javafx.scene.control.ScrollPane scroll=new javafx.scene.control.ScrollPane(body);scroll.setFitToWidth(true);scroll.setStyle(Theme.page());
         dialog.getDialogPane().setContent(scroll);
         if(save!=null){
-            ButtonType saveType=new ButtonType("Save changes",javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+            ButtonType saveType=new ButtonType(action,javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
             dialog.getDialogPane().getButtonTypes().add(saveType);
             Node button=dialog.getDialogPane().lookupButton(saveType);button.setStyle(Theme.primaryButton());
             button.addEventFilter(javafx.event.ActionEvent.ACTION,e->{
                 e.consume();
-                try { boolean saved=save.getAsBoolean();feedback.setText(saved?"Changes saved.":"Could not save these changes. Please retry.");feedback.setTextFill(Color.web(saved?Theme.SUCCESS:Theme.DANGER)); }
+                try { boolean saved=save.getAsBoolean();feedback.setText(saved?"Changes saved.":"Could not save these changes. Please retry.");feedback.setTextFill(Color.web(saved?Theme.SUCCESS:Theme.DANGER));if(saved&&closeOnSuccess)dialog.close(); }
                 catch(IllegalArgumentException ex){feedback.setText(ex.getMessage());feedback.setTextFill(Color.web(Theme.DANGER));}
             });
         }

@@ -537,49 +537,7 @@ public class CustomerView {
     // ── Add customer ──────────────────────────────────────────────────────────
 
     private void showAddCustomerDialog() {
-        Dialog<Customer> dialog = new Dialog<>();
-        dialog.setTitle("Add New Customer");
-        dialog.setHeaderText("Enter customer details");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10); grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField  = new TextField();
-        TextField emailField = new TextField();
-        TextField phoneField = new TextField();
-        DatePicker dobPicker = new DatePicker();
-
-        grid.add(new Label("Full Name:"),    0, 0); grid.add(nameField,  1, 0);
-        grid.add(new Label("Email:"),        0, 1); grid.add(emailField, 1, 1);
-        grid.add(new Label("Phone:"),        0, 2); grid.add(phoneField, 1, 2);
-        grid.add(new Label("Date of Birth:"),0, 3); grid.add(dobPicker,  1, 3);
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(btn -> {
-            if (btn == saveButtonType) {
-                Customer c = new Customer();
-                c.setStaffID(currentUser.getStaffID());
-                c.setFullNames(nameField.getText());
-                c.setEmailAddress(emailField.getText());
-                c.setContactNo(phoneField.getText());
-                c.setDateOfBirth(dobPicker.getValue());
-                return c;
-            }
-            return null;
-        });
-
-        dialog.showAndWait().ifPresent(c -> {
-            if (customerService.addCustomer(c)) {
-                showAlert("Success", "Customer added successfully", Alert.AlertType.INFORMATION);
-                loadCustomers();
-            } else {
-                showAlert("Error", "Failed to add customer", Alert.AlertType.ERROR);
-            }
-        });
+        com.pos.components.CustomerForm.create(currentUser.getStaffID(),customerService,customer->loadCustomers()).showAndWait();
     }
 
     // ── Edit customer ─────────────────────────────────────────────────────────
@@ -798,6 +756,10 @@ public class CustomerView {
                 if (reason.isEmpty()) reason = "No reason provided";
                 PaymentInfo payment = null;
                 BigDecimal topUp = newProduct.getPrice().subtract(originalPrice);
+                if(topUp.signum()!=0) {
+                    showAlert("Price difference", "For an item with a different price, submit a return and then make a new sale. This keeps the refund and new payment recorded correctly.", Alert.AlertType.INFORMATION);
+                    return null;
+                }
                 if (topUp.compareTo(BigDecimal.ZERO) > 0) {
                     String method = cashRadio.isSelected() ? "Cash" : "Card";
                     BigDecimal paid = topUp;

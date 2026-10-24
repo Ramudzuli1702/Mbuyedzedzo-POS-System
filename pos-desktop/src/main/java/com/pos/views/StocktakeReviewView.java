@@ -114,8 +114,15 @@ public final class StocktakeReviewView {
         confirm.setHeaderText(accepted?"Apply the physical counts to live stock?":"Reject this stocktake and keep live stock unchanged?");
         confirm.setContentText(sheet.items().stream().filter(l->l.counted()!=null).count()+" counted products · "+sheet.staffName());
         if(confirm.showAndWait().orElse(ButtonType.CANCEL)!=ButtonType.OK)return;
+        TextInputDialog authorization=new TextInputDialog();
+        authorization.initOwner(sheets.getScene().getWindow());
+        authorization.setTitle("Authorization Required");
+        authorization.setHeaderText(accepted?"Approve stocktake":"Reject stocktake");
+        authorization.setContentText("Enter your new 6-digit authorization code (valid once, for 15 minutes):");
+        String authCode=authorization.showAndWait().map(String::trim).orElse(null);
+        if(authCode==null)return;
         busy=true;updateButtons();status.setText("Saving review…");
-        CompletableFuture.supplyAsync(()-> {try{return service.review(sheet.id(),user.getStaffID(),accepted,reason);}catch(Exception e){throw new RuntimeException(e);}})
+        CompletableFuture.supplyAsync(()-> {try{return service.review(sheet.id(),user.getStaffID(),accepted,reason,authCode);}catch(Exception e){throw new RuntimeException(e);}})
                 .whenComplete((reviewed,error)->Platform.runLater(()-> {
                     busy=false;
                     if(error!=null) { status.setText(message(error));updateButtons();return; }

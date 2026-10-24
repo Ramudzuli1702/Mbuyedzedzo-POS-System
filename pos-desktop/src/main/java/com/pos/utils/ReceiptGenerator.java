@@ -61,6 +61,15 @@ public class ReceiptGenerator {
                                          PaymentInfo paymentInfo,
                                          String promoCode,
                                          BigDecimal discountAmount) {
+        return generateReceipt(customer,items,cashier,paymentInfo,promoCode,discountAmount,null);
+    }
+    public static String generateReceipt(Customer customer,ObservableList<CartItem> items,User cashier,
+                                         PaymentInfo paymentInfo,com.pos.services.PromotionEngine.Quote quote) {
+        return generateReceipt(customer,items,cashier,paymentInfo,null,quote.discount(),quote);
+    }
+    private static String generateReceipt(Customer customer,ObservableList<CartItem> items,User cashier,
+                                          PaymentInfo paymentInfo,String promoCode,BigDecimal discountAmount,
+                                          com.pos.services.PromotionEngine.Quote quote) {
         StringBuilder r = new StringBuilder();
         header(r, "SALES RECEIPT");
 
@@ -88,8 +97,15 @@ public class ReceiptGenerator {
         BigDecimal discount = discountAmount != null ? discountAmount : BigDecimal.ZERO;
         moneyLine(r, "Subtotal", subtotal);
         if (discount.compareTo(BigDecimal.ZERO) > 0) {
+            if(quote!=null) {
+                for(var offer:quote.offers()) {
+                    r.append(indent("Promotion: "+offer.name()+" x"+offer.applications()));
+                    moneyLine(r,"Savings",offer.saving().negate());
+                }
+            } else {
             moneyLine(r, "Discount" + (notBlank(promoCode) ? " (" + promoCode + ")" : ""),
                       discount.negate());
+            }
         }
         r.append(DRULE());
         moneyLine(r, "TOTAL", subtotal.subtract(discount));
@@ -325,7 +341,8 @@ public class ReceiptGenerator {
         r.append('\n');
         for (String l : wrapCentre(msg)) r.append(l).append('\n');
         r.append('\n');
-        r.append(centre("Powered by " + com.pos.Branding.APP_NAME)).append('\n');
+        r.append(centre("Powered by " + com.pos.Branding.BRAND_NAME)).append('\n');
+        r.append(centre(com.pos.Branding.PRODUCT_LINE)).append('\n');
         r.append(centre(com.pos.Branding.APP_TAGLINE)).append('\n');
         r.append(DRULE());
     }

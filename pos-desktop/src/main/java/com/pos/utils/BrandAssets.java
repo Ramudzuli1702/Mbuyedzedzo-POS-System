@@ -15,6 +15,8 @@ public final class BrandAssets {
     private static Image logo;
     private static Image logoMark;
     private static boolean loaded;
+    private static boolean windowIconsInstalled;
+    private static final java.util.List<Image> appIcons=new java.util.ArrayList<>();
 
     private BrandAssets() {}
 
@@ -74,6 +76,8 @@ public final class BrandAssets {
      * correction has to be baked into the pixels themselves.
      */
     public static void applyAppIcons(Stage stage) {
+        if(!stage.getIcons().isEmpty())return;
+        if(!appIcons.isEmpty()){stage.getIcons().setAll(appIcons);return;}
         for (int size : ICON_SIZES) {
             String path = "/brand/icons/icon-" + size + ".png";
             var in = BrandAssets.class.getResourceAsStream(path);
@@ -81,8 +85,21 @@ public final class BrandAssets {
                 log.warn("App icon asset missing from the build: {}", path);
                 continue;
             }
-            stage.getIcons().add(new Image(in));
+            try(in){appIcons.add(new Image(in));}
+            catch(java.io.IOException e){log.warn("Could not load app icon: {}",path);}
         }
+        stage.getIcons().setAll(appIcons);
+    }
+
+    /** Covers alerts, dialogs and secondary stages, including windows created by JavaFX controls. */
+    public static void installWindowIcons() {
+        if(windowIconsInstalled)return;
+        windowIconsInstalled=true;
+        javafx.stage.Window.getWindows().addListener((javafx.collections.ListChangeListener<javafx.stage.Window>)change->{
+            while(change.next())if(change.wasAdded())for(var window:change.getAddedSubList())
+                if(window instanceof Stage stage)applyAppIcons(stage);
+        });
+        for(var window:javafx.stage.Window.getWindows())if(window instanceof Stage stage)applyAppIcons(stage);
     }
 
     private static ImageView view(Image img, double height) {

@@ -7,6 +7,11 @@ public final class CompanionSchema {
     private CompanionSchema() {}
 
     public static void ensure(Connection c) throws SQLException {
+        try (PreparedStatement check = c.prepareStatement("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Product' AND COLUMN_NAME='IsArchived'")) {
+            if (!check.executeQuery().next()) try (Statement s = c.createStatement()) {
+                s.executeUpdate("ALTER TABLE Product ADD COLUMN IsArchived BOOLEAN NOT NULL DEFAULT FALSE");
+            }
+        }
         try (PreparedStatement check = c.prepareStatement("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='Product' AND COLUMN_NAME='StockVersion'")) {
             if (!check.executeQuery().next()) try (Statement s = c.createStatement()) {
                 s.executeUpdate("ALTER TABLE Product ADD COLUMN StockVersion BIGINT NOT NULL DEFAULT 0");

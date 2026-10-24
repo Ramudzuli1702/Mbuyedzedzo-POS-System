@@ -44,6 +44,8 @@ public class InventoryView {
     private TextField searchField;
 
     private WiFiHandler wifiHandler;
+    private volatile boolean active = true;
+    private final long sessionEpoch;
     private Label wifiStatusLabel;
 
     private final ReportService reportService = new ReportService();
@@ -53,6 +55,7 @@ public class InventoryView {
         this.productService = new ProductService();
         this.categoryService = new CategoryService();
         this.wifiHandler = WiFiHandler.getInstance();
+        sessionEpoch=wifiHandler.desktopEpoch();
 
         initializeWiFiReceiver();
     }
@@ -73,6 +76,8 @@ public class InventoryView {
 
     private void initializeWiFiReceiver() {
         new Thread(() -> {
+            synchronized(wifiHandler) {
+            if(!active || sessionEpoch!=wifiHandler.desktopEpoch())return;
             // Must boot the socket (if it isn't already) BEFORE setting the
             // callback below — startListening() unconditionally overwrites
             // both the scan and product callbacks itself, so calling it
@@ -81,13 +86,15 @@ public class InventoryView {
             // (e.g. Sales's barcode-scan handler) had already registered.
             boolean started = wifiHandler.isServerRunning() || wifiHandler.startListening(null, null);
 
-            wifiHandler.setProductCallback(product -> Platform.runLater(() -> handleProductFromAndroid(product)));
+            if(active && sessionEpoch==wifiHandler.desktopEpoch()) wifiHandler.setProductCallback(product -> Platform.runLater(() -> handleProductFromAndroid(product)));
 
             Platform.runLater(() -> updateWiFiStatus(started));
+            }
         }, "WiFi-Inventory-Init").start();
     }
 
     private void handleProductFromAndroid(Product product) {
+        if(!active || sessionEpoch!=wifiHandler.desktopEpoch() || !currentUser.hasFullAccess())return;
         System.out.println("➕ InventoryView: Product received from Android: " + product.getProductName());
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
@@ -103,7 +110,7 @@ public class InventoryView {
 
         Optional<ButtonType> result = alert.showAndWait();
 
-        if (result.isPresent() && result.get() == ButtonType.OK) {
+        if (active && sessionEpoch==wifiHandler.desktopEpoch() && result.isPresent() && result.get() == ButtonType.OK) {
             addProductToDatabase(product);
         } else {
             System.out.println("Product addition cancelled by user");
@@ -112,6 +119,9 @@ public class InventoryView {
     }
 
     private void addProductToDatabase(Product product) {
+        if(!active || sessionEpoch!=wifiHandler.desktopEpoch())return;
+        try {new com.pos.services.StocktakeService().requireStaff(currentUser.getStaffID(),true);}
+        catch(java.sql.SQLException ex){showAlert("Sign in again","An active Admin or Manager must approve this product.",Alert.AlertType.WARNING);return;}
         // The phone picks from the real category list now (fed to it over
         // WiFi), so use whatever name it sent — falling back to the default
         // only if it's missing or doesn't match anything (e.g. an older
@@ -197,7 +207,7 @@ public class InventoryView {
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabs.getTabs().addAll(
             new Tab("Products", productsScroll),
-            new Tab("Promo Codes", promoScroll));
+            new Tab("Promotions", promoScroll));
 
         layout.setCenter(tabs);
         return layout;
@@ -810,10 +820,13 @@ public class InventoryView {
                 if(qty<0||purchase.signum()<0||selling.signum()<0)throw new IllegalArgumentException("Quantity and prices cannot be negative.");
                 Product updated=new Product(product.getProductID(),name.getText().trim(),barcode.getText().trim(),qty,selling);
                 updated.setStaffID(product.getStaffID());updated.setCategoryID(categoryService.getCategoryId(category.getValue()));updated.setCategoryName(category.getValue());updated.setCostPrice(purchase);
-                boolean ok=productService.updateProduct(updated);if(ok)loadProducts();return ok;
+                updated.setStockVersion(product.getStockVersion());
+                boolean ok=productService.updateProduct(updated);if(ok)loadProducts();
+                else throw new IllegalArgumentException("The product could not be saved. Stock may have changed; close this form and reopen it before editing.");
+                return true;
             }catch(NumberFormatException ex){throw new IllegalArgumentException("Enter a whole quantity and valid purchase/selling prices.");}
         }:null);
-        if(editable){Button delete=new Button("Delete product");delete.setStyle(Theme.dangerButton());delete.setOnAction(e->{dialog.close();Platform.runLater(()->deleteProduct(product));});body.getChildren().add(com.pos.components.Ui.section("Product actions",delete));}
+        if(editable){Button delete=new Button("Archive product");delete.setStyle(Theme.dangerButton());delete.setOnAction(e->{dialog.close();Platform.runLater(()->deleteProduct(product));});body.getChildren().add(com.pos.components.Ui.section("Product actions",delete));}
         dialog.showAndWait();
     }
 
@@ -865,75 +878,25 @@ public class InventoryView {
     }
 
     private void showAddProductDialog() {
-        Dialog<Product> dialog = new Dialog<>();
-        dialog.setTitle("Add New Product");
-        dialog.setHeaderText("Enter product details");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField     = new TextField();
-        ComboBox<String> categoryCombo = new ComboBox<>();
-        categoryCombo.setItems(categoryService.getAllCategories());
-        categoryCombo.setPromptText("Select a category...");
-        TextField barcodeField  = new TextField();
-        TextField quantityField = new TextField();
-        TextField costPriceField = new TextField();
-        TextField priceField    = new TextField();
-
-        grid.add(new Label("Product Name:"), 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(new Label("Category:"), 0, 1);
-        grid.add(categoryCombo, 1, 1);
-        grid.add(new Label("Barcode:"), 0, 2);
-        grid.add(barcodeField, 1, 2);
-        grid.add(new Label("Quantity:"), 0, 3);
-        grid.add(quantityField, 1, 3);
-        grid.add(new Label("Purchase Price (R):"), 0, 4);
-        grid.add(costPriceField, 1, 4);
-        grid.add(new Label("Selling Price (R):"), 0, 5);
-        grid.add(priceField, 1, 5);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                if (categoryCombo.getValue() == null) {
-                    showAlert("Error", "Please select a category.", Alert.AlertType.ERROR);
-                    return null;
-                }
-                try {
-                    Product product = new Product();
-                    product.setStaffID(currentUser.getStaffID());
-                    product.setProductName(nameField.getText());
-                    product.setCategoryID(categoryService.getCategoryId(categoryCombo.getValue()));
-                    product.setBarCode(barcodeField.getText());
-                    product.setQuantity(Integer.parseInt(quantityField.getText()));
-                    product.setCostPrice(new BigDecimal(costPriceField.getText()));
-                    product.setPrice(new BigDecimal(priceField.getText()));
-                    return product;
-                } catch (NumberFormatException e) {
-                    showAlert("Error", "Invalid number format", Alert.AlertType.ERROR);
-                    return null;
-                }
-            }
-            return null;
-        });
-
-        Optional<Product> result = dialog.showAndWait();
-        result.ifPresent(product -> {
-            if (productService.addProduct(product)) {
-                showAlert("Success", "Product added successfully", Alert.AlertType.INFORMATION);
-                loadProducts();
-            } else {
-                showAlert("Error", "Failed to add product", Alert.AlertType.ERROR);
-            }
-        });
+        TextField name=new TextField(),barcode=new TextField(),quantity=new TextField("0"),cost=new TextField("0.00"),price=new TextField();
+        ComboBox<String> category=new ComboBox<>(categoryService.getAllCategories());category.setPromptText("Select a category");
+        var details=com.pos.components.Ui.formGrid();
+        com.pos.components.Ui.formField(details,0,"Product name",name);com.pos.components.Ui.formField(details,1,"Category",category);
+        com.pos.components.Ui.formField(details,2,"Barcode",barcode);
+        var stock=com.pos.components.Ui.formGrid();
+        com.pos.components.Ui.formField(stock,0,"Opening quantity",quantity);com.pos.components.Ui.formField(stock,1,"Purchase price (R)",cost);
+        com.pos.components.Ui.formField(stock,2,"Selling price (R)",price);
+        com.pos.components.Ui.createForm("Add product","New product",new VBox(16,
+                com.pos.components.Ui.section("Product information",details),com.pos.components.Ui.section("Stock and pricing",stock)),"Add product",()->{
+            if(category.getValue()==null)throw new IllegalArgumentException("Select a category.");
+            Product product=new Product();product.setStaffID(currentUser.getStaffID());product.setProductName(name.getText().trim());
+            product.setCategoryID(categoryService.getCategoryId(category.getValue()));product.setBarCode(barcode.getText().trim());
+            try {product.setQuantity(Integer.parseInt(quantity.getText().trim()));product.setCostPrice(new BigDecimal(cost.getText().trim()));product.setPrice(new BigDecimal(price.getText().trim()));}
+            catch(NumberFormatException ex){throw new IllegalArgumentException("Enter a whole stock quantity and valid purchase and selling prices.");}
+            ProductService.validate(product);
+            if(!productService.addProduct(product))throw new IllegalArgumentException("The product could not be added. Check that its barcode is unique and retry.");
+            loadProducts();return true;
+        }).showAndWait();
     }
 
 
@@ -967,13 +930,13 @@ public class InventoryView {
 
     private void deleteProduct(Product product) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-        alert.setTitle("Delete Product");
-        alert.setHeaderText("Are you sure you want to delete this product?");
-        alert.setContentText(product.getProductName());
+        alert.setTitle("Archive product");
+        alert.setHeaderText("Remove this product from the active inventory?");
+        alert.setContentText(product.getProductName() + "\nSales and stock history will be kept.");
 
         if (alert.showAndWait().get() == ButtonType.OK) {
             if (productService.deleteProduct(product.getProductID())) {
-                showAlert("Success", "Product deleted successfully", Alert.AlertType.INFORMATION);
+                showAlert("Success", "Product archived. Sales history has been kept.", Alert.AlertType.INFORMATION);
                 loadProducts();
             } else {
                 showAlert("Error", "Failed to delete product", Alert.AlertType.ERROR);
@@ -982,167 +945,59 @@ public class InventoryView {
     }
 
     public void cleanup() {
-        // Deliberately does NOT clear the WiFi product callback — a product
-        // scanned/added from the Android app must still go through even when
-        // Inventory isn't the active screen (the whole point of a phone as a
-        // second scanner). The callback is only ever torn down at actual app
-        // shutdown, via MainDashboard's handleCloseRequest -> wifiHandler.cleanup().
+        active = false;
+        wifiHandler.setProductCallback(null);
     }
 
     // ── Category management ──────────────────────────────────────────────────
 
     private void showCategoriesDialog() {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Category Management");
-        dialog.setHeaderText(null);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.getDialogPane().setPrefWidth(500);
-
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(20));
-
-        Label title = Theme.sectionTitleLabel("Manage Categories");
-
-        HBox addRow = new HBox(10);
-        addRow.setAlignment(Pos.CENTER_LEFT);
-
-        TextField newCategoryField = new TextField();
-        newCategoryField.setPromptText("New category name...");
-        newCategoryField.setPrefWidth(280);
-        newCategoryField.setStyle(Theme.input());
-        HBox.setHgrow(newCategoryField, Priority.ALWAYS);
-
-        Button addCategoryBtn = new Button("+ Add");
-        Theme.hover(addCategoryBtn, Theme.primaryButton(), Theme.primaryHover());
-
-        addRow.getChildren().addAll(newCategoryField, addCategoryBtn);
-
-        ListView<javafx.util.Pair<Integer, String>> categoryListView = new ListView<>();
-        categoryListView.setPrefHeight(300);
-        categoryListView.setStyle("-fx-background-radius: " + Theme.RADIUS_SM + "px; -fx-border-color: " + Theme.BORDER + "; -fx-border-radius: " + Theme.RADIUS_SM + "px;");
-
-        Runnable refreshList = () -> categoryListView.setItems(categoryService.getAllCategoriesWithId());
-        refreshList.run();
-
-        categoryListView.setCellFactory(lv -> new ListCell<>() {
-            private final Label nameLabel = new Label();
-            private final Button editBtn   = new Button("Edit");
-            private final Button deleteBtn = new Button("Delete");
-            private final HBox row = new HBox(10, nameLabel, new Region(), editBtn, deleteBtn);
-
-            {
-                HBox.setHgrow(row.getChildren().get(1), Priority.ALWAYS);
-                row.setAlignment(Pos.CENTER_LEFT);
-                row.setPadding(new Insets(4, 8, 4, 8));
-
-                editBtn.setStyle(
-                        "-fx-background-color: " + Theme.WARNING + "; -fx-text-fill: white;" +
-                        "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
-                deleteBtn.setStyle(
-                        "-fx-background-color: " + Theme.DANGER + "; -fx-text-fill: white;" +
-                        "-fx-font-size: 11; -fx-padding: 5 10; -fx-background-radius: 4; -fx-cursor: hand;");
-                nameLabel.setFont(Font.font("System", 13));
-
-                editBtn.setOnAction(e -> {
-                    javafx.util.Pair<Integer, String> item = getItem();
-                    if (item == null) return;
-
-                    TextInputDialog editDialog = new TextInputDialog(item.getValue());
-                    editDialog.setTitle("Edit Category");
-                    editDialog.setHeaderText("Rename category");
-                    editDialog.setContentText("New name:");
-
-                    editDialog.showAndWait().ifPresent(newName -> {
-                        String trimmed = newName.trim();
-                        if (trimmed.isEmpty()) {
-                            showAlert("Error", "Category name cannot be empty.", Alert.AlertType.ERROR);
-                            return;
-                        }
-                        if (categoryService.updateCategory(item.getKey(), trimmed)) {
-                            showAlert("Success", "Category renamed to \"" + trimmed + "\".",
-                                    Alert.AlertType.INFORMATION);
-                            refreshList.run();
-                            loadProducts();
-                            refreshCategoryFilterItems();
-                        } else {
-                            showAlert("Error", "Failed to rename category.", Alert.AlertType.ERROR);
-                        }
-                    });
-                });
-
-                deleteBtn.setOnAction(e -> {
-                    javafx.util.Pair<Integer, String> item = getItem();
-                    if (item == null) return;
-
-                    Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-                    confirm.setTitle("Delete Category");
-                    confirm.setHeaderText("Delete \"" + item.getValue() + "\"?");
-                    confirm.setContentText(
-                            "This will fail if any products are assigned to this category.\n" +
-                            "Reassign or delete those products first.");
-
-                    confirm.showAndWait().ifPresent(response -> {
-                        if (response == ButtonType.OK) {
-                            boolean deleted = categoryService.deleteCategory(item.getKey());
-                            if (deleted) {
-                                showAlert("Success", "Category deleted.", Alert.AlertType.INFORMATION);
-                                refreshList.run();
-                                refreshCategoryFilterItems();
-                            } else {
-                                showAlert("Cannot Delete",
-                                        "\"" + item.getValue() + "\" has products assigned to it.\n" +
-                                        "Please reassign or delete those products first.",
-                                        Alert.AlertType.WARNING);
-                            }
-                        }
-                    });
-                });
-            }
-
-            @Override
-            protected void updateItem(javafx.util.Pair<Integer, String> item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setGraphic(null);
-                } else {
-                    nameLabel.setText(item.getValue());
-                    setGraphic(row);
-                }
+        TextField newName=new TextField(),selectedName=new TextField();
+        newName.setPromptText("New category name");selectedName.setPromptText("Select a category below");
+        var addGrid=com.pos.components.Ui.formGrid();com.pos.components.Ui.formField(addGrid,0,"Category name",newName);
+        var editGrid=com.pos.components.Ui.formGrid();com.pos.components.Ui.formField(editGrid,0,"Category name",selectedName);
+        ListView<javafx.util.Pair<Integer,String>> categories=new ListView<>();categories.setPrefHeight(220);
+        categories.setPlaceholder(new Label("No categories yet. Add your first category above."));
+        categories.setCellFactory(list->new ListCell<>() {
+            @Override protected void updateItem(javafx.util.Pair<Integer,String> item,boolean empty) {
+                super.updateItem(item,empty);setText(empty||item==null?null:item.getValue());
             }
         });
-
-        addCategoryBtn.setOnAction(e -> {
-            String name = newCategoryField.getText().trim();
-            if (name.isEmpty()) {
-                showAlert("Error", "Please enter a category name.", Alert.AlertType.ERROR);
-                return;
-            }
-            if (categoryService.addCategory(name)) {
-                newCategoryField.clear();
-                refreshList.run();
-                refreshCategoryFilterItems();
-                showAlert("Success", "Category \"" + name + "\" added.", Alert.AlertType.INFORMATION);
-            } else {
-                showAlert("Error", "Failed to add category. It may already exist.", Alert.AlertType.ERROR);
-            }
+        Label feedback=new Label(),count=new Label();feedback.setWrapText(true);
+        Button add=new Button("Add category"),save=new Button("Save name"),delete=new Button("Delete category");
+        add.setStyle(Theme.primaryButton());save.setStyle(Theme.secondaryButton());delete.setStyle(Theme.dangerButton());
+        save.setDisable(true);delete.setDisable(true);
+        Runnable refresh=()->{categories.setItems(categoryService.getAllCategoriesWithId());count.setText(categories.getItems().size()+" categories");refreshCategoryFilterItems();};
+        refresh.run();
+        categories.getSelectionModel().selectedItemProperty().addListener((o,a,b)->{
+            selectedName.setText(b==null?"":b.getValue());save.setDisable(b==null);delete.setDisable(b==null);
         });
-
-        newCategoryField.setOnAction(e -> addCategoryBtn.fire());
-
-        Label countLabel = new Label();
-        countLabel.setFont(Font.font("System", 11));
-        countLabel.setTextFill(Color.web("#64748b"));
-
-        categoryListView.itemsProperty().addListener((obs, o, n) -> {
-            int count = n == null ? 0 : n.size();
-            countLabel.setText(count + " categor" + (count == 1 ? "y" : "ies") + " total");
+        add.setOnAction(e->{
+            String name=newName.getText().trim();
+            if(name.isEmpty()){feedback.setText("Enter a category name.");return;}
+            if(!categoryService.addCategory(name)){feedback.setText("The category could not be added. Check whether its name already exists.");return;}
+            newName.clear();refresh.run();feedback.setText("Category added.");
         });
-        countLabel.setText(categoryListView.getItems().size() + " categor" +
-                (categoryListView.getItems().size() == 1 ? "y" : "ies") + " total");
-
-        content.getChildren().addAll(title, addRow, categoryListView, countLabel);
-        dialog.getDialogPane().setContent(content);
-        dialog.showAndWait();
+        newName.setOnAction(e->add.fire());
+        save.setOnAction(e->{
+            var item=categories.getSelectionModel().getSelectedItem();if(item==null)return;
+            String name=selectedName.getText().trim();
+            if(name.isEmpty()){feedback.setText("Enter a category name.");return;}
+            if(!categoryService.updateCategory(item.getKey(),name)){feedback.setText("The category could not be renamed. Check the name and retry.");return;}
+            refresh.run();loadProducts();feedback.setText("Category renamed.");
+        });
+        delete.setOnAction(e->{
+            var item=categories.getSelectionModel().getSelectedItem();if(item==null)return;
+            Alert confirm=new Alert(Alert.AlertType.CONFIRMATION);confirm.setTitle("Delete category");
+            confirm.setHeaderText("Delete \""+item.getValue()+"\"?");confirm.setContentText("Categories assigned to products cannot be deleted. Reassign those products first.");
+            confirm.initOwner(categories.getScene().getWindow());
+            if(confirm.showAndWait().orElse(ButtonType.CANCEL)!=ButtonType.OK)return;
+            if(!categoryService.deleteCategory(item.getKey())){feedback.setText("This category could not be deleted. Check whether products still use it.");return;}
+            refresh.run();feedback.setText("Category deleted.");
+        });
+        com.pos.components.Ui.editor("Manage categories","Product categories",new VBox(16,
+                com.pos.components.Ui.section("Add a category",addGrid,add),
+                com.pos.components.Ui.section("Existing categories",count,categories,editGrid,new HBox(12,save,delete)),feedback),null).showAndWait();
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {

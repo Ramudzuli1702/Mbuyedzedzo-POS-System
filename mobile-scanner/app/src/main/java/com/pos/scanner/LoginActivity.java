@@ -18,7 +18,16 @@ public final class LoginActivity extends AppCompatActivity {
     private View progress;
     private boolean busy;
     private final BroadcastReceiver connection=new BroadcastReceiver(){
-        @Override public void onReceive(Context context,Intent event){if(!wifi.isConnected()||wifi.isSignedIn())finish();}
+        @Override public void onReceive(Context context,Intent event){
+            if(wifi.isSignedIn()){finish();return;}
+            if(!wifi.isConnected()) {
+                status.setText(wifi.getConnectionMessage());
+                signIn.setEnabled(false);
+            } else if(!busy) {
+                status.setText("Connected. Enter your staff email and password.");
+                signIn.setEnabled(true);
+            }
+        }
     };
     @Override protected void onCreate(Bundle state){
         super.onCreate(state);setContentView(R.layout.activity_login);
@@ -40,8 +49,9 @@ public final class LoginActivity extends AppCompatActivity {
         status.setText("Signing in...");
         wifi.login(address,secret,response->{
             if(isDestroyed())return;
-            busy=false;signIn.setEnabled(true);email.setEnabled(true);password.setEnabled(true);progress.setVisibility(View.GONE);
+            busy=false;signIn.setEnabled(wifi.isConnected());email.setEnabled(true);password.setEnabled(true);progress.setVisibility(View.GONE);
             if(response.get("ok").getAsBoolean())finish();
+            else if(!wifi.isConnected())status.setText(wifi.getConnectionMessage());
             else status.setText(response.has("message")?response.get("message").getAsString():"Sign-in failed. Please retry.");
         });
     }

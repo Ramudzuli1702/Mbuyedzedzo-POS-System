@@ -10,6 +10,12 @@ package com.pos;
  */
 public final class Branding {
 
+    public static final String BRAND_NAME = "Mbuyedzedzo";
+    public static final String PRODUCT_LINE = Edition.current().isRetail() ? "Retail POS System" : "POS System";
+    public static final String DISPLAY_NAME = BRAND_NAME + "\n" + PRODUCT_LINE;
+    /** Native window title bars have one line; keep the product descriptor in the window content. */
+    public static final String WINDOW_TITLE = BRAND_NAME + (Edition.current().isRetail() ? " — Retail" : "");
+
     public static final String APP_NAME  = Edition.current().isRetail()
             ? "Mbuyedzedzo Retail POS"
             : "Mbuyedzedzo POS System";

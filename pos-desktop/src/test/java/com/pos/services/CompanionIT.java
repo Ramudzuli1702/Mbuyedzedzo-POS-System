@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfSystemProperty(named="pos.companion.it.port",matches="[0-9]+")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CompanionIT {
-    String rootUrl,url,schema,hash;
+    String rootUrl,url,schema,hash,authHash;
     StocktakeService service;
     MobileReceiptService receipts;
     @BeforeAll void database() throws Exception {
@@ -27,9 +27,11 @@ class CompanionIT {
         schema="companion_test_"+UUID.randomUUID().toString().replace("-","");
         try(Connection c=DriverManager.getConnection(rootUrl,"root","");Statement s=c.createStatement()){s.executeUpdate("CREATE DATABASE `"+schema+"` CHARACTER SET utf8mb4");}
         url=rootUrl.replace("/?","/"+schema+"?");hash=PasswordUtil.hashPassword("Stocktake!123");
+        authHash=PasswordUtil.hashPassword("123456");
         service=new StocktakeService(this::open);receipts=new MobileReceiptService(this::open);
         try(Connection c=open();Statement s=c.createStatement()){
             s.executeUpdate("CREATE TABLE Staff (StaffID INT PRIMARY KEY, FullNames VARCHAR(100), EmailAddress VARCHAR(255), UserType VARCHAR(20), UserPassword VARCHAR(255), Status VARCHAR(20))");
+            s.executeUpdate("CREATE TABLE SupervisorCodes (CodeID INT AUTO_INCREMENT PRIMARY KEY,StaffID INT,AuthCode VARCHAR(255),IsActive BOOLEAN,ExpiryDate TIMESTAMP)");
             s.executeUpdate("CREATE TABLE Category (CategoryID INT PRIMARY KEY,CategoryName VARCHAR(100))");
             s.executeUpdate("CREATE TABLE Product (ProductID INT PRIMARY KEY,ProductName VARCHAR(100),BarCode VARCHAR(100),CategoryID INT,Quantity INT NOT NULL)");
             CompanionSchema.ensure(c);CompanionSchema.ensure(c); // Upgrade and repeat launch are both safe.
@@ -37,12 +39,16 @@ class CompanionIT {
     }
     Connection open() throws SQLException{return DriverManager.getConnection(url,"root","");}
     @BeforeEach void fixture() throws Exception {
+        com.pos.utils.LoginAttempts.SHARED.success("approval:2");
         try(Connection c=open();Statement s=c.createStatement()){
-            for(String table:List.of("StocktakeLine","Stocktake","MobileReceiptOutbox","Product","Staff","Category"))s.executeUpdate("DELETE FROM "+table);
+            for(String table:List.of("StocktakeLine","Stocktake","MobileReceiptOutbox","Product","SupervisorCodes","Staff","Category"))s.executeUpdate("DELETE FROM "+table);
             s.executeUpdate("INSERT INTO Category VALUES (1,'Groceries')");
             s.executeUpdate("INSERT INTO Product (ProductID,ProductName,BarCode,CategoryID,Quantity) VALUES (1,'Test Bread','00001234-A',1,10),(2,'Test Milk','0123456789012',1,20)");
             try(PreparedStatement p=c.prepareStatement("INSERT INTO Staff VALUES (?,?,?,?,?,?)")){
                 for(int id=1;id<=3;id++){p.setInt(1,id);p.setString(2,id==2?"Test Manager":"Test Cashier");p.setString(3,id==1?"stock.cashier@example.test":"staff"+id+"@example.test");p.setString(4,id==2?"Manager":"Cashier");p.setString(5,hash);p.setString(6,id==3?"Inactive":"Active");p.executeUpdate();}
+            }
+            try(PreparedStatement p=c.prepareStatement("INSERT INTO SupervisorCodes (StaffID,AuthCode,IsActive,ExpiryDate) VALUES (2,?,TRUE,DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 15 MINUTE))")) {
+                p.setString(1,authHash);p.executeUpdate();
             }
         }
     }
@@ -53,21 +59,49 @@ class CompanionIT {
     String start() throws Exception {String id=UUID.randomUUID().toString();service.start(id,1);return id;}
     @Test void countsWaitForApprovalAndUncountedProductsStayUntouched() throws Exception {
         String id=start();service.submit(id,1,List.of(new StocktakeService.Count(1,0)),"Empty shelf");assertEquals(10,quantity(1));
-        assertThrows(StocktakeService.Rejected.class,()->service.review(id,1,true,""));assertEquals(10,quantity(1));
-        StocktakeService.CountSheet reviewed=service.review(id,2,true,"Verified");assertEquals("Approved",reviewed.status());assertEquals("Test Manager",reviewed.reviewer());assertEquals(0,quantity(1));assertEquals(20,quantity(2));
-        assertThrows(StocktakeService.Rejected.class,()->service.review(id,2,true,""));
+        assertThrows(StocktakeService.Rejected.class,()->service.review(id,1,true,"","123456"));assertEquals(10,quantity(1));
+        StocktakeService.CountSheet reviewed=service.review(id,2,true,"Verified","123456");assertEquals("Approved",reviewed.status());assertEquals("Test Manager",reviewed.reviewer());assertEquals(0,quantity(1));assertEquals(20,quantity(2));
+        assertThrows(StocktakeService.Rejected.class,()->service.review(id,2,true,"","123456"));
+    }
+    @Test void missingWrongAndExpiredKeysCannotChangeStockOrReviewStatus() throws Exception {
+        String id=start();service.submit(id,1,List.of(new StocktakeService.Count(1,7)),"");
+        for(String code:new String[]{null,"","654321"}) {
+            var error=assertThrows(StocktakeService.Rejected.class,()->service.review(id,2,true,"",code));
+            assertEquals("AUTH_FAILED",error.code);
+            assertEquals("Pending",service.resume(id,1).status());assertEquals(10,quantity(1));
+        }
+        try(Connection c=open();Statement s=c.createStatement()) {
+            s.executeUpdate("UPDATE SupervisorCodes SET ExpiryDate=DATE_SUB(CURRENT_TIMESTAMP,INTERVAL 1 MINUTE)");
+        }
+        assertEquals("AUTH_FAILED",assertThrows(StocktakeService.Rejected.class,()->service.review(id,2,true,"","123456")).code);
+        assertEquals("Pending",service.resume(id,1).status());assertEquals(10,quantity(1));
+        try(Connection c=open();Statement s=c.createStatement()) {
+            s.executeUpdate("UPDATE SupervisorCodes SET ExpiryDate=DATE_ADD(CURRENT_TIMESTAMP,INTERVAL 15 MINUTE)");
+        }
+        service.review(id,2,true,"Verified","123456");assertEquals(7,quantity(1));
+    }
+    @Test void successfulReviewConsumesKeyAndPreventsReuseOnAnotherStocktake() throws Exception {
+        String first=start(),second=start();
+        service.submit(first,1,List.of(new StocktakeService.Count(1,7)),"");
+        service.submit(second,1,List.of(new StocktakeService.Count(2,18)),"");
+        service.review(first,2,true,"Verified","123456");
+        for(boolean approve:new boolean[]{true,false}) {
+            assertEquals("AUTH_FAILED",assertThrows(StocktakeService.Rejected.class,
+                    ()->service.review(second,2,approve,"Please recount","123456")).code);
+            assertEquals("Pending",service.resume(second,1).status());assertEquals(20,quantity(2));
+        }
     }
     @Test void identicalCountsCanBeApprovedAndRepeatedSubmissionsAreIdempotent() throws Exception {
         String id=start();service.submit(id,1,List.of(new StocktakeService.Count(1,10)),"");
         assertEquals(Integer.valueOf(10),service.submit(id,1,List.of(new StocktakeService.Count(1,99)),"retry").items().get(0).counted());
-        service.review(id,2,true,"");assertEquals(10,quantity(1));
+        service.review(id,2,true,"","123456");assertEquals(10,quantity(1));
     }
     @Test void interveningStockMovementsRollBackEveryCorrectionEvenIfStockReturnsToOriginalQuantity() throws Exception {
         String id=start();service.submit(id,1,List.of(new StocktakeService.Count(1,7),new StocktakeService.Count(2,19)),"");
         try(Connection c=open();Statement s=c.createStatement()){s.executeUpdate("UPDATE Product SET Quantity=18 WHERE ProductID=2");s.executeUpdate("UPDATE Product SET Quantity=20 WHERE ProductID=2");}
-        StocktakeService.Rejected error=assertThrows(StocktakeService.Rejected.class,()->service.review(id,2,true,""));assertEquals("STOCK_CHANGED",error.code);
+        StocktakeService.Rejected error=assertThrows(StocktakeService.Rejected.class,()->service.review(id,2,true,"","123456"));assertEquals("STOCK_CHANGED",error.code);
         assertEquals(10,quantity(1));assertEquals(20,quantity(2));assertEquals("Pending",service.resume(id,1).status());
-        service.review(id,2,false,"Stock moved; please recount");assertEquals(10,quantity(1));
+        service.review(id,2,false,"Stock moved; please recount","123456");assertEquals(10,quantity(1));
     }
     @Test void snapshotOwnershipAndActiveStaffAreEnforced() throws Exception {
         String id=start();assertThrows(StocktakeService.Rejected.class,()->service.resume(id,2));
@@ -95,7 +129,7 @@ class CompanionIT {
             service.saveDraft(id,1,plan.counts(),"Imported count");assertEquals(10,quantity(1));
             service.submit(id,1,plan.counts(),"Imported count");
             assertThrows(StocktakeService.Rejected.class,()->service.saveDraft(id,1,List.of(),"Too late"));
-            service.review(id,2,true,"Verified spreadsheet");assertEquals(0,quantity(1));assertEquals(20,quantity(2));
+            service.review(id,2,true,"Verified spreadsheet","123456");assertEquals(0,quantity(1));assertEquals(20,quantity(2));
         }finally{Files.deleteIfExists(file);}
     }
     @Test void invalidDraftSaveRollsBackAndEnforcesOwnership() throws Exception {
@@ -118,6 +152,38 @@ class CompanionIT {
         assertThrows(StocktakeService.Rejected.class,()->protocol.requireSession(request));assertFalse(protocol.isAuthenticated());
     }
     JsonObject login(JsonObject data) throws Exception {JsonObject j=new JsonObject();j.addProperty("type","auth_login");j.add("challengeId",data.get("challengeId"));j.addProperty("proof",Base64.getEncoder().encodeToString(StocktakeProtocol.proof(hash,data.get("nonce").getAsString(),data.get("challengeId").getAsString())));return j;}
+    @Test void securePairingAllowsTimeToEnterCredentials(@org.junit.jupiter.api.io.TempDir Path directory) throws Exception {
+        ScannerTls identity=new ScannerTls(directory.resolve("scanner.dat"));
+        BlockingQueue<String> scanned=new LinkedBlockingQueue<>();
+        WiFiHandler server=new WiFiHandler(service,receipts,()->List.of("Groceries"),0,identity);
+        assertTrue(server.startListening(scanned::add,p->{}));
+        try {
+            assertTrue(server.getConnectionPayload().matches("POS-TLS:[^:]+:[0-9]+:"+identity.fingerprint()));
+            javax.net.ssl.SSLContext tls=javax.net.ssl.SSLContext.getInstance("TLS");
+            tls.init(null,new javax.net.ssl.TrustManager[]{new javax.net.ssl.X509TrustManager(){
+                public java.security.cert.X509Certificate[] getAcceptedIssuers(){return new java.security.cert.X509Certificate[0];}
+                public void checkClientTrusted(java.security.cert.X509Certificate[] chain,String auth) throws java.security.cert.CertificateException {throw new java.security.cert.CertificateException();}
+                public void checkServerTrusted(java.security.cert.X509Certificate[] chain,String auth) throws java.security.cert.CertificateException {
+                    try {
+                        chain[0].checkValidity();
+                        assertEquals(identity.fingerprint(),HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(chain[0].getEncoded())));
+                    } catch(java.security.GeneralSecurityException e){throw new java.security.cert.CertificateException(e);}
+                }
+            }},new java.security.SecureRandom());
+            try(javax.net.ssl.SSLSocket phone=(javax.net.ssl.SSLSocket)tls.getSocketFactory().createSocket("127.0.0.1",server.getPort())) {
+                phone.setEnabledProtocols(new String[]{"TLSv1.2"});phone.setSoTimeout(10000);phone.startHandshake();
+                BufferedReader in=reader(phone);PrintWriter out=writer(phone);
+                JsonObject hello=receive(in,"connected");assertEquals(4,hello.get("protocolVersion").getAsInt());assertTrue(hello.get("requiresLogin").getAsBoolean());
+                Thread.sleep(31000); // Regression: the old 30-second timeout disconnected staff while entering credentials.
+                JsonObject challenge=challenge();challenge.addProperty("requestId","tls-challenge");out.println(challenge);
+                JsonObject proof=login(receive(in,"response").getAsJsonObject("data"));proof.addProperty("requestId","tls-login");out.println(proof);
+                JsonObject signedIn=receive(in,"response");assertTrue(signedIn.get("ok").getAsBoolean());receive(in,"categories");
+                JsonObject scan=new JsonObject();scan.addProperty("type","scan");scan.addProperty("data","00001234-A");
+                scan.add("token",signedIn.getAsJsonObject("data").get("token"));out.println(scan);
+                receive(in,"scan_ack");assertEquals("00001234-A",scanned.poll(3,TimeUnit.SECONDS));
+            }
+        } finally {server.cleanup();}
+    }
     @Test void realSocketPreservesBarcodesAndResendsReceiptsUntilAcknowledged() throws Exception {
         BlockingQueue<String> scanned=new LinkedBlockingQueue<>();WiFiHandler server=new WiFiHandler(service,receipts,()->List.of("Groceries"),0);
         assertTrue(server.startListening(scanned::add,p->{}));String receiptId;
@@ -165,7 +231,7 @@ class CompanionIT {
               long until=System.currentTimeMillis()+Long.getLong("pos.companion.ui.timeoutMillis",300000L);StocktakeService.CountSheet pending=null;
             while(System.currentTimeMillis()<until){pending=service.list(2).stream().filter(s->"Pending".equals(s.status())).findFirst().orElse(null);if(pending!=null)break;Thread.sleep(500);}
             assertNotNull(pending,"No stocktake was submitted by the emulator");
-            assertEquals(Integer.valueOf(7),pending.items().get(0).counted());service.review(pending.id(),2,true,"Verified in integration test");assertEquals(7,quantity(1));
+            assertEquals(Integer.valueOf(7),pending.items().get(0).counted());service.review(pending.id(),2,true,"Verified in integration test","123456");assertEquals(7,quantity(1));
             JsonObject status=new JsonObject();status.addProperty("type","stocktake_status");status.addProperty("stocktakeId",pending.id());status.addProperty("status","Approved");status.addProperty("reviewNotes","Verified in integration test");server.sendData(status.toString());
             Files.writeString(Path.of("target/companion-ui-approved.txt"),pending.id());
             until=System.currentTimeMillis()+120000;while(!Files.exists(finish)&&System.currentTimeMillis()<until)Thread.sleep(500);

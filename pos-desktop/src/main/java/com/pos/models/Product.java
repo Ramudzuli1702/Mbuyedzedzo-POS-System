@@ -14,6 +14,9 @@ public class Product {
     private BigDecimal price;
     private BigDecimal costPrice;
     private String categoryName;
+    private long stockVersion;
+    public long getStockVersion() { return stockVersion; }
+    public void setStockVersion(long value) { stockVersion = value; }
     
     public Product() {}
     

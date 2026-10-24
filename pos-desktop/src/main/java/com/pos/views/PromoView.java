@@ -53,7 +53,8 @@ public class PromoView {
         VBox root = new VBox(card);
         root.setPadding(new Insets(20));
         VBox.setVgrow(card, Priority.ALWAYS);
-        return root;
+        TabPane tabs=new TabPane(new Tab("Retail offers",new PromotionView(currentUser).getView()),new Tab("Basket coupons",root));
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);VBox wrapper=new VBox(tabs);VBox.setVgrow(tabs,Priority.ALWAYS);return wrapper;
     }
 
     // ── Top bar ───────────────────────────────────────────────────────────────

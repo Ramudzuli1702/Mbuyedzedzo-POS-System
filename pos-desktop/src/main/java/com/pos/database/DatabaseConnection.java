@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * DatabaseConnection — a HikariCP connection pool over MySQL.
@@ -125,7 +126,9 @@ public class DatabaseConnection {
             PORT     = Integer.parseInt(props.getProperty("db.port", String.valueOf(PORT)));
             DATABASE = props.getProperty("db.name",     DATABASE);
             USERNAME = props.getProperty("db.username", USERNAME);
-            PASSWORD = props.getProperty("db.password", PASSWORD);
+            String storedPassword=props.getProperty("db.password", PASSWORD);
+            PASSWORD = storedPassword.startsWith("dpapi:")
+                    ?new String(com.pos.utils.WindowsSecret.unprotect(storedPassword),java.nio.charset.StandardCharsets.UTF_8):storedPassword;
             TIMEZONE = props.getProperty("db.timezone", TIMEZONE);
             log.info("DB config loaded from {}", CONFIG_PATH);
         } catch (Exception e) {
@@ -149,7 +152,7 @@ public class DatabaseConnection {
             props.setProperty("db.port",     String.valueOf(port));
             props.setProperty("db.name",     database);
             props.setProperty("db.username", username);
-            props.setProperty("db.password", password);
+            props.setProperty("db.password", com.pos.utils.WindowsSecret.protect(password.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
             props.setProperty("db.timezone", TIMEZONE);
 
             try (FileOutputStream fos = new FileOutputStream(configFile)) {
@@ -239,7 +242,7 @@ public class DatabaseConnection {
 
     private static String buildUrl() {
         return "jdbc:mysql://" + HOST + ":" + PORT + "/" + DATABASE
-             + "?useSSL=false&allowPublicKeyRetrieval=true&" + tzParams()
+             + "?"+tlsParams()+"&" + tzParams()
              + "&connectTimeout=10000&socketTimeout=30000";
     }
 
@@ -264,11 +267,15 @@ public class DatabaseConnection {
      */
     public static Connection getRootConnection() throws SQLException {
         String url = "jdbc:mysql://" + HOST + ":" + PORT
-                   + "?useSSL=false&allowPublicKeyRetrieval=true&" + tzParams()
+                   + "?"+tlsParams()+"&" + tzParams()
                    + "&connectTimeout=10000";
         ensureDriver();
         return DriverManager.getConnection(url, USERNAME, PASSWORD);
     }
+
+    /** Kept for older call sites — individual connections are pool-managed. */
+    public static boolean isLoopback(){return Set.of("localhost","127.0.0.1","::1").contains(HOST.toLowerCase(java.util.Locale.ROOT));}
+    private static String tlsParams(){return isLoopback()?"sslMode=DISABLED&allowPublicKeyRetrieval=true":"sslMode=VERIFY_IDENTITY&allowPublicKeyRetrieval=false";}
 
     /** Kept for older call sites — individual connections are pool-managed. */
     public static void closeConnection() { }

@@ -141,7 +141,7 @@ public class SubscriptionView {
         grid.setHgap(16);
         grid.setVgap(10);
 
-        row(grid, 0, "Product", com.pos.Edition.current().isRetail() ? "Mbuyedzedzo Retail POS" : "Mbuyedzedzo POS System");
+        row(grid, 0, "Product", com.pos.Branding.DISPLAY_NAME);
         row(grid, 1, "Plan", tok != null && tok.licenseType != null ? planLabel(tok.licenseType) : "—");
         row(grid, 2, "Licence key", tok != null && tok.key != null ? tok.key : "—");
         row(grid, 3, "Expires", expiryLabel(tok));

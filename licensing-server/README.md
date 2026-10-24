@@ -1,5 +1,15 @@
 # Mbuyedzedzo Licensing
 
+For shop installation, staff accounts and daily operation, start with the
+[documentation index](../pos-desktop/docs/README.md). This README covers the
+licensing service and its administrators; desktop staff accounts are managed
+inside the shop's desktop application.
+
+The [database architecture guide](../pos-desktop/docs/database.md#licensing-database)
+maps this service's Flyway migrations and distinguishes licensing accounts from
+shop staff/customers. The [code architecture guide](../pos-desktop/docs/code-architecture.md)
+explains how the desktop, phone and licensing service interact.
+
 *Part of the [Mbuyedzedzo](../README.md) suite — see the root README for
 how this fits with [`pos-desktop`](../pos-desktop) and [`mobile-scanner`](../mobile-scanner).*
 
@@ -90,7 +100,7 @@ on startup.
 | Agents | super-admin only | create sales agents, deactivate, reset password |
 | Audit | all | every issue / activate / revoke / transfer |
 
-Integration test against a real MySQL (own schema; skipped otherwise):
+Integration test against SQL Server (dedicated test database; skipped otherwise):
 
 ```bash
 mvn -Dlicensing.it.jdbcUrl="jdbc:sqlserver://localhost:1433;databaseName=mbuyedzedzo_licensing_test;encrypt=false" \

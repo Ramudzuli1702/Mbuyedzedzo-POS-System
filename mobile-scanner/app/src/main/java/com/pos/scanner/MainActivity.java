@@ -114,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
         savedServerIP = prefs.getString(PREF_SERVER_IP, "");
         
         if (!savedServerIP.isEmpty()) {
-            serverIPText.setText("Server: " + savedServerIP);
+            serverIPText.setText("Server: " + PairingEndpoint.display(savedServerIP));
         }
     }
 
@@ -163,12 +163,12 @@ public class MainActivity extends AppCompatActivity {
     private void showIPInputDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Connect to POS System");
-        builder.setMessage("Enter the IP address shown on the POS desktop application.\n\nExample: 192.168.1.100");
+        builder.setMessage("Scan the QR code in the desktop connection panel, or paste its copied connection code here.");
 
         // Create input field
         final EditText input = new EditText(this);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setHint("192.168.1.100");
+        input.setHint("Paste the desktop connection code");
         
         // Pre-fill with saved IP
         if (!savedServerIP.isEmpty()) {
@@ -180,11 +180,11 @@ public class MainActivity extends AppCompatActivity {
 
         builder.setPositiveButton("Connect", (dialog, which) -> {
             String ip = input.getText().toString().trim();
-            if (!ip.isEmpty()) {
+            if (PairingEndpoint.parse(ip)!=null) {
                 saveServerIP(ip);
                 connectWiFi(ip);
             } else {
-                Toast.makeText(this, "Please enter an IP address", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Scan the desktop QR code or paste its connection code", Toast.LENGTH_SHORT).show();
             }
         });
 
@@ -205,21 +205,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Accepts "POS:192.168.1.5:8888", "POS:192.168.1.5", "192.168.1.5:8888"
-     * or a bare IP, and returns the "host[:port]" part — or null if the QR
-     * is not a POS connection code.
+     * Accepts the desktop's secure pairing code, including its certificate identity.
      */
     static String parseConnectPayload(String raw) {
-        if (raw == null) return null;
-        String s = raw.trim();
-        boolean hadPrefix = s.regionMatches(true, 0, "POS:", 0, 4);
-        if (hadPrefix) s = s.substring(4).trim();
-        if (s.isEmpty()) return null;
-        // Without the POS: prefix, only treat dotted strings as addresses
-        // (so a plain product barcode isn't mistaken for one).
-        if (!hadPrefix && !s.contains(".")) return null;
-        if (!s.matches("[A-Za-z0-9.\\-]+(:\\d{1,5})?")) return null;
-        return s;
+        PairingEndpoint endpoint=PairingEndpoint.parse(raw);
+        return endpoint==null?null:endpoint.encoded;
     }
 
     @Override
@@ -254,7 +244,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void connectWiFi(String ipAddress) {
-        Toast.makeText(this, "Connecting to " + ipAddress + "...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Connecting to " + PairingEndpoint.display(ipAddress) + "...", Toast.LENGTH_SHORT).show();
         
         new Thread(() -> {
             boolean success = wifiComm.connect(ipAddress);
@@ -262,13 +252,13 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 if (success) {
                     // Connection status will be updated via broadcast receiver
-                    serverIPText.setText("Server: " + ipAddress);
+                    serverIPText.setText("Server: " + PairingEndpoint.display(ipAddress));
                 } else {
                     Toast.makeText(this, 
                         "Connection failed. Make sure:\n" +
                         "1. POS desktop app is running\n" +
                         "2. Both devices are on same WiFi\n" +
-                        "3. IP address is correct", 
+                        "3. Scan the new QR code from the updated desktop",
                         Toast.LENGTH_LONG).show();
                 }
             });
@@ -297,13 +287,13 @@ public class MainActivity extends AppCompatActivity {
                 connectButton.setBackgroundTintList(getResources().getColorStateList(R.color.status_error));
 
                 if (!savedServerIP.isEmpty()) {
-                    serverIPText.setText("Server: " + savedServerIP);
+                    serverIPText.setText("Server: " + PairingEndpoint.display(savedServerIP));
                 }
             } else {
                 connectionStatus.setText("Not connected to desktop");
                 connectionStatus.setTextColor(getResources().getColor(R.color.brand_primary_dark));
                 connectionCard.setCardBackgroundColor(getResources().getColor(R.color.brand_primary_light));
-                statusText.setText("Connect to the POS desktop over WiFi");
+                statusText.setText(wifiComm==null?"Connect to the POS desktop over WiFi":wifiComm.getConnectionMessage());
                 connectButton.setText("Connect");
                 connectButton.setBackgroundTintList(getResources().getColorStateList(R.color.brand_primary));
             }

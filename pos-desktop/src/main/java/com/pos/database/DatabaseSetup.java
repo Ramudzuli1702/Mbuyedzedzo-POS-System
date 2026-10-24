@@ -6,7 +6,7 @@ import java.sql.*;
  * DatabaseSetup — runs automatically on first launch (and every launch — it's idempotent).
  *
  * WHAT IT DOES:
- *   1. Connects to MySQL using root credentials from DatabaseConnection
+ *   1. Connects using the configured account (bootstrap root or schema-scoped runtime account)
  *   2. Creates the database if it doesn't exist
  *   3. Creates all tables if they don't exist (safe to re-run)
  *   4. Inserts seed data (SaleSequence, default BusinessSettings)
@@ -14,8 +14,10 @@ import java.sql.*;
  *
  * CALLED FROM: POSApplication.continueToApp() after FirstRunSetup completes.
  *
- * The user never sees this — it runs silently in ~1 second on first run
- * and is skipped almost instantly on subsequent runs (all tables already exist).
+ * Startup repeats metadata checks and seed inserts on every launch. Migrations
+ * also include ledger/promotion upgrades and companion tables/stock-version trigger.
+ * MySQL DDL is not covered by one rollback boundary; a failure can leave completed
+ * upgrades in place, so changes must be repeatable and tested on restored data.
  */
 public class DatabaseSetup {
 
@@ -38,6 +40,9 @@ public class DatabaseSetup {
             fixSaleSequenceSchema();
             createAllTables();
             runMigrations();
+            try (Connection ledger = DatabaseConnection.getConnection()) {
+                LedgerSchema.ensure(ledger);
+            }
             try (Connection companion = DatabaseConnection.getConnection()) {
                 if (companion == null) throw new SQLException("Database connection unavailable");
                 CompanionSchema.ensure(companion);
@@ -54,6 +59,13 @@ public class DatabaseSetup {
     // ── Step 1: Create database ────────────────────────────────────────────────
 
     private static void createDatabaseIfNotExists() throws SQLException {
+        // Existing schema-scoped accounts must not need global CREATE DATABASE privileges.
+        try(Connection existing=java.sql.DriverManager.getConnection(
+                "jdbc:mysql://"+DatabaseConnection.HOST+":"+DatabaseConnection.PORT+"/"+DatabaseConnection.DATABASE
+                +"?sslMode="+(DatabaseConnection.isLoopback()?"DISABLED":"VERIFY_IDENTITY")
+                +"&allowPublicKeyRetrieval="+DatabaseConnection.isLoopback()+"&connectTimeout=10000",
+                DatabaseConnection.USERNAME,DatabaseConnection.PASSWORD)) {return;}
+        catch(SQLException e) {if(e.getErrorCode()!=1049)throw e;}
         // getRootConnection() connects without specifying a schema —
         // required because the database may not exist yet.
         try (Connection conn = DatabaseConnection.getRootConnection();

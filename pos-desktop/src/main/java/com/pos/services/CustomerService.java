@@ -47,7 +47,7 @@ public class CustomerService {
     public boolean deleteCustomer(int accountID) {
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(
-                     "DELETE FROM Account WHERE AccountID = ?")) {
+                     "UPDATE Account SET IsArchived = TRUE WHERE AccountID = ? AND IsArchived = FALSE AND EmailAddress <> 'walk-in@pos.local'")) {
             pstmt.setInt(1, accountID);
             return pstmt.executeUpdate() > 0;
         } catch (SQLException e) { e.printStackTrace(); return false; }
@@ -110,7 +110,7 @@ public class CustomerService {
         ObservableList<Customer> customers = FXCollections.observableArrayList();
         try (Connection conn = DatabaseConnection.getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM Account ORDER BY FullNames")) {
+             ResultSet rs = stmt.executeQuery("SELECT * FROM Account WHERE IsArchived = FALSE ORDER BY FullNames")) {
             while (rs.next()) customers.add(extractCustomer(rs));
         } catch (SQLException e) { e.printStackTrace(); }
         return customers;
@@ -118,7 +118,7 @@ public class CustomerService {
 
     public ObservableList<Customer> searchCustomers(String keyword) {
         ObservableList<Customer> customers = FXCollections.observableArrayList();
-        String query = "SELECT * FROM Account WHERE FullNames LIKE ? OR EmailAddress LIKE ? OR ContactNo LIKE ?";
+        String query = "SELECT * FROM Account WHERE IsArchived=FALSE AND (FullNames LIKE ? OR EmailAddress LIKE ? OR ContactNo LIKE ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(query)) {
             String pattern = "%" + keyword + "%";
@@ -298,7 +298,7 @@ public class CustomerService {
         String query = """
             SELECT t.SaleID, t.TransactionDate, s.FullNames AS StaffName,
                    t.TransactionID, p.ProductName,
-                   t.Quantity, t.SalePrice, t.PromoCode
+                   t.Quantity, t.SalePrice, COALESCE(JSON_UNQUOTE(JSON_EXTRACT(t.PromotionSnapshot,'$.name')),t.PromoCode) AS PromoCode
             FROM Transactions t
             JOIN Product p ON t.ProductID = p.ProductID
             JOIN Staff   s ON t.StaffID   = s.StaffID
@@ -354,7 +354,7 @@ public class CustomerService {
     public Purchase getTransactionDetails(int transactionID) {
         String query = """
             SELECT t.TransactionID, t.TransactionDate, p.ProductName,
-                   t.Quantity, t.SalePrice, s.FullNames AS StaffName, t.PromoCode
+                   t.Quantity, t.SalePrice, s.FullNames AS StaffName, COALESCE(JSON_UNQUOTE(JSON_EXTRACT(t.PromotionSnapshot,'$.name')),t.PromoCode) AS PromoCode
             FROM Transactions t
             JOIN Product p ON t.ProductID = p.ProductID
             JOIN Staff   s ON t.StaffID   = s.StaffID

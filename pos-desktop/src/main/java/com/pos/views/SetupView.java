@@ -66,7 +66,8 @@ public class SetupView {
         root.setStyle("-fx-background-color: #0f766e;");
 
         // ── Branding ──
-        Label appName = new Label(com.pos.Branding.APP_NAME);
+        Label appName = new Label(com.pos.Branding.DISPLAY_NAME);
+        appName.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
         appName.setFont(Font.font("System", FontWeight.BOLD, 32));
         appName.setTextFill(Color.WHITE);
 

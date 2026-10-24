@@ -33,6 +33,8 @@ public class MainDashboard {
     private Button infoBtn;
     private BorderPane contentArea;
     private VBox sidebarExtraInfo;
+    private VBox sidebarHeader;
+    private com.pos.components.SidebarBrand sidebarBrand;
     private boolean sidebarCollapsed = false;
     private final java.util.Map<Button, String> menuButtonLabels = new java.util.HashMap<>();
     private static final double SIDEBAR_EXPANDED_WIDTH  = 250;
@@ -82,7 +84,7 @@ public class MainDashboard {
         mainLayout.prefHeightProperty().bind(scene.heightProperty());
 
         stage.setScene(scene);
-        stage.setTitle(com.pos.Branding.APP_NAME + " — " + currentUser.getFullNames());
+        stage.setTitle(com.pos.Branding.WINDOW_TITLE + " — " + currentUser.getFullNames());
         stage.setOnCloseRequest(this::handleCloseRequest);
         stage.setMinWidth(1100);
         stage.setMinHeight(600);
@@ -310,7 +312,8 @@ public class MainDashboard {
         ScrollPane menuScroll = new ScrollPane(menu);
         menuScroll.setFitToWidth(true);
         menuScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        menuScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        // Keep wheel, touchpad and keyboard scrolling without a visible sidebar track.
+        menuScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         menuScroll.setStyle(
             "-fx-background: " + Theme.BRAND + "; -fx-background-color: " + Theme.BRAND + ";" +
             "-fx-border-color: transparent;"
@@ -330,9 +333,8 @@ public class MainDashboard {
         header.setPadding(new Insets(30, 20, 20, 20));
         header.setStyle("-fx-background-color: rgba(0,0,0,0.2);");
 
-        Label systemTitle = new Label(com.pos.Branding.APP_SHORT);
-        systemTitle.setFont(Font.font("System", FontWeight.BOLD, 22));
-        systemTitle.setTextFill(Color.WHITE);
+        sidebarHeader=header;
+        sidebarBrand=new com.pos.components.SidebarBrand();
 
         Label userName = new Label(currentUser.getFullNames());
         userName.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
@@ -352,12 +354,11 @@ public class MainDashboard {
         com.pos.components.ScannerStatusButton scannerBtn = new com.pos.components.ScannerStatusButton();
         scannerBtn.setMaxWidth(Double.MAX_VALUE);
 
-        // Collapsed into its own box so toggleSidebar() can hide it as one unit,
-        // leaving just the short branding title visible in the narrow rail.
+        // Keep only the logo visible in the narrow rail.
         sidebarExtraInfo = new VBox(10, userName, userRole, wifiBtn, scannerBtn);
         sidebarExtraInfo.setAlignment(Pos.CENTER);
 
-        header.getChildren().addAll(systemTitle, sidebarExtraInfo);
+        header.getChildren().addAll(sidebarBrand, sidebarExtraInfo);
         return header;
     }
 
@@ -367,6 +368,8 @@ public class MainDashboard {
         sidebar.setPrefWidth(width);
         sidebar.setMinWidth(width);
         sidebar.setMaxWidth(width);
+        sidebarBrand.setCollapsed(sidebarCollapsed);
+        sidebarHeader.setPadding(sidebarCollapsed?new Insets(20,8,16,8):new Insets(30,20,20,20));
 
         sidebarExtraInfo.setVisible(!sidebarCollapsed);
         sidebarExtraInfo.setManaged(!sidebarCollapsed);
@@ -447,6 +450,7 @@ public class MainDashboard {
 
         if (alert.showAndWait().get() == ButtonType.OK) {
             cleanupCurrentView();
+            wifiHandler.cleanup();
             userService.logCheckOut(currentUser.getStaffID());
             new LoginView(stage).show();
         }

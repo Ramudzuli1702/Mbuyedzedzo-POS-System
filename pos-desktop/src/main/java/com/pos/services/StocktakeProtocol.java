@@ -17,6 +17,7 @@ public final class StocktakeProtocol {
     private long challengeUntil, blockedUntil;
     private volatile long sessionUntil;
     private int attempts;
+    private String challengeEmail;
     public StocktakeProtocol() { this(new StocktakeService()); }
     public StocktakeProtocol(StocktakeService service) { this.service=service; }
 
@@ -60,6 +61,8 @@ public final class StocktakeProtocol {
         return response;
     }
     private Map<String,Object> challenge(String email) throws Exception {
+        if(!com.pos.utils.LoginAttempts.SHARED.begin(email))throw new StocktakeService.Rejected("RATE_LIMIT","Too many sign-in attempts. Wait one minute.");
+        challengeEmail=email;
         long now=System.currentTimeMillis();
         if(now<blockedUntil) throw new StocktakeService.Rejected("RATE_LIMIT","Too many sign-in attempts. Wait one minute.");
         if(++attempts>5) { blockedUntil=now+60000;attempts=0;throw new StocktakeService.Rejected("RATE_LIMIT","Too many sign-in attempts. Wait one minute."); }
@@ -86,9 +89,12 @@ public final class StocktakeProtocol {
         catch(IllegalArgumentException e) { supplied=new byte[0]; }
         byte[] expected=valid?proof(account.passwordHash(),nonce,expectedId):new byte[32];
         if(!valid || !MessageDigest.isEqual(supplied,expected)) throw new StocktakeService.Rejected("AUTH_FAILED","Email or password is incorrect.");
+        if(com.pos.utils.PasswordUtil.needsRehash(account.passwordHash()))
+            throw new StocktakeService.Rejected("AUTH_FAILED","Sign in on the desktop once to upgrade this account's password protection, then retry on the phone.");
         StocktakeService.Account current=service.requireStaff(account.id(),false);
         if(!current.passwordHash().equals(account.passwordHash())) throw new StocktakeService.Rejected("AUTH_FAILED","Sign in again using your current password.");
         signedIn=current;token=random();sessionUntil=System.currentTimeMillis()+30*60*1000;attempts=0;
+        com.pos.utils.LoginAttempts.SHARED.success(challengeEmail);
         return Map.of("token",token,"staffId",current.id(),"name",current.name(),"role",current.role());
     }
     public void requireSession(JsonObject request) throws Exception {

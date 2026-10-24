@@ -1,5 +1,7 @@
 # Consistent detail screens and companion sign-in
 
+Design/change note. See the [user guide](user-guide.md) and [troubleshooting](troubleshooting.md) for current operating instructions. Verification results below describe this change, rather than a fresh run of the current source.
+
 Stocktaking uses a distinct clipboard/checklist icon and the shared desktop layout: white heading bar, teal title, neutral background, white cards, labeled controls and standard primary/secondary actions.
 
 **View** opens editable fields directly for products, staff, customers and promos. Product information, stock adjustments and barcode preview and PNG saving share the same display. Customer profiles retain purchase history beside the editable information. Staff security actions remain explicitly labeled. Historical sessions, returns, exchanges and campaigns use the same detail presentation; their business actions remain available. Invalid input stays visible for correction instead of dismissing the form.

@@ -1,5 +1,7 @@
 # Desktop 1.0.8
 
+Historical change note. See the [user guide](user-guide.md) for current operations and [promotions](promotions.md) for the later retail-offer workflow. Test counts below belong to this change.
+
 Product details and barcode dialogs offer **Save barcode**, which opens a local PNG save dialog. The saved image includes high-resolution Code 128 bars and the readable barcode value. Default filenames use the shared document convention. Cancelling does nothing; invalid barcodes and write failures show inline feedback. The barcode print button and its printer helper have been removed.
 
 Reports replaces the Business Intelligence screen with a short overview: four sales metrics, daily revenue, payment methods and top products. The report selector opens the detailed sales, products, customers, staff, stock, returns/exchanges and promotions reports available in the edition. Retail omits customer and email campaign reports.

@@ -15,6 +15,8 @@ public class ProductService {
     ========================= */
     public boolean addProduct(Product product) {
 
+        validate(product);
+
         // The "QRCode" column holds whatever label image gets generated for
         // this product — a barcode image now, not a QR code (see BarcodeUtil).
         String barcodeImage = BarcodeUtil.generateBarcode(product.getBarCode());
@@ -27,6 +29,9 @@ public class ProductService {
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            conn.setAutoCommit(false);
+            try {
+            lockBarcode(conn,product.getBarCode(),0);
 
             pstmt.setInt(1, product.getStaffID());
             pstmt.setInt(2, product.getCategoryID());
@@ -37,7 +42,7 @@ public class ProductService {
             pstmt.setBigDecimal(7, product.getPrice());
             pstmt.setBigDecimal(8, product.getCostPrice());
 
-            if (pstmt.executeUpdate() == 0) return false;
+            if (pstmt.executeUpdate() == 0) {conn.rollback();return false;}
 
             try (ResultSet rs = pstmt.getGeneratedKeys()) {
                 if (rs.next()) {
@@ -45,7 +50,8 @@ public class ProductService {
                     product.setQrCode(barcodeImage);
                 }
             }
-            return true;
+            conn.commit();return true;
+            }catch(SQLException|RuntimeException e){conn.rollback();throw e;}
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -58,6 +64,8 @@ public class ProductService {
     ========================= */
     public boolean updateProduct(Product product) {
 
+        validate(product);
+
         // The barcode VALUE may have changed, so the generated label image
         // is regenerated too — otherwise an edited barcode would print a
         // label that doesn't match the number underneath it.
@@ -66,11 +74,14 @@ public class ProductService {
         String sql = """
             UPDATE Product
             SET ProductName = ?, CategoryID = ?, BarCode = ?, QRCode = ?, Quantity = ?, Price = ?, CostPrice = ?
-            WHERE ProductID = ?
+            WHERE ProductID = ? AND StockVersion = ? AND IsArchived = FALSE
         """;
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            conn.setAutoCommit(false);
+            try {
+            lockBarcode(conn,product.getBarCode(),product.getProductID());
 
             pstmt.setString(1, product.getProductName());
             pstmt.setInt(2, product.getCategoryID());
@@ -80,10 +91,13 @@ public class ProductService {
             pstmt.setBigDecimal(6, product.getPrice());
             pstmt.setBigDecimal(7, product.getCostPrice());
             pstmt.setInt(8, product.getProductID());
+            pstmt.setLong(9, product.getStockVersion());
 
             boolean ok = pstmt.executeUpdate() > 0;
             if (ok) product.setQrCode(barcodeImage);
+            if(ok)conn.commit();else conn.rollback();
             return ok;
+            }catch(SQLException|RuntimeException e){conn.rollback();throw e;}
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -96,7 +110,7 @@ public class ProductService {
     ========================= */
     public boolean deleteProduct(int productID) {
 
-        String sql = "DELETE FROM Product WHERE ProductID = ?";
+        String sql = "UPDATE Product SET IsArchived = TRUE WHERE ProductID = ? AND IsArchived = FALSE";
 
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -119,7 +133,7 @@ public class ProductService {
             SELECT p.*, c.CategoryName
             FROM Product p
             LEFT JOIN Category c ON p.CategoryID = c.CategoryID
-            WHERE p.ProductID = ?
+            WHERE p.ProductID = ? AND p.IsArchived = FALSE
         """;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -151,7 +165,7 @@ public class ProductService {
             SELECT p.*, c.CategoryName
             FROM Product p
             LEFT JOIN Category c ON p.CategoryID = c.CategoryID
-            WHERE p.QRCode = ? OR p.BarCode = ?
+            WHERE p.IsArchived = FALSE AND (p.QRCode = ? OR p.BarCode = ?)
         """;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -180,7 +194,7 @@ public class ProductService {
             SELECT p.*, c.CategoryName
             FROM Product p
             LEFT JOIN Category c ON p.CategoryID = c.CategoryID
-            ORDER BY p.ProductName
+            WHERE p.IsArchived = FALSE ORDER BY p.ProductName
         """;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -206,7 +220,7 @@ public class ProductService {
             SELECT p.*, c.CategoryName
             FROM Product p
             LEFT JOIN Category c ON p.CategoryID = c.CategoryID
-            WHERE p.ProductName LIKE ? OR p.BarCode LIKE ? OR c.CategoryName LIKE ?
+            WHERE p.IsArchived = FALSE AND (p.ProductName LIKE ? OR p.BarCode LIKE ? OR c.CategoryName LIKE ?)
         """;
 
         try (Connection conn = DatabaseConnection.getConnection();
@@ -235,7 +249,7 @@ public class ProductService {
             SELECT p.*, c.CategoryName
             FROM Product p
             LEFT JOIN Category c ON p.CategoryID = c.CategoryID
-            WHERE p.Quantity < 10
+            WHERE p.IsArchived = FALSE AND p.Quantity < 10
             ORDER BY p.Quantity ASC
         """;
 
@@ -260,17 +274,20 @@ public class ProductService {
     // Used inside TRANSACTIONS (Sales)
     public void updateStock(Connection conn, int productID, int quantitySold) throws SQLException {
 
+        if (quantitySold <= 0) throw new SQLException("Sale quantity must be positive.");
+
         String sql = """
             UPDATE Product
             SET Quantity = Quantity - ?, NoSold = NoSold + ?
-            WHERE ProductID = ?
+            WHERE ProductID = ? AND Quantity >= ? AND IsArchived = FALSE
         """;
 
         try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, quantitySold);
             pstmt.setInt(2, quantitySold);
             pstmt.setInt(3, productID);
-            pstmt.executeUpdate();
+            pstmt.setInt(4, quantitySold);
+            if (pstmt.executeUpdate() != 1) throw new SQLException("Stock changed or is insufficient. Refresh the cart and retry.");
         }
     }
 
@@ -299,11 +316,41 @@ public class ProductService {
         product.setQrCode(rs.getString("QRCode"));
         product.setBarCode(rs.getString("BarCode"));
         product.setQuantity(rs.getInt("Quantity"));
+        product.setStockVersion(rs.getLong("StockVersion"));
         product.setNoSold(rs.getInt("NoSold"));
         product.setPrice(rs.getBigDecimal("Price"));
         product.setCostPrice(rs.getBigDecimal("CostPrice"));
         product.setCategoryName(rs.getString("CategoryName"));
 
         return product;
+    }
+
+    private static void lockBarcode(Connection c,String barcode,int product) throws SQLException {
+        try(Statement s=c.createStatement()) {
+            s.executeUpdate("INSERT IGNORE INTO BusinessSettings (SettingKey,SettingValue) VALUES ('inventory.catalog.lock','1')");
+            try(ResultSet r=s.executeQuery("SELECT SettingValue FROM BusinessSettings WHERE SettingKey='inventory.catalog.lock' FOR UPDATE")) {
+                if(!r.next())throw new SQLException("Catalog lock unavailable.");
+            }
+        }
+        String equivalent=barcode.matches("[0-9]{12}")?"0"+barcode:barcode.matches("0[0-9]{12}")?barcode.substring(1):barcode;
+        try(PreparedStatement p=c.prepareStatement("SELECT ProductID FROM Product WHERE IsArchived=FALSE AND ProductID<>? AND (BarCode=? OR BarCode=?) FOR UPDATE")) {
+            p.setInt(1,product);p.setString(2,barcode);p.setString(3,equivalent);
+            try(ResultSet r=p.executeQuery()){if(r.next())throw new SQLException("This barcode already belongs to an active product.");}
+        }
+    }
+
+    public static void validate(Product product) {
+        if (product == null || product.getProductName() == null || product.getProductName().isBlank()
+                || product.getProductName().length() > 50 || product.getBarCode() == null
+                || product.getBarCode().isBlank() || product.getBarCode().length() > 128
+                || product.getQuantity() < 0)
+            throw new IllegalArgumentException("Enter a product name (up to 50 characters), barcode (up to 128 characters), and non-negative whole quantity.");
+        for (java.math.BigDecimal price : new java.math.BigDecimal[]{product.getPrice(), product.getCostPrice()}) {
+            if (price == null || price.signum() < 0 || price.compareTo(new java.math.BigDecimal("99999999.99")) > 0
+                    || price.stripTrailingZeros().scale() > 2)
+                throw new IllegalArgumentException("Prices must be non-negative amounts with at most two decimal places.");
+        }
+        if (BarcodeUtil.generateBarcode(product.getBarCode()) == null)
+            throw new IllegalArgumentException("Enter a valid Code 128 barcode.");
     }
 }

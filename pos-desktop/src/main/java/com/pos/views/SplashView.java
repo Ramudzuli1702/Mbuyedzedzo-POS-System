@@ -39,7 +39,8 @@ public final class SplashView {
             root.getChildren().add(logoBox);
         }
 
-        javafx.scene.control.Label name = new javafx.scene.control.Label(Branding.APP_NAME);
+        javafx.scene.control.Label name = new javafx.scene.control.Label(Branding.DISPLAY_NAME);
+        name.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
         name.setFont(Font.font("System", FontWeight.BOLD, 32));
         name.setTextFill(Color.WHITE);
 

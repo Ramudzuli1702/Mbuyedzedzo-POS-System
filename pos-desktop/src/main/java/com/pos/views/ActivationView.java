@@ -42,11 +42,12 @@ public class ActivationView {
         // with a baked-in white background.
         var logo = BrandAssets.logoMark(96);
 
-        Label title = new Label("Activate " + Branding.APP_NAME);
+        Label title = new Label(Branding.DISPLAY_NAME);
+        title.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
         title.setFont(Font.font("System", FontWeight.BOLD, 22));
         title.setTextFill(Color.web("#0f766e"));
 
-        Label edition = new Label(Edition.current().isRetail() ? "Retail edition" : "Standard edition");
+        Label edition = new Label(Edition.current().isRetail() ? "Activate your Retail edition" : "Activate your Standard edition");
         edition.setTextFill(Color.web("#64748b"));
 
         Label why = new Label(reason);

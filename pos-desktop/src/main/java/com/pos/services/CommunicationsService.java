@@ -12,6 +12,16 @@ import java.util.List;
 import java.util.ArrayList;
 
 public class CommunicationsService {
+    public boolean sendTestEmail(String recipient) {
+        try {
+            MimeMessage message=new MimeMessage(getMailSession());
+            message.setFrom(new InternetAddress(settings.getEmailUsername(),settings.getEmailFromName()));
+            message.setRecipient(Message.RecipientType.TO,new InternetAddress(recipient));
+            message.setSubject("Mbuyedzedzo — email test");
+            message.setText("Your POS email settings are working. You can now send receipts from this computer.","UTF-8");
+            Transport.send(message);return true;
+        }catch(Exception e){return false;}
+    }
 
     // ─────────────────────────────────────────────
     // Inner class: CommPreferences (unchanged)
@@ -98,6 +108,11 @@ public class CommunicationsService {
         Properties props = new Properties();
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.starttls.enable", "true");
+        props.put("mail.smtp.starttls.required", "true");
+        props.put("mail.smtp.ssl.checkserveridentity", "true");
+        props.put("mail.smtp.connectiontimeout", "10000");
+        props.put("mail.smtp.timeout", "15000");
+        props.put("mail.smtp.writetimeout", "15000");
         props.put("mail.smtp.host", "smtp.gmail.com");
         props.put("mail.smtp.port", "587");
         props.put("mail.smtp.ssl.protocols", "TLSv1.2");
@@ -231,7 +246,7 @@ public class CommunicationsService {
                     SELECT a.AccountID, a.EmailAddress, a.FullNames
                     FROM Account a
                     JOIN CustomerCommunications cc ON a.AccountID = cc.AccountID
-                    WHERE cc.MarketingEmails = TRUE
+                    WHERE cc.MarketingEmails = TRUE AND a.IsArchived=FALSE
                 """;
 
         int successCount = 0;
@@ -522,7 +537,7 @@ public class CommunicationsService {
                 </body>
                 </html>
                 """.formatted(bizName(), escaped, logoImg, bizName(), bizEmail(), bizEmail(),
-                        com.pos.Branding.APP_NAME, com.pos.Branding.APP_TAGLINE);
+                        com.pos.Branding.DISPLAY_NAME.replace("\n","<br>"), com.pos.Branding.APP_TAGLINE);
     }
 
     private String buildMarketingHtml(String customerName, String bodyHtml, String unsubToken) {

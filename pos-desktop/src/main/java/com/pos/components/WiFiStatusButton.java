@@ -149,8 +149,7 @@ public class WiFiStatusButton extends Button {
             "1. Make sure the phone is on the same WiFi as this PC\n" +
             "2. Open the POS Scanner app and tap 'Connect'\n" +
             "3. Tap 'Scan QR' and point it at the code\n" +
-            "   (or enter " + serverIP + ":" + serverPort + " manually)\n" +
-            "4. Start scanning products"
+            "4. Sign in with your staff account, then start scanning"
         );
         instructions.setWrapText(true);
         instructions.setFont(Theme.body());
@@ -193,7 +192,7 @@ public class WiFiStatusButton extends Button {
         copyBtn.setOnAction(e -> {
             javafx.scene.input.Clipboard clipboard = javafx.scene.input.Clipboard.getSystemClipboard();
             javafx.scene.input.ClipboardContent clipContent = new javafx.scene.input.ClipboardContent();
-            clipContent.putString(serverIP + ":" + serverPort);
+            clipContent.putString(wifiHandler.getConnectionPayload());
             clipboard.setContent(clipContent);
             showAlert("Copied", "Server address copied to clipboard", Alert.AlertType.INFORMATION);
         });

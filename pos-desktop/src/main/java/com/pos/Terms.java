@@ -77,6 +77,6 @@ public final class Terms {
 
                 By clicking "Accept & Continue" you confirm that you have read,
                 understood, and agree to these terms.
-                """.formatted(Branding.APP_NAME, Branding.APP_NAME, Branding.APP_NAME);
+                """.formatted(Branding.DISPLAY_NAME, Branding.DISPLAY_NAME, Branding.DISPLAY_NAME);
     }
 }

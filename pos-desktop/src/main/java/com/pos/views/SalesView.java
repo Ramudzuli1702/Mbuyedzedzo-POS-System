@@ -72,6 +72,12 @@ public class SalesView {
     // ── Active promo state (valid only for the sale currently being rung up) ──
     private PromoService.Promo activePromo = null;
     private BigDecimal activeDiscount = BigDecimal.ZERO;
+    private final com.pos.services.PromotionService promotionService=new com.pos.services.PromotionService();
+    private com.pos.services.PromotionEngine.Quote activeQuote;
+    private String appliedPromotionCode="";
+    private long priceGeneration;
+    private Label promotionSummary;
+    private boolean checkingOut;
 
     private WiFiHandler wifiHandler;
     private final AtomicBoolean updatingCombo = new AtomicBoolean(false);
@@ -330,104 +336,28 @@ public class SalesView {
     }
 
     private void showCashierSelectDialog() {
-        List<User> activeStaff = userService.getAllActiveUsers();
-
-        if (activeStaff == null || activeStaff.isEmpty()) {
-            showAlert("No Staff Found", "No active staff members could be loaded.", Alert.AlertType.WARNING);
-            return;
+        var activeStaff=FXCollections.observableArrayList(userService.getAllActiveUsers());
+        if(activeStaff==null || activeStaff.isEmpty()) {
+            showAlert("No staff found","No active staff members could be loaded.",Alert.AlertType.WARNING);return;
         }
-
-        Dialog<User> dialog = new Dialog<>();
-        dialog.setTitle("Select Active Cashier");
-        dialog.setHeaderText("Who is making this sale?");
-
-        ButtonType selectBtn = new ButtonType("Select", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(selectBtn, ButtonType.CANCEL);
-        dialog.getDialogPane().setPrefWidth(420);
-
-        VBox content = new VBox(12);
-        content.setPadding(new Insets(20));
-
-        Label note = new Label(
-                "Logged-in account: " + currentUser.getFullNames() + "\n"
-                + "Choose the cashier currently at the register.");
-        note.setStyle("-fx-text-fill: #666; -fx-font-size: 12;");
-        note.setWrapText(true);
-
-        ListView<User> staffList = new ListView<>();
-        staffList.setPrefHeight(250);
-        staffList.getItems().addAll(activeStaff);
-
-        staffList.getItems().stream()
-                .filter(u -> u.getStaffID() == activeCashier.getStaffID())
-                .findFirst()
-                .ifPresent(u -> {
-                    staffList.getSelectionModel().select(u);
-                    staffList.scrollTo(u);
-                });
-
-        staffList.setCellFactory(lv -> new ListCell<>() {
-            @Override
-            protected void updateItem(User user, boolean empty) {
-                super.updateItem(user, empty);
-                if (empty || user == null) {
-                    setText(null);
-                    setGraphic(null);
-                } else {
-                    HBox row = new HBox(10);
-                    row.setAlignment(Pos.CENTER_LEFT);
-
-                    Label avatar = new Label(getInitials(user.getFullNames()));
-                    avatar.setStyle(
-                            "-fx-background-color: #0f766e; -fx-text-fill: white;"
-                            + "-fx-font-weight: bold; -fx-padding: 6 10;"
-                            + "-fx-background-radius: 20; -fx-font-size: 12;");
-
-                    VBox info = new VBox(2);
-                    Label nameLbl = new Label(user.getFullNames());
-                    nameLbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-
-                    Label roleLbl = new Label(user.getUserType() != null ? user.getUserType() : "Staff");
-                    roleLbl.setStyle("-fx-text-fill: #888; -fx-font-size: 11;");
-
-                    info.getChildren().addAll(nameLbl, roleLbl);
-                    row.getChildren().addAll(avatar, info);
-
-                    if (user.getStaffID() == activeCashier.getStaffID()) {
-                        Label badge = new Label("● Active");
-                        badge.setStyle("-fx-text-fill: #16a34a; -fx-font-size: 11; -fx-font-weight: bold;");
-                        Region spacer = new Region();
-                        HBox.setHgrow(spacer, Priority.ALWAYS);
-                        row.getChildren().addAll(spacer, badge);
-                    }
-
-                    setGraphic(row);
-                    setText(null);
-                }
-            }
+        ComboBox<User> cashier=new ComboBox<>(activeStaff);cashier.setPromptText("Select the cashier at this register");
+        cashier.setConverter(new javafx.util.StringConverter<User>() {
+            public String toString(User user){return user==null?"":user.getFullNames()+" ("+user.getUserType()+")";}
+            public User fromString(String text){return null;}
         });
-
-        content.getChildren().addAll(note, new Separator(), staffList);
-        dialog.getDialogPane().setContent(content);
-
-        dialog.getDialogPane().lookupButton(selectBtn).setDisable(
-                staffList.getSelectionModel().isEmpty());
-        staffList.getSelectionModel().selectedItemProperty().addListener(
-                (obs, old, sel) -> dialog.getDialogPane().lookupButton(selectBtn).setDisable(sel == null));
-
-        dialog.setResultConverter(btn -> {
-            if (btn == selectBtn) return staffList.getSelectionModel().getSelectedItem();
-            return null;
-        });
-
-        Optional<User> result = dialog.showAndWait();
-        result.ifPresent(selectedUser -> {
-            activeCashier = selectedUser;
-            activeCashierLabel.setText("Cashier: " + activeCashier.getFullNames());
-            showAlert("Cashier Switched",
-                    activeCashier.getFullNames() + " is now the active cashier for this sale.",
-                    Alert.AlertType.INFORMATION);
-        });
+        activeStaff.stream().filter(user->user.getStaffID()==activeCashier.getStaffID()).findFirst().ifPresent(cashier::setValue);
+        PasswordField password=new PasswordField();password.setPromptText("Selected cashier's login password");
+        cashier.valueProperty().addListener((o,a,b)->password.clear());
+        var grid=com.pos.components.Ui.formGrid();com.pos.components.Ui.formField(grid,0,"Cashier",cashier);com.pos.components.Ui.formField(grid,1,"Confirm password",password);
+        Label note=new Label("The selected cashier must enter their password. New sales will be recorded under their account.");note.setWrapText(true);
+        com.pos.components.Ui.createForm("Switch cashier","Who's at the register?",new VBox(16,
+                com.pos.components.Ui.section("Current register",com.pos.components.Ui.detailRow("Logged-in account",currentUser.getFullNames()),com.pos.components.Ui.detailRow("Active cashier",activeCashier.getFullNames())),
+                com.pos.components.Ui.section("Cashier sign-in",grid,note)),"Switch cashier",()->{
+            User selected=cashier.getValue();if(selected==null)throw new IllegalArgumentException("Select a cashier.");
+            User verified=userService.login(selected.getEmailAddress(),password.getText());password.clear();
+            if(verified==null || verified.getStaffID()!=selected.getStaffID())throw new IllegalArgumentException("The password is incorrect or this account is inactive.");
+            activeCashier=verified;activeCashierLabel.setText("Cashier: "+verified.getFullNames());return true;
+        }).showAndWait();
     }
 
     private String getInitials(String fullName) {
@@ -473,65 +403,9 @@ public class SalesView {
     }
 
     private void showNewCustomerDialog() {
-        Dialog<Customer> dialog = new Dialog<>();
-        dialog.setTitle("Add New Customer");
-        dialog.setHeaderText("Enter customer details");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField = new TextField();
-        TextField emailField = new TextField();
-        TextField phoneField = new TextField();
-        DatePicker dobPicker = new DatePicker();
-
-        grid.add(new Label("Full Name:"), 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(new Label("Email:"), 0, 1);
-        grid.add(emailField, 1, 1);
-        grid.add(new Label("Phone:"), 0, 2);
-        grid.add(phoneField, 1, 2);
-        grid.add(new Label("Date of Birth:"), 0, 3);
-        grid.add(dobPicker, 1, 3);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                Customer customer = new Customer();
-                customer.setStaffID(currentUser.getStaffID());
-                customer.setFullNames(nameField.getText().trim());
-                customer.setEmailAddress(emailField.getText().trim());
-                customer.setContactNo(phoneField.getText().trim());
-                customer.setDateOfBirth(dobPicker.getValue());
-                return customer;
-            }
-            return null;
-        });
-
-        Optional<Customer> result = dialog.showAndWait();
-        result.ifPresent(customer -> {
-            LocalDate today = LocalDate.now();
-            LocalDate minDob = today.minusYears(18);
-
-            if (customer.getDateOfBirth() == null || customer.getDateOfBirth().isAfter(minDob)) {
-                showAlert("Error", "Customer must be at least 18 years old", Alert.AlertType.ERROR);
-                return;
-            }
-
-            if (customerService.addCustomer(customer)) {
-                showAlert("Success", "Customer added successfully", Alert.AlertType.INFORMATION);
-                loadCustomers();
-                customerCombo.setValue(customer);
-            } else {
-                showAlert("Error", "Failed to add customer", Alert.AlertType.ERROR);
-            }
-        });
+        com.pos.components.CustomerForm.create(currentUser.getStaffID(),customerService,customer->{
+            loadCustomers();customerCombo.setValue(customer);
+        }).showAndWait();
     }
 
     private VBox createLeftPanel() {
@@ -652,6 +526,7 @@ public class SalesView {
     }
 
     private void addProductWithDefaultQuantity(Product product) {
+        if(checkingOut){showAlert("Payment in progress","Finish or cancel payment before scanning more products.",Alert.AlertType.WARNING);return;}
         int quantityToAdd = 1;
 
         if (cartMap.containsKey(product.getProductID())) {
@@ -785,7 +660,8 @@ public class SalesView {
 
         actionBox.getChildren().addAll(clearBtn, checkoutBtn);
 
-        panel.getChildren().addAll(cartLabel, cartTable, totalBox, actionBox);
+        promotionSummary=new Label();promotionSummary.setWrapText(true);promotionSummary.setStyle("-fx-text-fill: "+Theme.TEXT_MUTED+";");
+        panel.getChildren().addAll(cartLabel, cartTable, totalBox,promotionSummary, actionBox);
 
         return panel;
     }
@@ -806,13 +682,21 @@ public class SalesView {
     }
 
     private void updateTotal() {
-        BigDecimal total = cartItems.stream()
-                .map(CartItem::getSubtotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        totalLabel.setText("R " + String.format("%.2f", total));
+        long generation=++priceGeneration;
+        if(cartItems.isEmpty()){totalLabel.setText("R 0.00");if(promotionSummary!=null)promotionSummary.setText("");return;}
+        var snapshot=cartItems.stream().map(i->new CartItem(i.getProductId(),i.getProductName(),i.getPrice(),i.getQuantity())).toList();
+        totalLabel.setText("Calculating...");
+        java.util.concurrent.CompletableFuture.supplyAsync(()->{
+            try{return promotionService.quote(snapshot,"");}catch(Exception e){throw new java.util.concurrent.CompletionException(e);}
+        }).whenComplete((quote,error)->Platform.runLater(()->{
+            if(generation!=priceGeneration)return;
+            if(error!=null){totalLabel.setText("Unavailable");promotionSummary.setText("Promotion prices could not be loaded. Retry checkout to refresh.");return;}
+            totalLabel.setText("R "+quote.total().toPlainString());promotionSummary.setText(quote.description());
+        }));
     }
 
     private void processCheckout() {
+        if(checkingOut)return;
         SessionService.BusinessSession activeSession = sessionService.getActiveSession();
         if (activeSession == null) {
             showAlert("No Active Session",
@@ -870,8 +754,10 @@ public class SalesView {
         activeDiscount = BigDecimal.ZERO;
 
         // ── Promo + payment dialog ────────────────────────────────────────
-        Optional<PaymentInfo> paymentResult = showPaymentDialog(cartTotal);
-        if (paymentResult.isEmpty()) return;
+        checkingOut=true;
+        Optional<PaymentInfo> paymentResult;
+        try {paymentResult=showPaymentDialog(cartTotal);}catch(RuntimeException ex){checkingOut=false;throw ex;}
+        if (paymentResult.isEmpty()){checkingOut=false;return;}
 
         final PaymentInfo paymentInfo = paymentResult.get();
         final BigDecimal finalTotal = cartTotal.subtract(activeDiscount);
@@ -879,6 +765,10 @@ public class SalesView {
         final User saleCashier = activeCashier;
         final PromoService.Promo salePromo = activePromo;
         final BigDecimal saleDiscount = activeDiscount;
+        final var saleQuote=activeQuote;
+        final String saleCode=appliedPromotionCode;
+        final ObservableList<CartItem> saleCart=FXCollections.observableArrayList(
+                cartItems.stream().map(item->new CartItem(item.getProductId(),item.getProductName(),item.getPrice(),item.getQuantity())).toList());
 
         // Run the sale (DB write, receipt build, email) off the FX thread so the
         // register stays responsive, with a clear "please wait" indicator.
@@ -891,14 +781,14 @@ public class SalesView {
             File savedFile = null;
             boolean success = false;
             try {
-                success = transactionService.processTransaction(
-                        saleCashier.getStaffID(), saleCustomer.getAccountID(),
-                        cartItems, paymentInfo, salePromo, saleDiscount);
+                success = transactionService.processPromotedTransaction(
+                        currentUser.getStaffID(), saleCashier.getStaffID(), saleCustomer.getAccountID(),
+                        saleCart, paymentInfo, saleCode, saleQuote);
 
                 if (success) {
                     receipt = ReceiptGenerator.generateReceipt(
-                            saleCustomer, cartItems, saleCashier, paymentInfo,
-                            salePromo != null ? salePromo.getPromoCode() : null, saleDiscount);
+                            saleCustomer, saleCart, saleCashier, paymentInfo,
+                            saleQuote);
                     savedFile = ReceiptGenerator.saveReceiptToFile(
                             receipt, null);
 
@@ -909,7 +799,6 @@ public class SalesView {
                             commService.sendReceiptByEmail(saleCustomer.getEmailAddress(), receipt);
                         }
                     }
-                    if (salePromo != null) promoService.incrementUsage(salePromo.getPromoID());
                 }
             } catch (RuntimeException e) {
                 error = e;
@@ -920,8 +809,9 @@ public class SalesView {
             final RuntimeException fError = error;
             final File fSavedFile = savedFile;
             Platform.runLater(() -> {
+                checkingOut=false;
                 busy.close();
-                if (fError != null) {
+                if (fError != null && !fSuccess) {
                     com.pos.utils.Dialogs.error(
                             cartTable.getScene() != null ? cartTable.getScene().getWindow() : null,
                             "Sale not completed",
@@ -931,23 +821,25 @@ public class SalesView {
                 }
                 if (!fSuccess) {
                     showAlert("Sale not completed",
-                            "The transaction could not be saved. Nothing was charged. Please try again.",
+                            "Nothing was charged. "+(transactionService.getLastFailure()==null?"Please retry checkout.":transactionService.getLastFailure()),
                             Alert.AlertType.ERROR);
                     return;
                 }
 
-                if (settingsService.getReceiptAutoPrint()) ReceiptGenerator.printReceipt(fReceipt);
-                if (wifiHandler != null) {
-                    new Thread(() -> wifiHandler.sendReceipt(fReceipt), "Receipt-Sender").start();
-                }
-
-                showSaleCompleteDialog(fReceipt, finalTotal, paymentInfo, fSavedFile);
-
+                // Retire the committed cart before any optional printer/delivery/dialog can fail.
                 clearCart();
                 if (customerCombo != null) customerCombo.setValue(null);
                 activeCashier = currentUser;
                 activeCashierLabel.setText("Cashier: " + activeCashier.getFullNames());
                 updateSessionStatus();
+                if (fError != null) showAlert("Sale saved", "The sale was saved, but receipt delivery failed. Do not repeat the sale. Use Sales history to retrieve it.", Alert.AlertType.WARNING);
+                if (fReceipt != null && settingsService.getReceiptAutoPrint()) ReceiptGenerator.printReceipt(fReceipt);
+                if (fReceipt != null && wifiHandler != null) {
+                    new Thread(() -> wifiHandler.sendReceipt(fReceipt), "Receipt-Sender").start();
+                }
+
+                if(fReceipt!=null)showSaleCompleteDialog(fReceipt, finalTotal, paymentInfo, fSavedFile);
+
             });
         }, "Checkout-Worker");
         worker.setDaemon(true);
@@ -1035,204 +927,42 @@ public class SalesView {
 
     // ── Payment dialog — now includes promo code field ────────────────────
     private Optional<PaymentInfo> showPaymentDialog(BigDecimal cartTotal) {
-        Dialog<PaymentInfo> dialog = new Dialog<>();
-        dialog.setTitle("Payment Method");
-        dialog.setHeaderText("Complete Payment — Cashier: " + activeCashier.getFullNames());
-
-        ButtonType payButtonType = new ButtonType("Process Payment", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(payButtonType, ButtonType.CANCEL);
-
-        VBox content = new VBox(15);
-        content.setPadding(new Insets(20));
-
-        // ── Running total display (updates when promo applied) ────────────
-        Label totalDisplay = new Label("Total Amount: R " + String.format("%.2f", cartTotal));
-        totalDisplay.setFont(Font.font("System", FontWeight.BOLD, 18));
-        totalDisplay.setTextFill(Color.web("#16a34a"));
-
-        content.getChildren().add(totalDisplay);
-        content.getChildren().add(new Separator());
-
-        // ── Promo code section ────────────────────────────────────────────
-        Label promoSectionLabel = new Label("Promo Code (optional):");
-        promoSectionLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
-
-        HBox promoRow = new HBox(10);
-        promoRow.setAlignment(Pos.CENTER_LEFT);
-
-        TextField promoCodeField = new TextField();
-        promoCodeField.setPromptText("Enter promo code...");
-        promoCodeField.setPrefWidth(200);
-        promoCodeField.setStyle("-fx-font-size: 13; -fx-padding: 8;");
-        HBox.setHgrow(promoCodeField, Priority.ALWAYS);
-
-        Button applyPromoBtn = new Button("Apply");
-        applyPromoBtn.setStyle(
-                "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold;"
-                + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
-
-        Button clearPromoBtn = new Button("Clear");
-        clearPromoBtn.setStyle(
-                "-fx-background-color: #94a3b8; -fx-text-fill: white; -fx-font-weight: bold;"
-                + "-fx-padding: 8 16; -fx-background-radius: 6; -fx-cursor: hand;");
-        clearPromoBtn.setVisible(false);
-
-        promoRow.getChildren().addAll(promoCodeField, applyPromoBtn, clearPromoBtn);
-
-        Label promoStatusLabel = new Label();
-        promoStatusLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        promoStatusLabel.setVisible(false);
-
-        Label discountLabel = new Label();
-        discountLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
-        discountLabel.setTextFill(Color.web("#16a34a"));
-        discountLabel.setVisible(false);
-
-        // Local mutable reference for the effective total within this dialog
-        final BigDecimal[] effectiveTotal = { cartTotal };
-
-        applyPromoBtn.setOnAction(e -> {
-            String code = promoCodeField.getText().trim();
-            if (code.isEmpty()) {
-                promoStatusLabel.setText("Please enter a promo code.");
-                promoStatusLabel.setTextFill(Color.web("#d97706"));
-                promoStatusLabel.setVisible(true);
-                return;
+        appliedPromotionCode="";
+        try {activeQuote=promotionService.quote(List.copyOf(cartItems),"");}
+        catch(Exception ex){showAlert("Pricing unavailable",ex.getMessage(),Alert.AlertType.ERROR);return Optional.empty();}
+        activeDiscount=activeQuote.discount();
+        Label total=new Label("R "+activeQuote.total().toPlainString());total.setStyle("-fx-font-size: 28; -fx-font-weight: bold; -fx-text-fill: "+Theme.BRAND+";");
+        Label deals=new Label(activeQuote.description());deals.setWrapText(true);
+        Label feedback=new Label();feedback.setWrapText(true);
+        TextField code=new TextField();code.setPromptText("Optional coupon code");code.setStyle(Theme.input());
+        Button apply=new Button("Apply code"),clear=new Button("Clear code");apply.setStyle(Theme.secondaryButton());clear.setStyle(Theme.secondaryButton());
+        RadioButton cash=new RadioButton("Cash"),card=new RadioButton("Card");ToggleGroup methods=new ToggleGroup();cash.setToggleGroup(methods);card.setToggleGroup(methods);cash.setSelected(true);
+        TextField amount=new TextField();amount.setPromptText("Amount received");Label change=new Label("Change: R0.00");
+        Runnable refresh=()->{activeDiscount=activeQuote.discount();total.setText("R "+activeQuote.total().toPlainString());deals.setText(activeQuote.description());amount.clear();change.setText("Change: R0.00");};
+        apply.setOnAction(e->{try {
+            if(code.getText().isBlank())throw new IllegalArgumentException("Enter a coupon code.");
+            var quote=promotionService.quote(List.copyOf(cartItems),code.getText());activeQuote=quote;appliedPromotionCode=code.getText().trim().toUpperCase(java.util.Locale.ROOT);
+            refresh.run();code.setDisable(true);feedback.setText(quote.offers().stream().noneMatch(o->o.id().startsWith("COUPON_"))?"The best qualifying offers are shown below; a basket coupon may lose to better automatic offers.":"Coupon applied.");
+        }catch(Exception ex){feedback.setText(ex.getMessage());}});
+        clear.setOnAction(e->{try {activeQuote=promotionService.quote(List.copyOf(cartItems),"");appliedPromotionCode="";code.clear();code.setDisable(false);feedback.setText("");refresh.run();}catch(Exception ex){feedback.setText(ex.getMessage());}});
+        amount.textProperty().addListener((o,a,b)->{try {BigDecimal difference=new BigDecimal(b).subtract(activeQuote.total());change.setText((difference.signum()<0?"Still due: R":"Change: R")+difference.abs().toPlainString());}catch(NumberFormatException ex){change.setText("Enter the amount received.");}});
+        amount.disableProperty().bind(card.selectedProperty());
+        var payment=com.pos.components.Ui.formGrid();com.pos.components.Ui.formField(payment,0,"Payment method",new HBox(16,cash,card));com.pos.components.Ui.formField(payment,1,"Amount received (R)",amount);
+        PaymentInfo[] result={null};
+        com.pos.components.Ui.createForm("Complete payment","Cashier: "+activeCashier.getFullNames(),new VBox(16,
+                com.pos.components.Ui.section("Amount due",total,deals),
+                com.pos.components.Ui.section("Optional coupon",new HBox(12,code,apply,clear),feedback),
+                com.pos.components.Ui.section("Payment",payment,change)),"Process payment",()->{
+            BigDecimal received=activeQuote.total(),changeGiven=BigDecimal.ZERO;
+            if(cash.isSelected()) {
+                try {received=new BigDecimal(amount.getText().trim());}
+                catch(NumberFormatException ex){throw new IllegalArgumentException("Enter a valid amount received.");}
+                if(received.signum()<0 || received.stripTrailingZeros().scale()>2)throw new IllegalArgumentException("Use a non-negative amount with at most two decimal places.");
+                changeGiven=received.subtract(activeQuote.total());if(changeGiven.signum()<0)throw new IllegalArgumentException("The amount received is less than the total.");
             }
-
-            PromoService.PromoValidationResult result = promoService.validate(code, cartTotal);
-            if (result.valid()) {
-                activePromo = result.promo();
-                activeDiscount = result.discountAmount();
-                effectiveTotal[0] = cartTotal.subtract(activeDiscount);
-
-                promoStatusLabel.setText("Promo applied: " + code);
-                promoStatusLabel.setTextFill(Color.web("#16a34a"));
-                promoStatusLabel.setVisible(true);
-
-                discountLabel.setText("Discount: -R" + String.format("%.2f", activeDiscount));
-                discountLabel.setVisible(true);
-
-                totalDisplay.setText("Total Amount: R " + String.format("%.2f", effectiveTotal[0]));
-
-                promoCodeField.setDisable(true);
-                applyPromoBtn.setDisable(true);
-                clearPromoBtn.setVisible(true);
-            } else {
-                activePromo = null;
-                activeDiscount = BigDecimal.ZERO;
-                effectiveTotal[0] = cartTotal;
-
-                promoStatusLabel.setText("" + result.errorMessage());
-                promoStatusLabel.setTextFill(Color.web("#dc2626"));
-                promoStatusLabel.setVisible(true);
-
-                discountLabel.setVisible(false);
-                totalDisplay.setText("Total Amount: R " + String.format("%.2f", cartTotal));
-            }
-        });
-
-        clearPromoBtn.setOnAction(e -> {
-            activePromo = null;
-            activeDiscount = BigDecimal.ZERO;
-            effectiveTotal[0] = cartTotal;
-
-            promoCodeField.setText("");
-            promoCodeField.setDisable(false);
-            applyPromoBtn.setDisable(false);
-            clearPromoBtn.setVisible(false);
-            promoStatusLabel.setVisible(false);
-            discountLabel.setVisible(false);
-            totalDisplay.setText("Total Amount: R " + String.format("%.2f", cartTotal));
-        });
-
-        content.getChildren().addAll(promoSectionLabel, promoRow, promoStatusLabel, discountLabel);
-        content.getChildren().add(new Separator());
-
-        // ── Payment method ────────────────────────────────────────────────
-        Label methodLabel = new Label("Select Payment Method:");
-        methodLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
-
-        ToggleGroup paymentGroup = new ToggleGroup();
-        RadioButton cashRadio = new RadioButton("Cash");
-        cashRadio.setToggleGroup(paymentGroup);
-        cashRadio.setSelected(true);
-        cashRadio.setFont(Font.font("System", 13));
-
-        RadioButton cardRadio = new RadioButton("Card");
-        cardRadio.setToggleGroup(paymentGroup);
-        cardRadio.setFont(Font.font("System", 13));
-
-        content.getChildren().addAll(methodLabel, cashRadio, cardRadio);
-        content.getChildren().add(new Separator());
-
-        VBox cashFields = new VBox(10);
-        Label amountLabel = new Label("Amount Received:");
-        TextField amountField = new TextField();
-        amountField.setPromptText("Enter amount received");
-        amountField.setStyle("-fx-font-size: 14; -fx-padding: 10;");
-
-        Label changeLabel = new Label("Change: R 0.00");
-        changeLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
-        changeLabel.setTextFill(Color.web("#2563eb"));
-
-        cashFields.getChildren().addAll(amountLabel, amountField, changeLabel);
-        content.getChildren().add(cashFields);
-
-        amountField.textProperty().addListener((obs, old, newVal) -> {
-            try {
-                double amount = Double.parseDouble(newVal);
-                double change = amount - effectiveTotal[0].doubleValue();
-                if (change >= 0) {
-                    changeLabel.setText("Change: R " + String.format("%.2f", change));
-                    changeLabel.setTextFill(Color.web("#16a34a"));
-                } else {
-                    changeLabel.setText("Insufficient: R " + String.format("%.2f", Math.abs(change)));
-                    changeLabel.setTextFill(Color.web("#dc2626"));
-                }
-            } catch (NumberFormatException e) {
-                changeLabel.setText("Change: R 0.00");
-                changeLabel.setTextFill(Color.web("#2563eb"));
-            }
-        });
-
-        cashFields.setVisible(true);
-        cashRadio.selectedProperty().addListener((obs, old, newVal) -> {
-            cashFields.setVisible(newVal);
-            if (!newVal) {
-                changeLabel.setText("Change: R 0.00");
-                amountField.clear();
-            }
-        });
-
-        dialog.getDialogPane().setContent(content);
-
-        dialog.setResultConverter(button -> {
-            if (button == payButtonType) {
-                String method = cashRadio.isSelected() ? "Cash" : "Card";
-                BigDecimal paid = effectiveTotal[0];
-                BigDecimal change = BigDecimal.ZERO;
-
-                if (cashRadio.isSelected()) {
-                    try {
-                        paid = new BigDecimal(amountField.getText());
-                        change = paid.subtract(effectiveTotal[0]);
-                        if (change.compareTo(BigDecimal.ZERO) < 0) {
-                            showAlert("Error", "Insufficient payment amount", Alert.AlertType.ERROR);
-                            return null;
-                        }
-                    } catch (NumberFormatException e) {
-                        showAlert("Error", "Please enter a valid amount", Alert.AlertType.ERROR);
-                        return null;
-                    }
-                }
-
-                return new PaymentInfo(method, paid, change);
-            }
-            return null;
-        });
-
-        return dialog.showAndWait();
+            result[0]=new PaymentInfo(cash.isSelected()?"Cash":"Card",received,changeGiven);return true;
+        }).showAndWait();
+        return Optional.ofNullable(result[0]);
     }
 
     private void showAlert(String title, String content, Alert.AlertType type) {
@@ -1240,6 +970,7 @@ public class SalesView {
     }
 
     public void cleanup() {
+        ++priceGeneration;
         if (wifiHandler != null) wifiHandler.cleanup();
     }
 

@@ -34,10 +34,16 @@ public class UserManagementView {
     private LineChart<Number, Number> salesChart;
     private LineChart<Number, Number> hoursChart;
     private ComboBox<YearMonth> monthSelector;
+    private VBox performanceSummary;
+    private Label performanceRange;
 
     public UserManagementView(User user) {
+        this(user,new UserService());
+    }
+
+    public UserManagementView(User user,UserService service) {
         this.currentUser = user;
-        this.userService = new UserService();
+        this.userService = service;
     }
 
     private HBox createSummaryCards() {
@@ -114,6 +120,7 @@ public class UserManagementView {
 
     private void showPerformanceView() {
         if (mainLayout != null) {
+            mainLayout.setTop(null);
             mainLayout.setCenter(performancePane);
         } else {
             Alert alert = new Alert(Alert.AlertType.WARNING);
@@ -123,95 +130,49 @@ public class UserManagementView {
     }
 
     private BorderPane createPerformancePane() {
-        BorderPane pane = new BorderPane();
-        pane.setStyle("-fx-background-color: #f5f7fa;");
-        pane.setPadding(new Insets(20));
-
-        monthSelector = new ComboBox<>();
-        YearMonth current = YearMonth.now();
-        for (int i = 0; i < 12; i++) {
-            monthSelector.getItems().add(current.minusMonths(i));
-        }
-        monthSelector.setValue(current);
-        monthSelector.setOnAction(e -> loadPerformanceData());
-
-        HBox selectorBox = new HBox(10, new Label("Select Month:"), monthSelector);
-        selectorBox.setAlignment(Pos.CENTER);
-
-        Button backBtn = new Button("← Back to Users");
-        backBtn.setStyle("-fx-background-color: #94a3b8; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20; -fx-background-radius: 6; -fx-cursor: hand;");
-        backBtn.setOnAction(e -> showUserView());
-        HBox topWithBack = new HBox(20, backBtn, selectorBox);
-        topWithBack.setAlignment(Pos.CENTER_LEFT);
-        pane.setTop(topWithBack);
-
-        VBox chartsBox = new VBox(20);
-        chartsBox.setPadding(new Insets(20));
-
-        NumberAxis xAxisSales = new NumberAxis(1, 31, 1);
-        xAxisSales.setLabel("Day of Month");
-        NumberAxis yAxisSales = new NumberAxis();
-        yAxisSales.setLabel("Total Sales (R)");
-        salesChart = new LineChart<>(xAxisSales, yAxisSales);
-        salesChart.setTitle("Daily Sales per Staff");
-        salesChart.setPrefHeight(300);
-
-        NumberAxis xAxisHours = new NumberAxis(1, 31, 1);
-        xAxisHours.setLabel("Day of Month");
-        NumberAxis yAxisHours = new NumberAxis();
-        yAxisHours.setLabel("Hours Worked");
-        hoursChart = new LineChart<>(xAxisHours, yAxisHours);
-        hoursChart.setTitle("Daily Hours Logged per Staff");
-        hoursChart.setPrefHeight(300);
-
-        chartsBox.getChildren().addAll(salesChart, hoursChart);
-
-        VBox tableBox = new VBox(15);
-        tableBox.setStyle("-fx-background-color: white; -fx-background-radius: 14; -fx-effect: dropshadow(gaussian, rgba(15,23,42,0.08), 18, 0, 0, 4);");
-        tableBox.setPadding(new Insets(20));
-
-        Label tableTitle = new Label("Staff Performance Ranking");
-        tableTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
-
-        performanceTable = new TableView<>();
-        performanceTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
-
-        TableColumn<StaffPerformance, Integer> rankCol = new TableColumn<>("Rank");
-        rankCol.setCellValueFactory(new PropertyValueFactory<>("rank"));
-        rankCol.setPrefWidth(60);
-
-        TableColumn<StaffPerformance, String> nameCol = new TableColumn<>("Full Name");
-        nameCol.setCellValueFactory(new PropertyValueFactory<>("fullNames"));
-        nameCol.setPrefWidth(200);
-
-        TableColumn<StaffPerformance, Double> salesCol = new TableColumn<>("Total Sales (R)");
-        salesCol.setCellValueFactory(new PropertyValueFactory<>("totalSales"));
-        salesCol.setPrefWidth(150);
-
-        TableColumn<StaffPerformance, Double> hoursCol = new TableColumn<>("Total Hours");
-        hoursCol.setCellValueFactory(new PropertyValueFactory<>("totalHours"));
-        hoursCol.setPrefWidth(120);
-
-        TableColumn<StaffPerformance, Double> effCol = new TableColumn<>("Efficiency (R/hr)");
-        effCol.setCellValueFactory(new PropertyValueFactory<>("efficiency"));
-        effCol.setPrefWidth(150);
-
-        performanceTable.getColumns().addAll(rankCol, nameCol, salesCol, hoursCol, effCol);
-
-        VBox.setVgrow(performanceTable, Priority.ALWAYS);
-        tableBox.getChildren().addAll(tableTitle, performanceTable);
-
-        HBox contentBox = new HBox(20, chartsBox, tableBox);
-        HBox.setHgrow(chartsBox, Priority.ALWAYS);
-        pane.setCenter(contentBox);
-
-        loadPerformanceData();
-
-        return pane;
+        BorderPane pane=new BorderPane();pane.setStyle(com.pos.utils.Theme.page());
+        pane.getStyleClass().addAll("reports-view","performance-report");
+        pane.getStylesheets().add(getClass().getResource("/css/reports.css").toExternalForm());
+        Label title=new Label("Staff performance");title.setFont(Font.font("System",FontWeight.BOLD,24));title.setTextFill(Color.web(com.pos.utils.Theme.BRAND));
+        Label subtitle=new Label("Compare staff sales and logged hours for the selected month.");subtitle.setFont(com.pos.utils.Theme.body());subtitle.setTextFill(Color.web(com.pos.utils.Theme.TEXT_MUTED));
+        Button back=new Button("Back to users"),refresh=new Button("Refresh");back.setStyle(com.pos.utils.Theme.secondaryButton());refresh.setStyle(com.pos.utils.Theme.secondaryButton());
+        back.setOnAction(e->showUserView());refresh.setOnAction(e->loadPerformanceData());
+        Region spacer=new Region();HBox.setHgrow(spacer,Priority.ALWAYS);
+        HBox header=new HBox(12,new VBox(6,title,subtitle),spacer,back,refresh);header.setAlignment(Pos.CENTER_LEFT);header.setPadding(new Insets(20,28,16,28));header.setStyle(com.pos.utils.Theme.topBar());
+        monthSelector=new ComboBox<>();YearMonth current=YearMonth.now();for(int i=0;i<12;i++)monthSelector.getItems().add(current.minusMonths(i));
+        monthSelector.setValue(current);monthSelector.setStyle(com.pos.utils.Theme.input());monthSelector.setPrefWidth(240);
+        monthSelector.setConverter(new javafx.util.StringConverter<YearMonth>() {
+            public String toString(YearMonth month){return month==null?"":month.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy"));}
+            public YearMonth fromString(String text){return null;}
+        });
+        performanceRange=new Label();performanceRange.setWrapText(true);performanceRange.setTextFill(Color.web(com.pos.utils.Theme.TEXT_MUTED));
+        Label monthLabel=new Label("Month");monthLabel.setFont(com.pos.utils.Theme.label());
+        VBox toolbar=new VBox(8,monthLabel,monthSelector,performanceRange);toolbar.setPadding(new Insets(16,24,16,24));toolbar.setStyle(com.pos.utils.Theme.topBar());
+        pane.setTop(new VBox(header,toolbar));
+        salesChart=new LineChart<>(new NumberAxis(1,current.lengthOfMonth(),1),new NumberAxis());
+        hoursChart=new LineChart<>(new NumberAxis(1,current.lengthOfMonth(),1),new NumberAxis());
+        salesChart.getXAxis().setLabel("Day of month");salesChart.getYAxis().setLabel("Sales (R)");hoursChart.getXAxis().setLabel("Day of month");hoursChart.getYAxis().setLabel("Hours worked");
+        for(var chart:java.util.List.of(salesChart,hoursChart)){chart.setAnimated(false);chart.setCreateSymbols(true);chart.setPrefHeight(320);chart.setMinHeight(280);}
+        performanceTable=new TableView<>();performanceTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);performanceTable.setPrefHeight(320);performanceTable.setPlaceholder(new Label("No staff performance recorded for this month."));
+        TableColumn<StaffPerformance,Integer> rankCol=new TableColumn<>("Rank");rankCol.setCellValueFactory(new PropertyValueFactory<>("rank"));rankCol.setMaxWidth(80);
+        TableColumn<StaffPerformance,String> nameCol=new TableColumn<>("Staff member");nameCol.setCellValueFactory(new PropertyValueFactory<>("fullNames"));
+        TableColumn<StaffPerformance,Double> salesCol=new TableColumn<>("Sales (R)");salesCol.setCellValueFactory(new PropertyValueFactory<>("totalSales"));
+        TableColumn<StaffPerformance,Double> hoursCol=new TableColumn<>("Hours worked");hoursCol.setCellValueFactory(new PropertyValueFactory<>("totalHours"));
+        TableColumn<StaffPerformance,Double> efficiencyCol=new TableColumn<>("Sales per hour (R)");efficiencyCol.setCellValueFactory(new PropertyValueFactory<>("efficiency"));
+        for(var column:java.util.List.of(salesCol,hoursCol,efficiencyCol))column.setCellFactory(c->new TableCell<>() {
+            @Override protected void updateItem(Double value,boolean empty){super.updateItem(value,empty);setText(empty||value==null?null:String.format(java.util.Locale.ROOT,"%,.2f",value));setAlignment(Pos.CENTER_RIGHT);}
+        });
+        performanceTable.getColumns().addAll(rankCol,nameCol,salesCol,hoursCol,efficiencyCol);
+        performanceSummary=new VBox();
+        VBox body=new VBox(20,performanceSummary,com.pos.components.Ui.section("Daily sales",salesChart),
+                com.pos.components.Ui.section("Daily hours worked",hoursChart),com.pos.components.Ui.section("Staff ranking",performanceTable));body.setPadding(new Insets(24));
+        ScrollPane scroll=new ScrollPane(body);scroll.setFitToWidth(true);scroll.setStyle(com.pos.utils.Theme.page());pane.setCenter(scroll);
+        monthSelector.setOnAction(e->loadPerformanceData());loadPerformanceData();return pane;
     }
 
     private void showUserView() {
         if (mainLayout != null) {
+            mainLayout.setTop(createTopBar());
             VBox mainContent = new VBox(20);
             mainContent.setPadding(new Insets(20));
             VBox tableBox = createUserTable();
@@ -221,28 +182,33 @@ public class UserManagementView {
     }
 
     private void loadPerformanceData() {
-        YearMonth selectedMonth = monthSelector.getValue();
-        if (selectedMonth == null) return;
-
-        java.util.List<StaffPerformance> performances = userService.getStaffPerformance(selectedMonth.getYear(), selectedMonth.getMonthValue());
-        ObservableList<StaffPerformance> obsList = FXCollections.observableArrayList(performances);
-        performanceTable.setItems(obsList);
-
-        loadSalesChart(selectedMonth);
-        loadHoursChart(selectedMonth);
+        YearMonth month=monthSelector.getValue();if(month==null)return;
+        var performances=userService.getStaffPerformance(month.getYear(),month.getMonthValue());
+        performanceTable.setItems(FXCollections.observableArrayList(performances));
+        double sales=performances.stream().mapToDouble(StaffPerformance::getTotalSales).sum();
+        double hours=performances.stream().mapToDouble(StaffPerformance::getTotalHours).sum();
+        performanceSummary.getChildren().setAll(com.pos.components.SummaryCards.row(
+                new com.pos.components.SummaryCards.Card("Staff reported",Integer.toString(performances.size()),com.pos.utils.Theme.BRAND,"Selected month"),
+                new com.pos.components.SummaryCards.Card("Total sales",String.format(java.util.Locale.ROOT,"R%,.2f",sales),com.pos.utils.Theme.BRAND),
+                new com.pos.components.SummaryCards.Card("Hours worked",String.format(java.util.Locale.ROOT,"%,.2f",hours),com.pos.utils.Theme.BRAND),
+                new com.pos.components.SummaryCards.Card("Sales per hour",String.format(java.util.Locale.ROOT,"R%,.2f",hours>0?sales/hours:0),com.pos.utils.Theme.BRAND,"Sales divided by logged hours")));
+        performanceRange.setText(month.atDay(1)+" to "+month.atEndOfMonth()+" · Sales and logged hours are shown separately.");
+        ((NumberAxis)salesChart.getXAxis()).setUpperBound(month.lengthOfMonth());((NumberAxis)hoursChart.getXAxis()).setUpperBound(month.lengthOfMonth());
+        loadSalesChart(month);loadHoursChart(month);
     }
 
     private void loadSalesChart(YearMonth ym) {
         salesChart.getData().clear();
         java.util.Map<Integer, java.util.Map<LocalDate, Double>> dailySales = userService.getDailySalesAllStaff(ym);
 
-        for (java.util.Map.Entry<Integer, java.util.Map<LocalDate, Double>> entry : dailySales.entrySet()) {
-            int staffID = entry.getKey();
-            String staffName = userService.getStaffNameById(staffID);
+        for (StaffPerformance staff : performanceTable.getItems()) {
+            int staffID = staff.getStaffID();
+            String staffName = staff.getFullNames();
             XYChart.Series<Number, Number> series = new XYChart.Series<>();
             series.setName(staffName);
 
-            entry.getValue().forEach((date, amount) -> {
+            dailySales.getOrDefault(staffID,java.util.Map.of()).entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(entry -> {
+                LocalDate date=entry.getKey();Double amount=entry.getValue();
                 int day = date.getDayOfMonth();
                 series.getData().add(new XYChart.Data<>(day, amount));
             });
@@ -255,13 +221,14 @@ public class UserManagementView {
         hoursChart.getData().clear();
         java.util.Map<Integer, java.util.Map<LocalDate, Double>> dailyHours = userService.getDailyHoursAllStaff(ym);
 
-        for (java.util.Map.Entry<Integer, java.util.Map<LocalDate, Double>> entry : dailyHours.entrySet()) {
-            int staffID = entry.getKey();
-            String staffName = userService.getStaffNameById(staffID);
+        for (StaffPerformance staff : performanceTable.getItems()) {
+            int staffID = staff.getStaffID();
+            String staffName = staff.getFullNames();
             XYChart.Series<Number, Number> series = new XYChart.Series<>();
             series.setName(staffName);
 
-            entry.getValue().forEach((date, hours) -> {
+            dailyHours.getOrDefault(staffID,java.util.Map.of()).entrySet().stream().sorted(java.util.Map.Entry.comparingByKey()).forEach(entry -> {
+                LocalDate date=entry.getKey();Double hours=entry.getValue();
                 int day = date.getDayOfMonth();
                 series.getData().add(new XYChart.Data<>(day, hours));
             });
@@ -392,78 +359,23 @@ public class UserManagementView {
     }
 
     private void showAddUserDialog() {
-        Dialog<User> dialog = new Dialog<>();
-        dialog.setTitle("Add New User");
-        dialog.setHeaderText("Enter user details");
-
-        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
-        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
-
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20));
-
-        TextField nameField = new TextField();
-        TextField emailField = new TextField();
-        PasswordField passwordField = new PasswordField();
-        PasswordField confirmPasswordField = new PasswordField();
-        ComboBox<String> typeCombo = new ComboBox<>();
-        typeCombo.getItems().addAll("Admin", "Manager", "Cashier");
-        typeCombo.setValue("Cashier");
-
-        grid.add(new Label("Full Name:"), 0, 0);
-        grid.add(nameField, 1, 0);
-        grid.add(new Label("Email:"), 0, 1);
-        grid.add(emailField, 1, 1);
-        grid.add(new Label("Password:"), 0, 2);
-        grid.add(passwordField, 1, 2);
-        grid.add(new Label("Confirm Password:"), 0, 3);
-        grid.add(confirmPasswordField, 1, 3);
-        grid.add(new Label("User Type:"), 0, 4);
-        grid.add(typeCombo, 1, 4);
-
-        Label pwdHint = new Label("Password must be at least 8 characters");
-        pwdHint.setFont(Font.font(10));
-        pwdHint.setTextFill(Color.GRAY);
-        grid.add(pwdHint, 1, 5);
-
-        dialog.getDialogPane().setContent(grid);
-
-        dialog.setResultConverter(dialogButton -> {
-            if (dialogButton == saveButtonType) {
-                String password = passwordField.getText();
-                String confirmPassword = confirmPasswordField.getText();
-
-                if (!password.equals(confirmPassword)) {
-                    showAlert("Error", "Passwords do not match", Alert.AlertType.ERROR);
-                    return null;
-                }
-
-                if (!PasswordUtil.isValidPassword(password)) {
-                    showAlert("Error", "Password must be at least 8 characters", Alert.AlertType.ERROR);
-                    return null;
-                }
-
-                User user = new User();
-                user.setFullNames(nameField.getText());
-                user.setEmailAddress(emailField.getText());
-                user.setUserType(typeCombo.getValue());
-                user.setUserPassword(password);
-                return user;
-            }
-            return null;
-        });
-
-        Optional<User> result = dialog.showAndWait();
-        result.ifPresent(user -> {
-            if (userService.addUser(user, user.getUserPassword())) {
-                showAlert("Success", "User added successfully", Alert.AlertType.INFORMATION);
-                loadUsers();
-            } else {
-                showAlert("Error", "Failed to add user. Email might already exist.", Alert.AlertType.ERROR);
-            }
-        });
+        TextField name=new TextField(),email=new TextField();PasswordField password=new PasswordField(),confirm=new PasswordField();
+        ComboBox<String> role=new ComboBox<>();role.getItems().addAll("Admin","Manager","Cashier");role.setValue("Cashier");
+        var profile=com.pos.components.Ui.formGrid();
+        com.pos.components.Ui.formField(profile,0,"Full name",name);com.pos.components.Ui.formField(profile,1,"Email address",email);
+        com.pos.components.Ui.formField(profile,2,"Role",role);
+        var security=com.pos.components.Ui.formGrid();com.pos.components.Ui.formField(security,0,"Password",password);com.pos.components.Ui.formField(security,1,"Confirm password",confirm);
+        com.pos.components.Ui.createForm("Add user","New staff member",new VBox(16,
+                com.pos.components.Ui.section("Staff information",profile),
+                com.pos.components.Ui.section("Login details",security,new Label("Use a password with at least 8 characters."))),"Add user",()->{
+            if(name.getText().isBlank() || !email.getText().contains("@") || role.getValue()==null)
+                throw new IllegalArgumentException("Enter a full name, valid email address and role.");
+            if(!password.getText().equals(confirm.getText()))throw new IllegalArgumentException("The passwords do not match.");
+            if(!PasswordUtil.isValidPassword(password.getText()))throw new IllegalArgumentException("The password must contain at least 8 characters.");
+            User user=new User();user.setFullNames(name.getText().trim());user.setEmailAddress(email.getText().trim());user.setUserType(role.getValue());
+            if(!userService.addUser(user,password.getText()))throw new IllegalArgumentException("The user could not be added. Check whether this email is already registered.");
+            password.clear();confirm.clear();loadUsers();return true;
+        }).showAndWait();
     }
 
 
@@ -488,13 +400,7 @@ public class UserManagementView {
     }
 
     private void showAuthKeyDialog(User user) {
-        String code = sessionService.getOrCreateAuthKey(user.getStaffID());
-        showAlert("Authorisation Key",
-            user.getFullNames() + "'s supervisor authorisation code:\n\n" + code
-                + "\n\nGive this to them directly — it's what they'll enter to countersign a "
-                + "session or approve an exchange/return. Generating it again later returns the same "
-                + "active code; it doesn't issue a new one.",
-            Alert.AlertType.INFORMATION);
+        com.pos.components.AuthorizationKeyDialog.show(currentUser,user,userService,sessionService);
     }
 
     private void resetPassword(User user) {

@@ -30,6 +30,7 @@ public final class LicenseToken {
     public final String licenseType;
     public final String licenseStatus;
     public final Instant tokenExpiry;      // exp
+    public final Instant issuedAt;         // signed iat
     public final Instant licenseExpiry;    // null = perpetual
 
     private LicenseToken(JsonObject p) {
@@ -39,6 +40,7 @@ public final class LicenseToken {
         this.licenseType = str(p, "licenseType");
         this.licenseStatus = str(p, "licenseStatus");
         this.tokenExpiry = p.has("exp") ? Instant.ofEpochSecond(p.get("exp").getAsLong()) : Instant.EPOCH;
+        this.issuedAt = p.has("iat") ? Instant.ofEpochSecond(p.get("iat").getAsLong()) : Instant.EPOCH;
         this.licenseExpiry = p.has("licenseExpiresAt") && !p.get("licenseExpiresAt").isJsonNull()
                 ? Instant.parse(p.get("licenseExpiresAt").getAsString()) : null;
     }

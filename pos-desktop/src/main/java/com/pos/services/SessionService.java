@@ -145,30 +145,13 @@ public class SessionService {
         }
     }
 
+    public boolean endSession(int sessionID,int reviewer,String authCode,String notes) {
+        return SessionReview.review(sessionID,reviewer,authCode,notes,false);
+    }
+
     public boolean endSession(int sessionID, String authCode, String notes) {
-        String query = """
-            UPDATE BusinessSessions 
-            SET EndDate = CURRENT_TIMESTAMP, 
-                Status = 'Closed',
-                DeclarationSigned = TRUE,
-                AuthorisationCode = ?,
-                Notes = ?
-            WHERE SessionID = ? AND Status = 'Active'
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setString(1, authCode);
-            pstmt.setString(2, notes);
-            pstmt.setInt(3, sessionID);
-
-            return pstmt.executeUpdate() > 0;
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        BusinessSession session=getSessionById(sessionID);
+        return session!=null && endSession(sessionID,session.getSupervisorID(),authCode,notes);
     }
 
     /**
@@ -242,42 +225,15 @@ public class SessionService {
     }
 
     public void updateSessionTotals(int sessionID) {
-        String query = """
-            UPDATE BusinessSessions s
-            SET 
-                TotalCashSales = (
-                    SELECT COALESCE(SUM(t.SalePrice * t.Quantity), 0)
-                    FROM SessionTransactions st
-                    JOIN Transactions t ON st.SaleID = t.SaleID
-                    WHERE st.SessionID = ? AND t.PaymentMethod = 'Cash'
-                ),
-                TotalCardSales = (
-                    SELECT COALESCE(SUM(t.SalePrice * t.Quantity), 0)
-                    FROM SessionTransactions st
-                    JOIN Transactions t ON st.SaleID = t.SaleID
-                    WHERE st.SessionID = ? AND t.PaymentMethod = 'Card'
-                ),
-                TotalSales = (
-                    SELECT COALESCE(SUM(t.SalePrice * t.Quantity), 0)
-                    FROM SessionTransactions st
-                    JOIN Transactions t ON st.SaleID = t.SaleID
-                    WHERE st.SessionID = ?
-                )
-            WHERE SessionID = ?
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setInt(1, sessionID);
-            pstmt.setInt(2, sessionID);
-            pstmt.setInt(3, sessionID);
-            pstmt.setInt(4, sessionID);
-            pstmt.executeUpdate();
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        try(Connection c=DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                try(PreparedStatement p=c.prepareStatement("SELECT SessionID FROM BusinessSessions WHERE SessionID=? FOR UPDATE")) {
+                    p.setInt(1,sessionID);try(ResultSet r=p.executeQuery()){if(!r.next())throw new SQLException("Business session missing.");}
+                }
+                SessionMoney.refresh(c,sessionID);c.commit();
+            }catch(SQLException|RuntimeException e){c.rollback();throw e;}
+        }catch(SQLException e){throw new IllegalStateException("Session totals could not be refreshed.",e);}
     }
 
     public boolean linkSaleToSession(int sessionID, int saleID) {
@@ -326,7 +282,7 @@ public class SessionService {
         ObservableList<SessionSaleSummary> sales = FXCollections.observableArrayList();
         String query = """
             SELECT t.SaleID, MIN(t.TransactionDate) AS SaleDate, MIN(s.FullNames) AS StaffName,
-                   SUM(t.SalePrice * t.Quantity) AS Amount
+                   SUM(t.SalePrice * t.Quantity - COALESCE((SELECT SUM(r.RefundAmount) FROM Returns r WHERE r.TransactionID=t.TransactionID AND r.Status='Approved'),0)) AS Amount
             FROM SessionTransactions st
             JOIN Transactions t ON st.SaleID = t.SaleID
             JOIN Staff s ON t.StaffID = s.StaffID
@@ -643,75 +599,24 @@ public class SessionService {
     }
 
     public boolean verifySupervisorCode(int staffID, String code) {
-        String query = """
-            SELECT COUNT(*) 
-            FROM SupervisorCodes 
-            WHERE StaffID = ? 
-            AND AuthCode = ? 
-            AND IsActive = TRUE
-            AND (ExpiryDate IS NULL OR ExpiryDate > CURRENT_TIMESTAMP)
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setInt(1, staffID);
-            pstmt.setString(2, code);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                return rs.getInt(1) > 0;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return false;
+        try(Connection c=DatabaseConnection.getConnection()) {
+            c.setAutoCommit(false);
+            try {SupervisorAuthorization.verify(c,staffID,code);c.rollback();return true;}
+            catch(SQLException e){c.rollback();return false;}
+        }catch(SQLException e){return false;}
     }
 
     public String getOrCreateAuthKey(int staffID) {
-        String checkQuery = "SELECT AuthCode FROM SupervisorCodes WHERE StaffID = ? AND IsActive = TRUE LIMIT 1";
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(checkQuery)) {
-
-            pstmt.setInt(1, staffID);
-            ResultSet rs = pstmt.executeQuery();
-
-            if (rs.next()) {
-                return rs.getString("AuthCode");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        // Generate new 6-digit code
-        String newCode = generateAuthCode();
-        createSupervisorCode(staffID, newCode);
-        return newCode;
+        return SupervisorAuthorization.issue(staffID);
     }
 
     private String generateAuthCode() {
-        Random random = new Random();
+        java.security.SecureRandom random = new java.security.SecureRandom();
         return String.format("%06d", random.nextInt(1000000));
     }
 
     public boolean createSupervisorCode(int staffID, String code) {
-        String query = """
-            INSERT INTO SupervisorCodes (StaffID, AuthCode, IsActive)
-            VALUES (?, ?, TRUE)
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setInt(1, staffID);
-            pstmt.setString(2, code);
-            return pstmt.executeUpdate() > 0;
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return SupervisorAuthorization.create(staffID,code);
     }
     /**
      * Called by a manager/admin to countersign a cashier-started/ended session.
@@ -725,28 +630,6 @@ public class SessionService {
      * @return true if the update succeeded
      */
     public boolean countersignSession(int sessionID, int countersignerID, String authCode, String notes) {
-        String query = """
-            UPDATE BusinessSessions
-            SET DeclarationSigned  = TRUE,
-                AuthorisationCode  = ?,
-                Notes = CONCAT(COALESCE(Notes, ''), ?)
-            WHERE SessionID = ?
-              AND Status = 'Closed'
-              AND DeclarationSigned = FALSE
-            """;
-
-        try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(query)) {
-
-            pstmt.setString(1, authCode);
-            pstmt.setString(2, " | [COUNTERSIGNED BY STAFF #" + countersignerID + "]"
-                    + (notes != null && !notes.isBlank() ? " " + notes : ""));
-            pstmt.setInt(3, sessionID);
-
-            return pstmt.executeUpdate() > 0;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
+        return SessionReview.review(sessionID,countersignerID,authCode,notes,true);
     }
 }

@@ -315,7 +315,7 @@ public class SupervisorApprovalView {
                         Alert.AlertType.INFORMATION);
                     refreshData();
                 } else {
-                    showAlert("Error", "Failed to process exchange.", Alert.AlertType.ERROR);
+                    showAlert("Review not saved", "Refresh the queue and check the authorization code and available stock. For a price difference, record a return and a new sale.", Alert.AlertType.ERROR);
                 }
             });
     }
@@ -344,7 +344,7 @@ public class SupervisorApprovalView {
                         Alert.AlertType.INFORMATION);
                     refreshData();
                 } else {
-                    showAlert("Error", "Failed to process return.", Alert.AlertType.ERROR);
+                    showAlert("Review not saved", "Open a business session, refresh the queue, and check the authorization code and remaining return quantity before retrying.", Alert.AlertType.ERROR);
                 }
             });
     }
@@ -353,7 +353,7 @@ public class SupervisorApprovalView {
         TextInputDialog dialog = new TextInputDialog();
         dialog.setTitle("Authorization Required");
         dialog.setHeaderText(header);
-        dialog.setContentText("Enter your 6-digit authorization code:");
+        dialog.setContentText((header.contains("Return")?"Refunds use the original payment method and the current business session.\n":"")+"Enter a new 6-digit authorization code (valid once, for 15 minutes):");
         return dialog.showAndWait();
     }
 

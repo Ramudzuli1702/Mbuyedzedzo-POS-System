@@ -22,3 +22,22 @@
 .reports-view .default-color5.chart-pie { -fx-pie-color: #64748b; }
 .reports-view .default-color6.chart-pie { -fx-pie-color: #0c5c57; }
 .reports-view .default-color7.chart-pie { -fx-pie-color: #cbd5e1; }
+
+/* Staff use the same series order on both charts and a shared teal/slate scale. */
+.performance-report .chart-line-symbol { -fx-background-radius: 3px; -fx-padding: 3px; }
+.performance-report .default-color0.chart-series-line { -fx-stroke: #0f766e; }
+.performance-report .default-color1.chart-series-line { -fx-stroke: #475569; }
+.performance-report .default-color2.chart-series-line { -fx-stroke: #5eaaa3; }
+.performance-report .default-color3.chart-series-line { -fx-stroke: #94a3b8; }
+.performance-report .default-color4.chart-series-line { -fx-stroke: #0c5c57; }
+.performance-report .default-color5.chart-series-line { -fx-stroke: #334155; }
+.performance-report .default-color6.chart-series-line { -fx-stroke: #7abdb6; }
+.performance-report .default-color7.chart-series-line { -fx-stroke: #64748b; }
+.performance-report .default-color0.chart-line-symbol { -fx-background-color: #0f766e, white; }
+.performance-report .default-color1.chart-line-symbol { -fx-background-color: #475569, white; }
+.performance-report .default-color2.chart-line-symbol { -fx-background-color: #5eaaa3, white; }
+.performance-report .default-color3.chart-line-symbol { -fx-background-color: #94a3b8, white; }
+.performance-report .default-color4.chart-line-symbol { -fx-background-color: #0c5c57, white; }
+.performance-report .default-color5.chart-line-symbol { -fx-background-color: #334155, white; }
+.performance-report .default-color6.chart-line-symbol { -fx-background-color: #7abdb6, white; }
+.performance-report .default-color7.chart-line-symbol { -fx-background-color: #64748b, white; }
